@@ -21,6 +21,7 @@ import { XLSXGenerator } from './xlsx-generator';
 import { MetricHierarchyService } from './metric-hierarchy.service';
 import { FootnoteLinkingService } from './footnote-linking.service';
 import { MDAIntelligenceService } from './mda-intelligence.service';
+import { ScratchpadItemService } from './scratchpad-item.service';
 
 // Controllers
 import { DealController } from './deal.controller';
@@ -31,6 +32,7 @@ import { FinancialCalculatorController } from './financial-calculator.controller
 import { DocumentGenerationController } from './document-generation.controller';
 import { DealsTestController } from './deals-test.controller';
 import { ExportController } from './export.controller';
+import { ScratchpadItemController } from './scratchpad-item.controller';
 
 /**
  * Deals Module
@@ -56,6 +58,7 @@ import { ExportController } from './export.controller';
     FinancialCalculatorController,
     DocumentGenerationController,
     ExportController,
+    ScratchpadItemController,
   ],
   providers: [
     PrismaService,
@@ -73,6 +76,7 @@ import { ExportController } from './export.controller';
     MetricHierarchyService,
     FootnoteLinkingService,
     MDAIntelligenceService,
+    ScratchpadItemService,
   ],
   exports: [
     DealService,

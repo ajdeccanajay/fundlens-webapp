@@ -831,3 +831,26 @@ model MetricHierarchy {
   @@index([dealId, statementType], map: "idx_metric_hierarchy_statement")
   @@map("metric_hierarchy")
 }
+
+// ============================================================
+// RESEARCH SCRATCHPAD REDESIGN
+// Feature: research-scratchpad-redesign
+// ============================================================
+
+model ScratchpadItem {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  type        String   @db.VarChar(50)
+  content     Json
+  sources     Json     @default("[]")
+  savedAt     DateTime @map("saved_at") @db.Timestamptz(6)
+  savedFrom   Json     @default("{}") @map("saved_from")
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([workspaceId], map: "idx_scratchpad_items_workspace")
+  @@index([workspaceId, savedAt(sort: Desc)], map: "idx_scratchpad_items_saved_at")
+  @@index([workspaceId, type], map: "idx_scratchpad_items_type")
+  @@map("scratchpad_items")
+}

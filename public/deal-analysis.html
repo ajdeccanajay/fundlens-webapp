@@ -22,6 +22,43 @@
     * { font-family: var(--font-sans) !important; }
     code, pre, .font-mono { font-family: var(--font-mono) !important; }
     
+    /* Gradient and badge styles from index.html */
+    .gradient-bg { 
+        background: var(--gradient-hero) !important;
+    }
+    
+    .tenant-badge {
+        background: linear-gradient(135deg, var(--color-success-500) 0%, var(--color-success-600) 100%) !important;
+    }
+    
+    /* Update navigation to use design system navy - EXACT COPY FROM INDEX.HTML */
+    nav.bg-white {
+        background: var(--color-navy-900) !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+    }
+    
+    nav.bg-white * {
+        color: var(--text-inverse) !important;
+    }
+    
+    /* FORCE DROPDOWN MENU COLORS - CRITICAL FIX */
+    .absolute.right-0.mt-2.w-56 {
+        background: #FFFFFF !important;
+        border: 1px solid #E2E8F0 !important;
+    }
+    
+    .absolute.right-0.mt-2.w-56 p {
+        color: #0F172A !important;
+    }
+    
+    .absolute.right-0.mt-2.w-56 .text-xs {
+        color: #475569 !important;
+    }
+    
+    .absolute.right-0.mt-2.w-56 button {
+        color: #DC2626 !important;
+    }
+    
     .step-completed { background-color: #10b981; }
     .step-running { background-color: #3b82f6; animation: pulse 2s infinite; }
     .step-failed { background-color: #ef4444; }
@@ -34,6 +71,70 @@
   </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
+  <div x-data="dealAnalysis()" x-init="init()">
+    <!-- Top Navigation Bar -->
+    <nav class="bg-white shadow-sm border-b border-gray-100 sticky top-0 z-50">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between items-center h-16">
+          <!-- Logo & Tenant -->
+          <div class="flex items-center space-x-4">
+            <a href="/app/deals/index.html" class="flex items-center">
+              <div class="bg-white px-3 py-1 rounded-lg">
+                <img src="/fundlens-logo.png" alt="FundLens" class="h-8 w-auto">
+              </div>
+            </a>
+            <!-- Tenant Badge -->
+            <div class="hidden sm:flex items-center">
+              <span class="text-gray-300 mx-3">|</span>
+              <div class="tenant-badge px-3 py-1 rounded-full">
+                <span class="text-white text-sm font-medium" x-text="user.tenantName || 'Loading...'"></span>
+              </div>
+              <!-- Platform Admin Badge -->
+              <div x-show="user.isPlatformAdmin" class="ml-2 px-2 py-1 rounded-full bg-yellow-500">
+                <span class="text-white text-xs font-bold">PLATFORM ADMIN</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- User Menu -->
+          <div class="flex items-center space-x-4">
+            <div class="relative" x-data="{ open: false }">
+              <button @click="open = !open" class="flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors">
+                <div class="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center">
+                  <span class="text-indigo-600 font-semibold text-sm" x-text="getUserInitials()"></span>
+                </div>
+                <div class="hidden md:block text-left">
+                  <p class="text-sm font-medium text-gray-700" x-text="user.email"></p>
+                  <p class="text-xs text-gray-500 capitalize" x-text="user.role"></p>
+                </div>
+                <i class="fas fa-chevron-down text-gray-400 text-xs"></i>
+              </button>
+              
+              <!-- Dropdown -->
+              <div x-show="open" @click.away="open = false" 
+                   x-transition:enter="transition ease-out duration-100"
+                   x-transition:enter-start="transform opacity-0 scale-95"
+                   x-transition:enter-end="transform opacity-100 scale-100"
+                   x-transition:leave="transition ease-in duration-75"
+                   x-transition:leave-start="transform opacity-100 scale-100"
+                   x-transition:leave-end="transform opacity-0 scale-95"
+                   class="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg py-2 z-50 border border-gray-200">
+                <div class="px-4 py-3 border-b border-gray-200">
+                  <p class="text-sm font-medium text-gray-900" x-text="user.email"></p>
+                  <p class="text-xs text-gray-600" x-text="user.tenantName"></p>
+                </div>
+                <div class="pt-2">
+                  <button @click="logout()" class="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors">
+                    <i class="fas fa-sign-out-alt mr-3"></i> Sign Out
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </nav>
+
   <div class="max-w-7xl mx-auto px-4 py-6">
     <!-- Deal Header -->
     <div id="deal-header" class="bg-white rounded-lg shadow-sm p-6 mb-6">
@@ -564,7 +665,64 @@
     function updateNavigationTicker(ticker) {
       // Navigation removed - function kept for compatibility
     }
+
+    // Alpine.js data for navigation
+    function dealAnalysis() {
+      return {
+        user: { email: '', tenantId: '', tenantName: '', tenantSlug: '', role: '', isPlatformAdmin: false },
+        
+        async init() {
+          await this.loadUser();
+        },
+        
+        async loadUser() {
+          const token = localStorage.getItem('fundlens_token');
+          if (!token) {
+            window.location.href = '/login.html';
+            return;
+          }
+          
+          const userStr = localStorage.getItem('fundlens_user');
+          if (userStr) {
+            this.user = JSON.parse(userStr);
+          }
+          
+          try {
+            const response = await fetch('/api/auth/me', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+            });
+            
+            if (response.ok) {
+              const data = await response.json();
+              if (data.success && data.user) {
+                const isPlatformAdmin = data.user.tenantId === '00000000-0000-0000-0000-000000000000' && 
+                                       data.user.tenantRole === 'admin';
+                this.user = { ...this.user, ...data.user, isPlatformAdmin };
+                localStorage.setItem('fundlens_user', JSON.stringify(this.user));
+              }
+            }
+          } catch (error) {
+            console.error('Auth error:', error);
+          }
+        },
+        
+        getUserInitials() {
+          if (!this.user.email) return '?';
+          return this.user.email.substring(0, 2).toUpperCase();
+        },
+        
+        logout() {
+          localStorage.removeItem('fundlens_token');
+          localStorage.removeItem('fundlens_refresh_token');
+          localStorage.removeItem('fundlens_user');
+          localStorage.removeItem('fundlens_email');
+          window.location.href = '/login.html';
+        }
+      };
+    }
     
   </script>
+  <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
 </body>
 </html>

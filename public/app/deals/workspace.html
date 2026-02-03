@@ -4,6 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FundLens - Deal Workspace</title>
+    
+    <!-- Design System -->
+    <link rel="stylesheet" href="/css/design-system.css">
+    <link rel="stylesheet" href="/css/research-scratchpad.css">
+    <script src="/js/theme-toggle.js"></script>
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -154,31 +160,107 @@
             0%, 100% { opacity: 0.4; transform: scale(0.8); }
             50% { opacity: 1; transform: scale(1); }
         }
+        
+        /* FORCE NAVIGATION COLORS - EXACT COPY FROM INDEX.HTML */
+        nav.bg-white {
+            background: var(--color-navy-900) !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+        }
+        
+        nav.bg-white * {
+            color: var(--text-inverse) !important;
+        }
+        
+        /* Gradient and badge styles from index.html */
+        .gradient-bg { 
+            background: var(--gradient-hero) !important;
+        }
+        
+        .tenant-badge {
+            background: linear-gradient(135deg, var(--color-success-500) 0%, var(--color-success-600) 100%) !important;
+        }
+        
+        /* Dropdown menu colors */
+        .absolute.right-0.mt-2.w-56 {
+            background: #FFFFFF !important;
+            border: 1px solid #E2E8F0 !important;
+        }
+        
+        .absolute.right-0.mt-2.w-56 p {
+            color: #0F172A !important;
+        }
+        
+        .absolute.right-0.mt-2.w-56 .text-xs {
+            color: #475569 !important;
+        }
+        
+        .absolute.right-0.mt-2.w-56 button {
+            color: #DC2626 !important;
+        }
     </style>
 </head>
 <body class="bg-gray-50">
     <div x-data="dealWorkspace()" x-init="init()" x-cloak>
         <!-- Top Navigation Bar -->
-        <nav class="bg-white border-b border-gray-200 h-12 flex items-center px-6 justify-between">
-            <div class="flex items-center space-x-6">
-                <a href="/fundlens-main.html" class="flex items-center space-x-2 text-gray-900 hover:text-blue-600">
-                    <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background: linear-gradient(135deg, var(--fundlens-primary) 0%, var(--fundlens-accent) 100%);">
-                        <i class="fas fa-chart-pie text-white text-sm"></i>
+        <nav class="bg-white shadow-sm border-b border-gray-100 sticky top-0 z-50">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between items-center h-16">
+                    <!-- Logo & Tenant -->
+                    <div class="flex items-center space-x-4">
+                        <a href="/app/deals/index.html" class="flex items-center">
+                            <div class="bg-white px-3 py-1 rounded-lg">
+                                <img src="/fundlens-logo.png" alt="FundLens" class="h-8 w-auto">
+                            </div>
+                        </a>
+                        <!-- Tenant Badge -->
+                        <div class="hidden sm:flex items-center">
+                            <span class="text-gray-300 mx-3">|</span>
+                            <div class="tenant-badge px-3 py-1 rounded-full">
+                                <span class="text-white text-sm font-medium" x-text="user.tenantName || 'Loading...'"></span>
+                            </div>
+                            <!-- Platform Admin Badge -->
+                            <div x-show="user.isPlatformAdmin" class="ml-2 px-2 py-1 rounded-full bg-yellow-500">
+                                <span class="text-white text-xs font-bold">PLATFORM ADMIN</span>
+                            </div>
+                        </div>
                     </div>
-                    <span class="font-bold text-lg">FundLens</span>
-                </a>
-                <div class="hidden md:flex items-center space-x-4 text-sm">
-                    <a href="/app/deals/index.html" class="text-gray-600 hover:text-blue-600 px-3 py-1 rounded hover:bg-gray-50">
-                        <i class="fas fa-briefcase mr-1"></i>Deals
-                    </a>
+
+                    <!-- User Menu -->
+                    <div class="flex items-center space-x-4">
+                        <div class="relative" x-data="{ open: false }">
+                            <button @click="open = !open" class="flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors">
+                                <div class="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center">
+                                    <span class="text-indigo-600 font-semibold text-sm" x-text="getUserInitials()"></span>
+                                </div>
+                                <div class="hidden md:block text-left">
+                                    <p class="text-sm font-medium text-gray-700" x-text="user.email"></p>
+                                    <p class="text-xs text-gray-500 capitalize" x-text="user.role"></p>
+                                </div>
+                                <i class="fas fa-chevron-down text-gray-400 text-xs"></i>
+                            </button>
+                            
+                            <!-- Dropdown -->
+                            <div x-show="open" @click.away="open = false" 
+                                 x-transition:enter="transition ease-out duration-100"
+                                 x-transition:enter-start="transform opacity-0 scale-95"
+                                 x-transition:enter-end="transform opacity-100 scale-100"
+                                 x-transition:leave="transition ease-in duration-75"
+                                 x-transition:leave-start="transform opacity-100 scale-100"
+                                 x-transition:leave-end="transform opacity-0 scale-95"
+                                 class="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg py-2 z-50 border border-gray-200">
+                                <div class="px-4 py-3 border-b border-gray-200">
+                                    <p class="text-sm font-medium text-gray-900" x-text="user.email"></p>
+                                    <p class="text-xs text-gray-600" x-text="user.tenantName"></p>
+                                </div>
+                                <div class="pt-2">
+                                    <button @click="logout()" class="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors">
+                                        <i class="fas fa-sign-out-alt mr-3"></i> Sign Out
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-            </div>
-            <div class="flex items-center space-x-4">
-                <span class="text-xs text-gray-500 hidden sm:inline" x-text="'Tenant: ' + (JSON.parse(localStorage.getItem('fundlens_user') || '{}').tenantSlug || 'default')"></span>
-                <button @click="localStorage.removeItem('fundlens_token'); localStorage.removeItem('fundlens_user'); window.location.href='/login.html'" 
-                        class="text-sm text-gray-600 hover:text-red-600 px-2 py-1 rounded hover:bg-gray-50">
-                    <i class="fas fa-sign-out-alt mr-1"></i>Logout
-                </button>
             </div>
         </nav>
         
@@ -221,7 +303,7 @@
                          aria-label="Analysis view"
                          @keydown.enter="switchView('analysis')"
                          @keydown.space.prevent="switchView('analysis')">
-                        <i class="fas fa-chart-bar w-5 text-gray-400" aria-hidden="true"></i>
+                        <i class="fas fa-chart-line w-5 text-gray-400" aria-hidden="true"></i>
                         <span class="ml-3 text-sm font-medium">Analysis</span>
                     </div>
                     
@@ -233,7 +315,7 @@
                          aria-label="Research view"
                          @keydown.enter="switchView('research')"
                          @keydown.space.prevent="switchView('research')">
-                        <i class="fas fa-brain w-5 text-gray-400" aria-hidden="true"></i>
+                        <i class="fas fa-search w-5 text-gray-400" aria-hidden="true"></i>
                         <span class="ml-3 text-sm font-medium">Research</span>
                     </div>
                     
@@ -245,7 +327,7 @@
                          aria-label="Scratchpad view"
                          @keydown.enter="switchView('scratchpad')"
                          @keydown.space.prevent="switchView('scratchpad')">
-                        <i class="fas fa-bookmark w-5 text-gray-400" aria-hidden="true"></i>
+                        <i class="fas fa-sticky-note w-5 text-gray-400" aria-hidden="true"></i>
                         <span class="ml-3 text-sm font-medium">Scratchpad</span>
                         <span x-show="scratchpadCount > 0" class="badge" x-text="scratchpadCount" aria-label="Scratchpad item count"></span>
                     </div>
@@ -258,7 +340,7 @@
                          aria-label="IC Memo view"
                          @keydown.enter="switchView('ic-memo')"
                          @keydown.space.prevent="switchView('ic-memo')">
-                        <i class="fas fa-file-alt w-5 text-gray-400" aria-hidden="true"></i>
+                        <i class="fas fa-file-contract w-5 text-gray-400" aria-hidden="true"></i>
                         <span class="ml-3 text-sm font-medium">IC Memo</span>
                     </div>
                 </nav>
@@ -1041,39 +1123,197 @@
                 </div>
                 
                 <!-- Scratchpad View -->
-                <div x-show="currentView === 'scratchpad'" class="fade-in p-8">
-                    <div class="max-w-4xl mx-auto">
-                        <div class="flex justify-between items-center mb-6">
-                            <h1 class="text-2xl font-bold">Research Scratchpad</h1>
-                            <button @click="exportScratchpad()" class="px-4 py-2 rounded-lg text-sm font-medium text-white" style="background: var(--fundlens-primary);">
+                <div x-show="currentView === 'scratchpad'" class="scratchpad-container fade-in">
+                    <!-- Sticky Header -->
+                    <div class="scratchpad-header" :class="{ 'scrolled': scratchpadScrolled }">
+                        <div class="scratchpad-header-title">
+                            <h2>Research Scratchpad</h2>
+                            <span class="scratchpad-item-count" x-text="`${scratchpadItems.length} saved items`"></span>
+                        </div>
+                        <div class="scratchpad-actions">
+                            <button @click="exportScratchpadMarkdown()" class="scratchpad-action-btn">
                                 <i class="fas fa-download mr-2"></i>Export to Markdown
                             </button>
+                            <button @click="copyScratchpadAll()" class="scratchpad-action-btn">
+                                <i class="fas fa-copy mr-2"></i>Copy All
+                            </button>
+                            <button @click="addScratchpadToReport()" class="scratchpad-action-btn primary">
+                                <i class="fas fa-file-export mr-2"></i>Add to Report
+                            </button>
                         </div>
-                        
-                        <template x-if="scratchpadItems.length === 0">
-                            <div class="text-center py-20">
-                                <i class="fas fa-bookmark text-6xl text-gray-300 mb-4"></i>
-                                <h2 class="text-xl font-semibold text-gray-900 mb-2">No saved items yet</h2>
-                                <p class="text-gray-600">Save answers from Research Assistant to build your analysis</p>
+                    </div>
+                    
+                    <!-- Items List -->
+                    <div class="scratchpad-items-list" x-ref="scratchpadList" @scroll="handleScratchpadScroll">
+                        <!-- Loading State -->
+                        <template x-if="scratchpadLoading">
+                            <div class="scratchpad-loading">
+                                <div class="loading-spinner"></div>
+                                <p class="loading-text">Loading saved items...</p>
                             </div>
                         </template>
                         
-                        <div class="space-y-4">
-                            <template x-for="item in scratchpadItems" :key="item.id">
-                                <div class="bg-white rounded-xl p-6 border border-gray-200 metric-card">
-                                    <div x-html="renderMarkdown(item.content)"></div>
-                                    <div x-show="item.notes" class="mt-3 p-3 rounded-lg" style="background: #fef3c7; border-left: 4px solid var(--fundlens-warning);">
-                                        <p class="text-sm text-gray-700"><strong>My Notes:</strong> <span x-text="item.notes"></span></p>
+                        <!-- Empty State -->
+                        <template x-if="!scratchpadLoading && scratchpadItems.length === 0">
+                            <div class="scratchpad-empty-state">
+                                <i class="fas fa-bookmark empty-state-icon"></i>
+                                <h3 class="empty-state-title">No saved items yet</h3>
+                                <p class="empty-state-description">
+                                    Save insights from the Research tab to build your analysis. Click "Save to Scratchpad" on any research answer.
+                                </p>
+                                <button @click="switchView('research')" class="empty-state-cta">
+                                    <i class="fas fa-search mr-2"></i>Go to Research Tab
+                                </button>
+                            </div>
+                        </template>
+                        
+                        <!-- Saved Items -->
+                        <template x-if="!scratchpadLoading && scratchpadItems.length > 0">
+                            <div>
+                                <template x-for="item in scratchpadItems" :key="item.id">
+                                    <div class="saved-item-card" 
+                                         @click="toggleScratchpadItem(item.id)"
+                                         :class="{ 'collapsed': isItemCollapsed(item.id) }">
+                                        <!-- Item Header -->
+                                        <div class="saved-item-header">
+                                            <div class="saved-item-meta">
+                                                <span class="item-type-badge" 
+                                                      :class="getScratchpadItemTypeClass(item.type)"
+                                                      x-text="getScratchpadItemTypeLabel(item.type)"></span>
+                                                <span class="item-timestamp" x-text="formatScratchpadTimestamp(item.savedAt)"></span>
+                                            </div>
+                                            <button @click.stop="deleteScratchpadItem(item.id)" 
+                                                    class="item-delete-btn"
+                                                    aria-label="Delete item">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                        
+                                        <!-- Item Content -->
+                                        <div class="saved-item-content" 
+                                             :class="{ 'collapsed': isItemCollapsed(item.id), 'expanded': !isItemCollapsed(item.id) }">
+                                            <!-- Direct Answer -->
+                                            <template x-if="item.type === 'direct_answer'">
+                                                <div class="direct-answer-content">
+                                                    <p class="direct-answer-text" x-text="item.content.text"></p>
+                                                    <div class="direct-answer-badges">
+                                                        <template x-if="item.content.confidence">
+                                                            <span class="answer-badge">
+                                                                <i class="fas fa-check-circle mr-1"></i>
+                                                                Confidence: <span x-text="formatConfidence(item.content.confidence)"></span>
+                                                            </span>
+                                                        </template>
+                                                        <template x-if="item.content.sourceCount">
+                                                            <span class="answer-badge">
+                                                                <i class="fas fa-file-alt mr-1"></i>
+                                                                Sources: <span x-text="item.content.sourceCount"></span> SEC filings
+                                                            </span>
+                                                        </template>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                            
+                                            <!-- Revenue Framework -->
+                                            <template x-if="item.type === 'revenue_framework'">
+                                                <div class="revenue-framework-grid">
+                                                    <div class="framework-column">
+                                                        <h4><i class="fas fa-bolt mr-2"></i>Point-in-Time Recognition</h4>
+                                                        <div class="product-tags">
+                                                            <template x-for="product in item.content.pointInTime" :key="product.name">
+                                                                <div class="product-tag point-in-time">
+                                                                    <i :class="`fas fa-${getProductIcon(product.icon)}`" class="product-icon"></i>
+                                                                    <span x-text="product.name"></span>
+                                                                </div>
+                                                            </template>
+                                                        </div>
+                                                    </div>
+                                                    <div class="framework-column">
+                                                        <h4><i class="fas fa-clock mr-2"></i>Over-Time Recognition</h4>
+                                                        <div class="product-tags">
+                                                            <template x-for="product in item.content.overTime" :key="product.name">
+                                                                <div class="product-tag over-time">
+                                                                    <i :class="`fas fa-${getProductIcon(product.icon)}`" class="product-icon"></i>
+                                                                    <span x-text="product.name"></span>
+                                                                </div>
+                                                            </template>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                            
+                                            <!-- Trend Analysis -->
+                                            <template x-if="item.type === 'trend_analysis'">
+                                                <div class="trend-analysis-content">
+                                                    <p class="trend-metric-label" x-text="item.content.metric"></p>
+                                                    <div class="trend-bars">
+                                                        <template x-for="dataPoint in item.content.data" :key="dataPoint.year">
+                                                            <div class="trend-bar-row">
+                                                                <span class="trend-year" x-text="dataPoint.year"></span>
+                                                                <div class="trend-bar-container">
+                                                                    <div class="trend-bar" 
+                                                                         :style="`width: ${getTrendBarWidth(dataPoint.value, item.content.data)}%`"
+                                                                         :title="`${dataPoint.year}: ${formatCurrency(dataPoint.value)}`">
+                                                                        <span x-text="formatCurrencyShort(dataPoint.value)"></span>
+                                                                    </div>
+                                                                </div>
+                                                                <span class="yoy-badge" 
+                                                                      :class="{ 'positive': dataPoint.yoyChange >= 0, 'negative': dataPoint.yoyChange < 0 }">
+                                                                    <i :class="dataPoint.yoyChange >= 0 ? 'fas fa-arrow-up' : 'fas fa-arrow-down'"></i>
+                                                                    <span x-text="Math.abs(dataPoint.yoyChange).toFixed(1) + '%'"></span>
+                                                                </span>
+                                                            </div>
+                                                        </template>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                            
+                                            <!-- Provocation -->
+                                            <template x-if="item.type === 'provocation'">
+                                                <div class="provocation-content">
+                                                    <div class="provocation-header">
+                                                        <i class="fas fa-lightbulb provocation-icon"></i>
+                                                        <span class="provocation-label">Think Deeper</span>
+                                                    </div>
+                                                    <p class="provocation-question" x-text="item.content.question"></p>
+                                                </div>
+                                            </template>
+                                        </div>
+                                        
+                                        <!-- Item Footer -->
+                                        <div class="saved-item-footer" x-show="!isItemCollapsed(item.id)">
+                                            <!-- Source Chips -->
+                                            <div class="source-chips" x-show="item.sources && item.sources.length > 0">
+                                                <template x-for="source in item.sources" :key="source.url">
+                                                    <a :href="source.url" 
+                                                       target="_blank" 
+                                                       class="source-chip"
+                                                       @click.stop
+                                                       :title="`Open ${source.filingType} filing`">
+                                                        <i class="fas fa-external-link-alt"></i>
+                                                        <span x-text="`${source.ticker} ${source.filingType} - ${formatDate(source.filingDate)}`"></span>
+                                                    </a>
+                                                </template>
+                                            </div>
+                                            
+                                            <!-- Copy Button -->
+                                            <button @click.stop="copyScratchpadItem(item)" 
+                                                    class="scratchpad-action-btn"
+                                                    style="padding: 0.375rem 0.75rem;">
+                                                <i class="fas fa-copy"></i>
+                                            </button>
+                                        </div>
                                     </div>
-                                    <div class="flex justify-between items-center text-xs text-gray-400 mt-3">
-                                        <span x-text="item.timestamp"></span>
-                                        <button @click="deleteFromScratchpad(item.id)" style="color: var(--fundlens-error);">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                            </template>
-                        </div>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
+                    
+                    <!-- Copy Confirmation Toast -->
+                    <div x-show="showCopyConfirmation" 
+                         x-transition
+                         class="copy-confirmation">
+                        <i class="fas fa-check mr-2"></i>
+                        Copied to clipboard!
                     </div>
                 </div>
                 
@@ -1235,6 +1475,9 @@
             console.log('🔧 URL:', window.location.href);
             
             return {
+                // User data
+                user: { email: '', tenantId: '', tenantName: '', tenantSlug: '', role: '', isPlatformAdmin: false },
+                
                 // Current state
                 currentView: 'analysis',
                 analysisTab: 'quantitative',
@@ -1270,6 +1513,52 @@
                 
                 // Qualitative data
                 qualitativeData: [],
+                
+                // User functions
+                getUserInitials() {
+                    if (!this.user.email) return '?';
+                    return this.user.email.substring(0, 2).toUpperCase();
+                },
+                
+                async loadUser() {
+                    const token = localStorage.getItem('fundlens_token');
+                    if (!token) {
+                        window.location.href = '/login.html';
+                        return;
+                    }
+                    
+                    const userStr = localStorage.getItem('fundlens_user');
+                    if (userStr) {
+                        this.user = JSON.parse(userStr);
+                    }
+                    
+                    try {
+                        const response = await fetch('/api/auth/me', {
+                            method: 'POST',
+                            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            if (data.success && data.user) {
+                                const isPlatformAdmin = data.user.tenantId === '00000000-0000-0000-0000-000000000000' && 
+                                                       data.user.tenantRole === 'admin';
+                                this.user = { ...this.user, ...data.user, isPlatformAdmin };
+                                localStorage.setItem('fundlens_user', JSON.stringify(this.user));
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Auth error:', error);
+                    }
+                },
+                
+                logout() {
+                    localStorage.removeItem('fundlens_token');
+                    localStorage.removeItem('fundlens_refresh_token');
+                    localStorage.removeItem('fundlens_user');
+                    localStorage.removeItem('fundlens_email');
+                    window.location.href = '/login.html';
+                },
                 
                 // Research
                 researchMessages: [],
@@ -1334,7 +1623,10 @@
                     };
                 },
                 
-                init() {
+                async init() {
+                    // Load user first
+                    await this.loadUser();
+                    
                     // Ticker is already set in data initialization
                     const ticker = this.dealInfo.ticker;
                     
@@ -1724,7 +2016,24 @@
                         const headers = this.getAuthHeaders();
                         if (!headers) return;
                         
-                        // Use notebooks API to get list of notebooks
+                        // First try the new scratchpad API
+                        const workspaceId = this.dealId || 'default';
+                        const scratchpadResponse = await fetch(`/api/research/scratchpad/${workspaceId}`, { headers });
+                        
+                        if (scratchpadResponse.status === 401) {
+                            window.location.href = '/login.html';
+                            return;
+                        }
+                        
+                        if (scratchpadResponse.ok) {
+                            const scratchpadData = await scratchpadResponse.json();
+                            this.scratchpadItems = scratchpadData.items || [];
+                            this.scratchpadCount = scratchpadData.totalCount || 0;
+                            console.log(`✅ Loaded ${this.scratchpadItems.length} scratchpad items from new API`);
+                            return;
+                        }
+                        
+                        // Fallback to old notebooks API if new API not available
                         const response = await fetch('/api/research/notebooks', { headers });
                         
                         if (response.status === 401) {
@@ -1745,15 +2054,22 @@
                                     const notebookResponse = await fetch(`/api/research/notebooks/${this.notebookId}`, { headers });
                                     if (notebookResponse.ok) {
                                         const notebookData = await notebookResponse.json();
-                                        // Map insights to scratchpad items format
+                                        // Map old notebook insights to new scratchpad format
                                         this.scratchpadItems = (notebookData.data.insights || []).map(insight => ({
                                             id: insight.id,
-                                            content: insight.content,
-                                            notes: insight.userNotes,
-                                            timestamp: new Date(insight.createdAt).toLocaleString(),
-                                            tags: insight.tags || []
+                                            workspaceId: workspaceId,
+                                            type: 'direct_answer', // Default type for old data
+                                            content: {
+                                                text: insight.content || '',
+                                                sourceCount: 0
+                                            },
+                                            sources: [],
+                                            savedAt: insight.createdAt,
+                                            metadata: {
+                                                tags: insight.tags || []
+                                            }
                                         }));
-                                        console.log(`✅ Loaded ${this.scratchpadItems.length} scratchpad items`);
+                                        console.log(`✅ Loaded ${this.scratchpadItems.length} scratchpad items (legacy format)`);
                                     }
                                 }
                             }
@@ -2484,7 +2800,9 @@
                 
                 getYoYGrowth(growthData, period) {
                     if (!growthData) return 'N/A';
-                    const growth = growthData.find(g => g.period === period);
+                    // YoY growth periods are formatted as "FY2023_to_FY2024"
+                    // We want to find the growth TO this period
+                    const growth = growthData.find(g => g.period.endsWith(`_to_${period}`));
                     return growth ? this.formatPercent(growth.value) : 'N/A';
                 },
                 
@@ -2605,6 +2923,245 @@
                     }
                     
                     return true;
+                },
+                
+                // ═══════════════════════════════════════════════════════════════
+                // NEW SCRATCHPAD FUNCTIONS
+                // ═══════════════════════════════════════════════════════════════
+                
+                // Scratchpad state
+                scratchpadLoading: false,
+                scratchpadScrolled: false,
+                collapsedItems: new Set(),
+                showCopyConfirmation: false,
+                
+                // Handle scroll for sticky header shadow
+                handleScratchpadScroll() {
+                    if (this.$refs.scratchpadList) {
+                        this.scratchpadScrolled = this.$refs.scratchpadList.scrollTop > 10;
+                    }
+                },
+                
+                // Toggle item collapse state
+                toggleScratchpadItem(itemId) {
+                    if (this.collapsedItems.has(itemId)) {
+                        this.collapsedItems.delete(itemId);
+                    } else {
+                        this.collapsedItems.add(itemId);
+                    }
+                    // Persist to localStorage
+                    this.saveScratchpadCollapseState();
+                },
+                
+                isItemCollapsed(itemId) {
+                    return this.collapsedItems.has(itemId);
+                },
+                
+                // Save collapse state to localStorage
+                saveScratchpadCollapseState() {
+                    const workspaceId = this.dealInfo.ticker;
+                    const state = Array.from(this.collapsedItems);
+                    localStorage.setItem(`fundlens_scratchpad_collapse_${workspaceId}`, JSON.stringify(state));
+                },
+                
+                // Load collapse state from localStorage
+                loadScratchpadCollapseState() {
+                    const workspaceId = this.dealInfo.ticker;
+                    const stateStr = localStorage.getItem(`fundlens_scratchpad_collapse_${workspaceId}`);
+                    if (stateStr) {
+                        try {
+                            const state = JSON.parse(stateStr);
+                            this.collapsedItems = new Set(state);
+                        } catch (e) {
+                            console.error('Error loading collapse state:', e);
+                        }
+                    }
+                },
+                
+                // Get item type CSS class
+                getScratchpadItemTypeClass(type) {
+                    const typeMap = {
+                        'direct_answer': 'direct-answer',
+                        'revenue_framework': 'revenue-framework',
+                        'trend_analysis': 'trend-analysis',
+                        'provocation': 'provocation'
+                    };
+                    return typeMap[type] || 'direct-answer';
+                },
+                
+                // Get item type label
+                getScratchpadItemTypeLabel(type) {
+                    const labelMap = {
+                        'direct_answer': 'Direct Answer',
+                        'revenue_framework': 'Revenue Framework',
+                        'trend_analysis': 'Trend Analysis',
+                        'provocation': 'Provocation'
+                    };
+                    return labelMap[type] || 'Insight';
+                },
+                
+                // Format timestamp
+                formatScratchpadTimestamp(timestamp) {
+                    if (!timestamp) return '';
+                    const date = new Date(timestamp);
+                    const now = new Date();
+                    const diffMs = now - date;
+                    const diffMins = Math.floor(diffMs / 60000);
+                    const diffHours = Math.floor(diffMs / 3600000);
+                    const diffDays = Math.floor(diffMs / 86400000);
+                    
+                    if (diffMins < 1) return 'Just now';
+                    if (diffMins < 60) return `${diffMins} min${diffMins > 1 ? 's' : ''} ago`;
+                    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+                    if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+                    return date.toLocaleDateString();
+                },
+                
+                // Format confidence score
+                formatConfidence(confidence) {
+                    if (typeof confidence === 'number') {
+                        return `${Math.round(confidence * 100)}%`;
+                    }
+                    return confidence; // 'high', 'medium', 'low'
+                },
+                
+                // Get product icon
+                getProductIcon(iconType) {
+                    const iconMap = {
+                        'phone': 'mobile-alt',
+                        'laptop': 'laptop',
+                        'tablet': 'tablet-alt',
+                        'services': 'cloud',
+                        'other': 'box'
+                    };
+                    return iconMap[iconType] || 'box';
+                },
+                
+                // Get trend bar width (percentage)
+                getTrendBarWidth(value, allData) {
+                    if (!allData || allData.length === 0) return 0;
+                    const maxValue = Math.max(...allData.map(d => d.value));
+                    if (maxValue === 0) return 0;
+                    return (value / maxValue) * 100;
+                },
+                
+                // Format currency short (for trend bars)
+                formatCurrencyShort(value) {
+                    if (!value) return '$0';
+                    const absValue = Math.abs(value);
+                    if (absValue >= 1000000000) {
+                        return `$${(value / 1000000000).toFixed(1)}B`;
+                    }
+                    if (absValue >= 1000000) {
+                        return `$${(value / 1000000).toFixed(1)}M`;
+                    }
+                    return `$${value.toFixed(0)}`;
+                },
+                
+                // Format date
+                formatDate(dateStr) {
+                    if (!dateStr) return '';
+                    const date = new Date(dateStr);
+                    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                },
+                
+                // Delete scratchpad item
+                async deleteScratchpadItem(itemId) {
+                    if (!confirm('Delete this item from your scratchpad?')) return;
+                    await this.deleteFromScratchpad(itemId);
+                },
+                
+                // Copy scratchpad item
+                async copyScratchpadItem(item) {
+                    try {
+                        let text = '';
+                        
+                        // Format based on item type
+                        if (item.type === 'direct_answer') {
+                            text = item.content.text;
+                        } else if (item.type === 'revenue_framework') {
+                            text = 'Revenue Recognition Framework:\n\n';
+                            text += 'Point-in-Time:\n';
+                            item.content.pointInTime.forEach(p => text += `- ${p.name}\n`);
+                            text += '\nOver-Time:\n';
+                            item.content.overTime.forEach(p => text += `- ${p.name}\n`);
+                        } else if (item.type === 'trend_analysis') {
+                            text = `${item.content.metric}:\n\n`;
+                            item.content.data.forEach(d => {
+                                text += `${d.year}: ${this.formatCurrency(d.value)} (YoY: ${d.yoyChange >= 0 ? '+' : ''}${d.yoyChange.toFixed(1)}%)\n`;
+                            });
+                        } else if (item.type === 'provocation') {
+                            text = item.content.question;
+                        }
+                        
+                        await navigator.clipboard.writeText(text);
+                        this.showCopyConfirmation = true;
+                        setTimeout(() => {
+                            this.showCopyConfirmation = false;
+                        }, 2000);
+                    } catch (error) {
+                        console.error('Error copying to clipboard:', error);
+                        alert('Failed to copy to clipboard');
+                    }
+                },
+                
+                // Export scratchpad to markdown
+                async exportScratchpadMarkdown() {
+                    await this.exportScratchpad();
+                },
+                
+                // Copy all scratchpad items
+                async copyScratchpadAll() {
+                    try {
+                        let text = `# Research Scratchpad - ${this.dealInfo.ticker}\n\n`;
+                        text += `Generated: ${new Date().toLocaleString()}\n\n`;
+                        
+                        this.scratchpadItems.forEach((item, index) => {
+                            text += `## ${index + 1}. ${this.getScratchpadItemTypeLabel(item.type)}\n\n`;
+                            
+                            if (item.type === 'direct_answer') {
+                                text += `${item.content.text}\n\n`;
+                            } else if (item.type === 'revenue_framework') {
+                                text += '**Point-in-Time Recognition:**\n';
+                                item.content.pointInTime.forEach(p => text += `- ${p.name}\n`);
+                                text += '\n**Over-Time Recognition:**\n';
+                                item.content.overTime.forEach(p => text += `- ${p.name}\n`);
+                                text += '\n';
+                            } else if (item.type === 'trend_analysis') {
+                                text += `**${item.content.metric}:**\n\n`;
+                                item.content.data.forEach(d => {
+                                    text += `- ${d.year}: ${this.formatCurrency(d.value)} (YoY: ${d.yoyChange >= 0 ? '+' : ''}${d.yoyChange.toFixed(1)}%)\n`;
+                                });
+                                text += '\n';
+                            } else if (item.type === 'provocation') {
+                                text += `*${item.content.question}*\n\n`;
+                            }
+                            
+                            if (item.sources && item.sources.length > 0) {
+                                text += '**Sources:**\n';
+                                item.sources.forEach(s => text += `- ${s.ticker} ${s.filingType} (${this.formatDate(s.filingDate)})\n`);
+                                text += '\n';
+                            }
+                            
+                            text += '---\n\n';
+                        });
+                        
+                        await navigator.clipboard.writeText(text);
+                        this.showCopyConfirmation = true;
+                        setTimeout(() => {
+                            this.showCopyConfirmation = false;
+                        }, 2000);
+                    } catch (error) {
+                        console.error('Error copying to clipboard:', error);
+                        alert('Failed to copy to clipboard');
+                    }
+                },
+                
+                // Add scratchpad to report
+                async addScratchpadToReport() {
+                    // Switch to IC Memo view
+                    this.switchView('ic-memo');
+                    // The IC Memo generation will automatically include scratchpad items
                 }
             };
         }

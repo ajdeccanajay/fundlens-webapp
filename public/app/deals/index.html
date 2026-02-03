@@ -106,6 +106,24 @@
             border-color: var(--border-subtle) !important;
         }
         
+        /* FORCE DROPDOWN MENU COLORS - CRITICAL FIX */
+        .absolute.right-0.mt-2.w-56 {
+            background: #FFFFFF !important;
+            border: 1px solid #E2E8F0 !important;
+        }
+        
+        .absolute.right-0.mt-2.w-56 p {
+            color: #0F172A !important;
+        }
+        
+        .absolute.right-0.mt-2.w-56 .text-xs {
+            color: #475569 !important;
+        }
+        
+        .absolute.right-0.mt-2.w-56 button {
+            color: #DC2626 !important;
+        }
+        
         @keyframes fadeIn { 
             from { opacity: 0; transform: translateY(10px); } 
             to { opacity: 1; transform: translateY(0); } 
@@ -125,11 +143,8 @@
                     <!-- Logo & Tenant -->
                     <div class="flex items-center space-x-4">
                         <div class="flex items-center">
-                            <div class="w-10 h-10 gradient-bg rounded-xl flex items-center justify-center shadow-lg">
-                                <i class="fas fa-chart-line text-white text-lg"></i>
-                            </div>
-                            <div class="ml-3">
-                                <h1 class="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">FundLens</h1>
+                            <div class="bg-white px-3 py-1 rounded-lg">
+                                <img src="/fundlens-logo.png" alt="FundLens" class="h-8 w-auto">
                             </div>
                         </div>
                         <!-- Tenant Badge -->
@@ -147,11 +162,6 @@
 
                     <!-- User Menu -->
                     <div class="flex items-center space-x-4">
-                        <!-- Theme Toggle Button -->
-                        <button onclick="window.FundLensTheme.toggle()" class="p-2 rounded-lg hover:bg-gray-100 transition-colors" title="Toggle theme">
-                            <i class="fas fa-moon text-gray-600 text-lg"></i>
-                        </button>
-                        
                         <div class="relative" x-data="{ open: false }">
                             <button @click="open = !open" class="flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors">
                                 <div class="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center">
@@ -172,19 +182,13 @@
                                  x-transition:leave="transition ease-in duration-75"
                                  x-transition:leave-start="transform opacity-100 scale-100"
                                  x-transition:leave-end="transform opacity-0 scale-95"
-                                 class="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-50">
-                                <div class="px-4 py-3 border-b border-gray-100">
+                                 class="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg py-2 z-50 border border-gray-200">
+                                <div class="px-4 py-3 border-b border-gray-200">
                                     <p class="text-sm font-medium text-gray-900" x-text="user.email"></p>
-                                    <p class="text-xs text-gray-500" x-text="user.tenantName"></p>
+                                    <p class="text-xs text-gray-600" x-text="user.tenantName"></p>
                                 </div>
-                                <a href="#" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                                    <i class="fas fa-user-circle mr-3 text-gray-400"></i> Profile Settings
-                                </a>
-                                <a href="#" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                                    <i class="fas fa-cog mr-3 text-gray-400"></i> Preferences
-                                </a>
-                                <div class="border-t border-gray-100 mt-2 pt-2">
-                                    <button @click="logout()" class="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50">
+                                <div class="pt-2">
+                                    <button @click="logout()" class="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors">
                                         <i class="fas fa-sign-out-alt mr-3"></i> Sign Out
                                     </button>
                                 </div>
