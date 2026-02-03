@@ -108,3 +108,4 @@ The SEC API integration includes built-in rate limiting (150ms delay between req
 ## 📝 License
 
 UNLICENSED - Private project
+# fundlens-webapp
