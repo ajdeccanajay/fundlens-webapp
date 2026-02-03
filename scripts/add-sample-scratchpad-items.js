@@ -13,13 +13,13 @@ async function addSampleItems() {
     
     const workspaceId = '00000000-0000-0000-0000-000000000001'; // Default workspace
     
-    // Sample 1: Direct Answer
+    // Sample 1: Direct Answer with markdown formatting
     const item1 = await prisma.$executeRaw`
       INSERT INTO scratchpad_items (workspace_id, type, content, sources, metadata)
       VALUES (
         ${workspaceId}::uuid,
         'direct_answer',
-        '{"text": "Apple recognizes iPhone revenue at point of sale, while services like iCloud and Apple Music are recognized over time as the service is delivered.", "confidence": "high", "sourceCount": 3}'::jsonb,
+        '{"text": "Apple recognizes revenue differently based on product type:\n\n**Hardware Products (Point-in-Time)**\n- iPhone: Revenue recognized at point of sale\n- Mac: Revenue recognized at point of sale\n- iPad: Revenue recognized at point of sale\n\n**Services (Over-Time)**\n- iCloud: Revenue recognized over subscription period\n- Apple Music: Revenue recognized monthly as service is delivered\n- AppleCare: Revenue recognized over the coverage period\n\nThis dual approach reflects the different nature of product sales versus ongoing service delivery.", "confidence": "high", "sourceCount": 3}'::jsonb,
         '[{"filingType": "10-K", "filingDate": "2023-11-03", "url": "https://sec.gov/example", "ticker": "AAPL"}]'::jsonb,
         '{"ticker": "AAPL", "tags": ["revenue", "recognition"]}'::jsonb
       )

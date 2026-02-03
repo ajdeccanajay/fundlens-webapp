@@ -1195,7 +1195,7 @@
                                             <!-- Direct Answer -->
                                             <template x-if="item.type === 'direct_answer'">
                                                 <div class="direct-answer-content">
-                                                    <p class="direct-answer-text" x-text="item.content.text"></p>
+                                                    <div class="direct-answer-text formatted-content" x-html="formatMarkdown(item.content.text)"></div>
                                                     <div class="direct-answer-badges">
                                                         <template x-if="item.content.confidence">
                                                             <span class="answer-badge">
@@ -3023,6 +3023,46 @@
                         return `${Math.round(confidence * 100)}%`;
                     }
                     return confidence; // 'high', 'medium', 'low'
+                },
+                
+                // Format markdown text to HTML
+                formatMarkdown(text) {
+                    if (!text) return '';
+                    
+                    // Use marked.js if available, otherwise do basic formatting
+                    if (typeof marked !== 'undefined') {
+                        try {
+                            return marked.parse(text);
+                        } catch (e) {
+                            console.error('Markdown parsing error:', e);
+                        }
+                    }
+                    
+                    // Fallback: Basic formatting
+                    let html = text;
+                    
+                    // Convert line breaks to <br> or <p> tags
+                    html = html.split('\n\n').map(para => {
+                        if (para.trim()) {
+                            return `<p>${para.replace(/\n/g, '<br>')}</p>`;
+                        }
+                        return '';
+                    }).join('');
+                    
+                    // Bold text **text**
+                    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                    
+                    // Italic text *text*
+                    html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+                    
+                    // Bullet lists
+                    html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
+                    html = html.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+                    
+                    // Numbered lists
+                    html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+                    
+                    return html;
                 },
                 
                 // Get product icon
