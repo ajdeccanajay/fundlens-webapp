@@ -1,0 +1,120 @@
+{
+  "family": "fundlens-production",
+  "taskRoleArn": "arn:aws:iam::588082972864:role/fundlens-production-ecs-task-role",
+  "executionRoleArn": "arn:aws:iam::588082972864:role/fundlens-production-ecs-execution-role",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "2048",
+  "memory": "4096",
+  "containerDefinitions": [
+    {
+      "name": "python-parser",
+      "image": "588082972864.dkr.ecr.us-east-1.amazonaws.com/fundlens-python-parser:latest",
+      "cpu": 512,
+      "memory": 1024,
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "hostPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      "essential": true,
+      "environment": [
+        { "name": "PORT", "value": "8000" },
+        { "name": "PYTHONUNBUFFERED", "value": "1" }
+      ],
+      "secrets": [
+        {
+          "name": "DATABASE_URL",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:588082972864:secret:fundlens/production/database-clwKdY:DATABASE_URL::"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/fundlens-production/python-parser",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "python-parser"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"],
+        "interval": 30,
+        "timeout": 10,
+        "retries": 3,
+        "startPeriod": 30
+      }
+    },
+    {
+      "name": "backend",
+      "image": "588082972864.dkr.ecr.us-east-1.amazonaws.com/fundlens-backend:latest",
+      "cpu": 1536,
+      "memory": 3072,
+      "portMappings": [
+        {
+          "containerPort": 3000,
+          "hostPort": 3000,
+          "protocol": "tcp"
+        }
+      ],
+      "essential": true,
+      "environment": [
+        { "name": "AWS_REGION", "value": "us-east-1" },
+        { "name": "PORT", "value": "3000" },
+        { "name": "BEDROCK_KB_ID", "value": "NB5XNMHBQT" },
+        { "name": "KB_SYNC_LAMBDA_NAME", "value": "bedrock-kb-sync" },
+        { "name": "S3_DATA_LAKE_BUCKET", "value": "fundlens-data-lake" },
+        { "name": "S3_BUCKET_NAME", "value": "fundlens-documents-dev" },
+        { "name": "COGNITO_USER_POOL_ID", "value": "us-east-1_4OYqnpE18" },
+        { "name": "BEDROCK_DATA_SOURCE_ID", "value": "OQMSFOE5SL" },
+        { "name": "REQUEST_DELAY_MS", "value": "150" },
+        { "name": "PYTHON_PARSER_URL", "value": "http://localhost:8000" },
+        { "name": "SEC_USER_AGENT", "value": "FundLensAI/1.0 (contact: ops@fundlens.ai)" },
+        { "name": "CACHE_TTL_MS", "value": "86400000" },
+        { "name": "COGNITO_REGION", "value": "us-east-1" },
+        { "name": "NODE_ENV", "value": "production" },
+        { "name": "BEDROCK_CHUNKS_BUCKET", "value": "fundlens-bedrock-chunks" }
+      ],
+      "secrets": [
+        {
+          "name": "DATABASE_URL",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:588082972864:secret:fundlens/production/database-clwKdY:DATABASE_URL::"
+        },
+        {
+          "name": "COGNITO_APP_CLIENT_ID",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:588082972864:secret:fundlens/production/cognito-e5TVZQ:clientId::"
+        },
+        {
+          "name": "COGNITO_APP_CLIENT_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:588082972864:secret:fundlens/production/cognito-e5TVZQ:clientSecret::"
+        },
+        {
+          "name": "PLATFORM_ADMIN_KEY",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:588082972864:secret:fundlens/production/platform-Zb6qOQ:adminKey::"
+        }
+      ],
+      "dependsOn": [
+        {
+          "containerName": "python-parser",
+          "condition": "HEALTHY"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/fundlens-production/backend",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "backend"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"],
+        "interval": 30,
+        "timeout": 10,
+        "retries": 3,
+        "startPeriod": 60
+      }
+    }
+  ]
+}

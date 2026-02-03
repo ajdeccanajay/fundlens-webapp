@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Workspace Header Fix</title>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-result { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .pass { background: #d4edda; color: #155724; }
+        .fail { background: #f8d7da; color: #721c24; }
+        .header { font-size: 24px; font-weight: bold; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <h1>Workspace Header Fix Test</h1>
+    <p>Testing that dealInfo is initialized before Alpine.js renders the template.</p>
+    
+    <div x-data="testWorkspace()" x-init="runTests()">
+        <div class="header" x-text="dealInfo ? (dealInfo.ticker + ' - ' + dealInfo.name) : 'FAILED: dealInfo is null'"></div>
+        
+        <div id="test-results">
+            <h2>Test Results:</h2>
+            <div class="test-result" :class="tests.initialization ? 'pass' : 'fail'">
+                <strong>Test 1: dealInfo Initialization</strong><br>
+                <span x-text="tests.initialization ? '✓ PASS: dealInfo initialized with ticker from URL' : '✗ FAIL: dealInfo is null or undefined'"></span>
+            </div>
+            
+            <div class="test-result" :class="tests.ticker ? 'pass' : 'fail'">
+                <strong>Test 2: Ticker Value</strong><br>
+                <span x-text="tests.ticker ? '✓ PASS: ticker = ' + dealInfo.ticker : '✗ FAIL: ticker is undefined'"></span>
+            </div>
+            
+            <div class="test-result" :class="tests.name ? 'pass' : 'fail'">
+                <strong>Test 3: Name Value</strong><br>
+                <span x-text="tests.name ? '✓ PASS: name = ' + dealInfo.name : '✗ FAIL: name is undefined'"></span>
+            </div>
+            
+            <div class="test-result" :class="tests.noUndefined ? 'pass' : 'fail'">
+                <strong>Test 4: No "undefined" in Header</strong><br>
+                <span x-text="tests.noUndefined ? '✓ PASS: Header does not contain \"undefined\"' : '✗ FAIL: Header contains \"undefined\"'"></span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function testWorkspace() {
+            // Get ticker from URL immediately (before Alpine.js renders)
+            const urlParams = new URLSearchParams(window.location.search);
+            const ticker = urlParams.get('ticker') || 'AAPL';
+            
+            console.log('🔧 testWorkspace() called - ticker:', ticker);
+            
+            return {
+                // Deal info - initialized immediately with ticker from URL
+                dealInfo: {
+                    ticker: ticker,
+                    name: ticker + ' Inc.',
+                    sector: 'Technology'
+                },
+                
+                tests: {
+                    initialization: false,
+                    ticker: false,
+                    name: false,
+                    noUndefined: false
+                },
+                
+                runTests() {
+                    console.log('Running tests...');
+                    console.log('dealInfo:', this.dealInfo);
+                    
+                    // Test 1: dealInfo is initialized
+                    this.tests.initialization = this.dealInfo !== null && this.dealInfo !== undefined;
+                    
+                    // Test 2: ticker is set
+                    this.tests.ticker = this.dealInfo && this.dealInfo.ticker !== undefined && this.dealInfo.ticker !== 'undefined';
+                    
+                    // Test 3: name is set
+                    this.tests.name = this.dealInfo && this.dealInfo.name !== undefined && this.dealInfo.name !== 'undefined';
+                    
+                    // Test 4: header doesn't contain "undefined"
+                    const headerText = this.dealInfo ? (this.dealInfo.ticker + ' - ' + this.dealInfo.name) : 'FAILED';
+                    this.tests.noUndefined = !headerText.includes('undefined');
+                    
+                    console.log('Test results:', this.tests);
+                    
+                    // Overall result
+                    const allPassed = Object.values(this.tests).every(t => t === true);
+                    console.log(allPassed ? '✅ ALL TESTS PASSED' : '❌ SOME TESTS FAILED');
+                }
+            };
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FundLens - Internal Admin Tools</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- Design System -->
+    <link rel="stylesheet" href="/css/design-system.css">
+    <script src="/js/theme-toggle.js"></script>
+    
+    <!-- Keep Tailwind for gradual migration -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Force design system fonts */
+        * { font-family: var(--font-sans) !important; }
+        code, pre, .font-mono { font-family: var(--font-mono) !important; }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="min-h-screen">
+        <!-- Header -->
+        <header class="bg-white shadow-sm border-b border-gray-200">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <i class="fas fa-shield-alt text-red-600 text-2xl"></i>
+                        <div>
+                            <h1 class="text-2xl font-bold text-gray-900">Internal Admin Tools</h1>
+                            <p class="text-sm text-gray-500">Platform administration and testing utilities</p>
+                        </div>
+                    </div>
+                    <a href="/" class="text-blue-600 hover:text-blue-700 flex items-center space-x-2">
+                        <i class="fas fa-home"></i>
+                        <span>Back to App</span>
+                    </a>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <!-- Warning Banner -->
+            <div class="bg-red-50 border-l-4 border-red-600 p-4 mb-8">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-exclamation-triangle text-red-600"></i>
+                    </div>
+                    <div class="ml-3">
+                        <h3 class="text-sm font-medium text-red-800">
+                            Restricted Access - Platform Administrators Only
+                        </h3>
+                        <div class="mt-2 text-sm text-red-700">
+                            <p>These tools are for internal use only and should not be shared with external users. All actions are logged and monitored.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tools Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Platform Admin -->
+                <a href="/internal/platform-admin.html" class="block bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow border border-gray-200 p-6">
+                    <div class="flex items-center space-x-3 mb-4">
+                        <div class="flex-shrink-0">
+                            <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-cog text-blue-600 text-xl"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-900">Platform Admin</h3>
+                            <p class="text-sm text-gray-500">Main admin dashboard</p>
+                        </div>
+                    </div>
+                    <p class="text-sm text-gray-600">
+                        Manage tenants, users, data sources, and system configuration.
+                    </p>
+                    <div class="mt-4 flex items-center text-blue-600 text-sm font-medium">
+                        <span>Open Dashboard</span>
+                        <i class="fas fa-arrow-right ml-2"></i>
+                    </div>
+                </a>
+
+                <!-- RAG Query Tool -->
+                <a href="/internal/rag-query.html" class="block bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow border border-gray-200 p-6">
+                    <div class="flex items-center space-x-3 mb-4">
+                        <div class="flex-shrink-0">
+                            <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-search text-purple-600 text-xl"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-900">RAG Query Tool</h3>
+                            <p class="text-sm text-gray-500">Test RAG system</p>
+                        </div>
+                    </div>
+                    <p class="text-sm text-gray-600">
+                        Test and debug the RAG (Retrieval-Augmented Generation) query system.
+                    </p>
+                    <div class="mt-4 flex items-center text-purple-600 text-sm font-medium">
+                        <span>Open Tool</span>
+                        <i class="fas fa-arrow-right ml-2"></i>
+                    </div>
+                </a>
+
+                <!-- SSE Chat Test -->
+                <a href="/internal/test-sse-chat.html" class="block bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow border border-gray-200 p-6">
+                    <div class="flex items-center space-x-3 mb-4">
+                        <div class="flex-shrink-0">
+                            <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-comments text-green-600 text-xl"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-900">SSE Chat Test</h3>
+                            <p class="text-sm text-gray-500">Test streaming chat</p>
+                        </div>
+                    </div>
+                    <p class="text-sm text-gray-600">
+                        Test Server-Sent Events (SSE) streaming for chat functionality.
+                    </p>
+                    <div class="mt-4 flex items-center text-green-600 text-sm font-medium">
+                        <span>Open Tool</span>
+                        <i class="fas fa-arrow-right ml-2"></i>
+                    </div>
+                </a>
+
+                <!-- Upload Test -->
+                <a href="/internal/upload.html" class="block bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow border border-gray-200 p-6">
+                    <div class="flex items-center space-x-3 mb-4">
+                        <div class="flex-shrink-0">
+                            <div class="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-upload text-yellow-600 text-xl"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-900">Upload Test</h3>
+                            <p class="text-sm text-gray-500">Test file uploads</p>
+                        </div>
+                    </div>
+                    <p class="text-sm text-gray-600">
+                        Test document upload functionality and S3 integration.
+                    </p>
+                    <div class="mt-4 flex items-center text-yellow-600 text-sm font-medium">
+                        <span>Open Tool</span>
+                        <i class="fas fa-arrow-right ml-2"></i>
+                    </div>
+                </a>
+
+                <!-- Ticker Display Test -->
+                <a href="/internal/test-ticker-display.html" class="block bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow border border-gray-200 p-6">
+                    <div class="flex items-center space-x-3 mb-4">
+                        <div class="flex-shrink-0">
+                            <div class="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-chart-line text-indigo-600 text-xl"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-900">Ticker Display Test</h3>
+                            <p class="text-sm text-gray-500">Test ticker UI</p>
+                        </div>
+                    </div>
+                    <p class="text-sm text-gray-600">
+                        Test ticker display and financial data visualization components.
+                    </p>
+                    <div class="mt-4 flex items-center text-indigo-600 text-sm font-medium">
+                        <span>Open Tool</span>
+                        <i class="fas fa-arrow-right ml-2"></i>
+                    </div>
+                </a>
+
+                <!-- Chat Test -->
+                <a href="/internal/test-chat.html" class="block bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow border border-gray-200 p-6">
+                    <div class="flex items-center space-x-3 mb-4">
+                        <div class="flex-shrink-0">
+                            <div class="w-12 h-12 bg-pink-100 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-comment-dots text-pink-600 text-xl"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-900">Chat Test</h3>
+                            <p class="text-sm text-gray-500">Test chat interface</p>
+                        </div>
+                    </div>
+                    <p class="text-sm text-gray-600">
+                        Test basic chat interface and messaging functionality.
+                    </p>
+                    <div class="mt-4 flex items-center text-pink-600 text-sm font-medium">
+                        <span>Open Tool</span>
+                        <i class="fas fa-arrow-right ml-2"></i>
+                    </div>
+                </a>
+            </div>
+
+            <!-- Info Section -->
+            <div class="mt-12 bg-blue-50 rounded-lg p-6">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">
+                    <i class="fas fa-info-circle text-blue-600 mr-2"></i>
+                    About These Tools
+                </h2>
+                <div class="space-y-3 text-sm text-gray-700">
+                    <p>
+                        <strong>Purpose:</strong> These tools are designed for platform administrators to test, debug, and manage the FundLens system.
+                    </p>
+                    <p>
+                        <strong>Access:</strong> This area is protected by platform admin authentication. Only authorized personnel should have access.
+                    </p>
+                    <p>
+                        <strong>Security:</strong> All actions performed through these tools are logged and monitored for security and compliance purposes.
+                    </p>
+                    <p>
+                        <strong>Support:</strong> If you need assistance with any of these tools, contact the development team.
+                    </p>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="bg-white border-t border-gray-200 mt-12">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                <div class="flex items-center justify-between text-sm text-gray-500">
+                    <div>
+                        <i class="fas fa-lock mr-2"></i>
+                        Secure Admin Area - Authorized Access Only
+                    </div>
+                    <div>
+                        FundLens &copy; 2026
+                    </div>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        // Log access for security monitoring
+        console.log('[Security] Admin tools accessed at:', new Date().toISOString());
+        
+        // Check if running in production
+        if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+            console.warn('[Security] Admin tools accessed in production environment');
+        }
+    </script>
+</body>
+</html>

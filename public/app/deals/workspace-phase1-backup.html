@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FundLens - Deal Workspace</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <style>
+        [x-cloak] { display: none !important; }
+        
+        /* FundLens Brand Colors */
+        :root {
+            --fundlens-primary: #1a56db;
+            --fundlens-primary-hover: #1e429f;
+            --fundlens-secondary: #0e7490;
+            --fundlens-accent: #7c3aed;
+            --fundlens-success: #059669;
+            --fundlens-warning: #d97706;
+            --fundlens-error: #dc2626;
+            --fundlens-gray-50: #f9fafb;
+            --fundlens-gray-100: #f3f4f6;
+            --fundlens-gray-200: #e5e7eb;
+            --fundlens-gray-600: #4b5563;
+            --fundlens-gray-900: #111827;
+        }
+        
+        /* Sidebar Styles */
+        .sidebar {
+            width: 240px;
+            transition: width 0.2s ease;
+            background: white;
+            border-right: 1px solid var(--fundlens-gray-200);
+        }
+        
+        .nav-item {
+            transition: all 0.2s ease;
+            cursor: pointer;
+            position: relative;
+        }
+        
+        .nav-item:hover {
+            background: var(--fundlens-gray-50);
+        }
+        
+        .nav-item.active {
+            background: #eff6ff;
+            color: var(--fundlens-primary);
+            border-left: 3px solid var(--fundlens-primary);
+        }
+        
+        .nav-item.active i {
+            color: var(--fundlens-primary);
+        }
+        
+        /* Badge */
+        .badge {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: var(--fundlens-error);
+            color: white;
+            font-size: 0.65rem;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-weight: 600;
+        }
+        
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.3s ease-out;
+        }
+        
+        /* Metric Cards */
+        .metric-card {
+            background: white;
+            border-radius: 0.75rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            padding: 1.5rem;
+            border: 1px solid var(--fundlens-gray-100);
+            transition: all 0.2s ease;
+        }
+        
+        .metric-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        /* Messages */
+        .message-user {
+            background: linear-gradient(135deg, var(--fundlens-primary) 0%, var(--fundlens-accent) 100%);
+            color: white;
+            border-radius: 18px;
+            padding: 12px 18px;
+            max-width: 80%;
+            margin-left: auto;
+        }
+        
+        .message-assistant {
+            background: white;
+            border: 1px solid var(--fundlens-gray-200);
+            border-radius: 18px;
+            padding: 16px 20px;
+            max-width: 85%;
+        }
+        
+        /* Tables */
+        .annual-table { width: 100%; font-size: 0.875rem; }
+        .annual-table th { text-align: left; padding: 0.5rem 0.75rem; background: var(--fundlens-gray-50); font-weight: 600; }
+        .annual-table td { padding: 0.5rem 0.75rem; border-top: 1px solid var(--fundlens-gray-100); }
+        
+        /* QA Cards */
+        .qa-card {
+            background: #f8fafc;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-left: 4px solid var(--fundlens-primary);
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div x-data="dealWorkspace()" x-init="init()" x-cloak>
+        <!-- Top Bar -->
+        <div class="bg-white border-b border-gray-200 h-16 flex items-center px-6 justify-between">
+            <div class="flex items-center space-x-4">
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background: linear-gradient(135deg, var(--fundlens-primary) 0%, var(--fundlens-accent) 100%);">
+                    <i class="fas fa-chart-line text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold text-gray-900" x-text="dealInfo.ticker + ' - ' + dealInfo.name"></h1>
+                    <p class="text-xs text-gray-500" x-text="dealInfo.sector"></p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-3">
+                <button @click="exportData()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+                    <i class="fas fa-download mr-2"></i>Export
+                </button>
+                <button class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+                    <i class="fas fa-cog"></i>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Main Layout -->
+        <div class="flex h-[calc(100vh-64px)]">
+            <!-- Sidebar -->
+            <div class="sidebar flex flex-col">
+                <!-- Navigation Items -->
+                <nav class="flex-1 p-3 space-y-1">
+                    <div @click="switchView('analysis')" 
+                         :class="{'active': currentView === 'analysis'}"
+                         class="nav-item flex items-center px-3 py-3 rounded-lg">
+                        <i class="fas fa-chart-bar w-5 text-gray-400"></i>
+                        <span class="ml-3 text-sm font-medium">Analysis</span>
+                    </div>
+                    
+                    <div @click="switchView('research')" 
+                         :class="{'active': currentView === 'research'}"
+                         class="nav-item flex items-center px-3 py-3 rounded-lg">
+                        <i class="fas fa-brain w-5 text-gray-400"></i>
+                        <span class="ml-3 text-sm font-medium">Research</span>
+                    </div>
+                    
+                    <div @click="switchView('scratchpad')" 
+                         :class="{'active': currentView === 'scratchpad'}"
+                         class="nav-item flex items-center px-3 py-3 rounded-lg">
+                        <i class="fas fa-bookmark w-5 text-gray-400"></i>
+                        <span class="ml-3 text-sm font-medium">Scratchpad</span>
+                        <span x-show="scratchpadCount > 0" class="badge" x-text="scratchpadCount"></span>
+                    </div>
+                    
+                    <div @click="switchView('ic-memo')" 
+                         :class="{'active': currentView === 'ic-memo'}"
+                         class="nav-item flex items-center px-3 py-3 rounded-lg">
+                        <i class="fas fa-file-alt w-5 text-gray-400"></i>
+                        <span class="ml-3 text-sm font-medium">IC Memo</span>
+                    </div>
+                </nav>
+                
+                <!-- Keyboard Shortcuts Hint -->
+                <div class="p-4 border-t border-gray-200">
+                    <p class="text-xs text-gray-400 mb-2">Keyboard Shortcuts</p>
+                    <div class="space-y-1 text-xs text-gray-500">
+                        <div>⌘1 - Analysis</div>
+                        <div>⌘2 - Research</div>
+                        <div>⌘3 - Scratchpad</div>
+                        <div>⌘4 - IC Memo</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Content Area -->
+            <div class="flex-1 overflow-auto">
+                <!-- Analysis View -->
+                <div x-show="currentView === 'analysis'" class="fade-in p-8">
+                    <div class="max-w-7xl mx-auto">
+                        <!-- Tabs -->
+                        <div class="flex space-x-2 mb-6">
+                            <button @click="analysisTab = 'quantitative'" 
+                                    :class="analysisTab === 'quantitative' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white' : 'bg-white text-gray-700 border border-gray-300'"
+                                    class="px-4 py-2 rounded-lg font-medium text-sm">
+                                Quantitative
+                            </button>
+                            <button @click="analysisTab = 'qualitative'" 
+                                    :class="analysisTab === 'qualitative' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white' : 'bg-white text-gray-700 border border-gray-300'"
+                                    class="px-4 py-2 rounded-lg font-medium text-sm">
+                                Qualitative
+                            </button>
+                            <button @click="analysisTab = 'export'" 
+                                    :class="analysisTab === 'export' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white' : 'bg-white text-gray-700 border border-gray-300'"
+                                    class="px-4 py-2 rounded-lg font-medium text-sm">
+                                Export
+                            </button>
+                        </div>
+                        
+                        <!-- Quantitative Content -->
+                        <div x-show="analysisTab === 'quantitative'" class="space-y-6">
+                            <div class="bg-white rounded-xl p-6 border border-gray-200">
+                                <h2 class="text-xl font-bold mb-4">Financial Performance</h2>
+                                <div x-show="loading" class="text-center py-8">
+                                    <i class="fas fa-spinner fa-spin text-3xl" style="color: var(--fundlens-primary);"></i>
+                                    <p class="text-gray-600 mt-2">Loading financial data...</p>
+                                </div>
+                                <div x-show="!loading" class="grid grid-cols-4 gap-4">
+                                    <div class="metric-card" style="background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);">
+                                        <p class="text-sm text-gray-600">Revenue</p>
+                                        <p class="text-2xl font-bold" style="color: var(--fundlens-success);" x-text="formatCurrency(metrics.revenue)"></p>
+                                        <p class="text-xs" style="color: var(--fundlens-success);" x-text="metrics.revenueGrowth"></p>
+                                    </div>
+                                    <div class="metric-card" style="background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);">
+                                        <p class="text-sm text-gray-600">Net Income</p>
+                                        <p class="text-2xl font-bold" style="color: var(--fundlens-primary);" x-text="formatCurrency(metrics.netIncome)"></p>
+                                        <p class="text-xs" style="color: var(--fundlens-primary);" x-text="metrics.netIncomeGrowth"></p>
+                                    </div>
+                                    <div class="metric-card" style="background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);">
+                                        <p class="text-sm text-gray-600">Op Margin</p>
+                                        <p class="text-2xl font-bold" style="color: var(--fundlens-accent);" x-text="metrics.opMargin"></p>
+                                        <p class="text-xs" style="color: var(--fundlens-accent);" x-text="metrics.opMarginChange"></p>
+                                    </div>
+                                    <div class="metric-card" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);">
+                                        <p class="text-sm text-gray-600">Free Cash Flow</p>
+                                        <p class="text-2xl font-bold" style="color: var(--fundlens-warning);" x-text="formatCurrency(metrics.fcf)"></p>
+                                        <p class="text-xs" style="color: var(--fundlens-warning);" x-text="metrics.fcfGrowth"></p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Qualitative Content -->
+                        <div x-show="analysisTab === 'qualitative'" class="space-y-4">
+                            <div x-show="loadingQualitative" class="text-center py-8">
+                                <i class="fas fa-spinner fa-spin text-3xl" style="color: var(--fundlens-primary);"></i>
+                                <p class="text-gray-600 mt-2">Loading qualitative analysis...</p>
+                            </div>
+                            <template x-for="qa in qualitativeData" :key="qa.question">
+                                <div class="qa-card">
+                                    <h3 class="font-semibold text-gray-900 mb-2" x-text="qa.question"></h3>
+                                    <p class="text-gray-600 text-sm" x-text="qa.answer"></p>
+                                </div>
+                            </template>
+                        </div>
+                        
+                        <!-- Export Content -->
+                        <div x-show="analysisTab === 'export'" class="space-y-4">
+                            <div class="bg-white rounded-xl p-6 border border-gray-200">
+                                <h2 class="text-xl font-bold mb-4">Export Financial Statements</h2>
+                                <p class="text-gray-600 mb-6">Download comprehensive financial data to Excel for further analysis</p>
+                                <button @click="exportToExcel()" class="px-6 py-3 rounded-lg font-medium text-white" style="background: var(--fundlens-success);">
+                                    <i class="fas fa-file-excel mr-2"></i>Export to Excel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Research View -->
+                <div x-show="currentView === 'research'" class="fade-in h-full flex flex-col">
+                    <div class="flex-1 overflow-auto p-6 space-y-4">
+                        <template x-if="researchMessages.length === 0">
+                            <div class="text-center py-20">
+                                <div class="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6" style="background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);">
+                                    <i class="fas fa-brain text-3xl" style="color: var(--fundlens-primary);"></i>
+                                </div>
+                                <h2 class="text-2xl font-bold text-gray-900 mb-4">Research Assistant</h2>
+                                <p class="text-gray-600 mb-8" x-text="'Ask questions about ' + dealInfo.ticker + ' or compare with other companies'"></p>
+                                <div class="grid grid-cols-2 gap-4 max-w-2xl mx-auto">
+                                    <button @click="quickQuery('What are the key risks?')" 
+                                            class="bg-white p-6 rounded-xl border border-gray-200 text-left hover:shadow-lg transition-all">
+                                        <div class="w-10 h-10 rounded-lg flex items-center justify-center mb-3" style="background: #fee2e2;">
+                                            <i class="fas fa-exclamation-triangle" style="color: var(--fundlens-error);"></i>
+                                        </div>
+                                        <h3 class="font-semibold text-gray-900 mb-2">Risk Analysis</h3>
+                                        <p class="text-sm text-gray-600">Key risks and challenges</p>
+                                    </button>
+                                    <button @click="quickQuery('Compare revenue with peers')" 
+                                            class="bg-white p-6 rounded-xl border border-gray-200 text-left hover:shadow-lg transition-all">
+                                        <div class="w-10 h-10 rounded-lg flex items-center justify-center mb-3" style="background: #dbeafe;">
+                                            <i class="fas fa-chart-line" style="color: var(--fundlens-primary);"></i>
+                                        </div>
+                                        <h3 class="font-semibold text-gray-900 mb-2">Compare</h3>
+                                        <p class="text-sm text-gray-600">Compare with peers</p>
+                                    </button>
+                                </div>
+                            </div>
+                        </template>
+                        
+                        <template x-for="message in researchMessages" :key="message.id">
+                            <div>
+                                <div x-show="message.role === 'user'" class="flex justify-end mb-4">
+                                    <div class="message-user" x-text="message.content"></div>
+                                </div>
+                                <div x-show="message.role === 'assistant'" class="flex justify-start mb-4">
+                                    <div class="message-assistant">
+                                        <div x-html="renderMarkdown(message.content)"></div>
+                                        <button @click="saveToScratchpad(message)" 
+                                                class="mt-3 text-xs flex items-center" style="color: var(--fundlens-primary);">
+                                            <i class="fas fa-bookmark mr-1"></i>Save to Scratchpad
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                    
+                    <div class="border-t border-gray-200 p-6 bg-white">
+                        <div class="flex items-end space-x-3">
+                            <textarea x-model="researchInput" 
+                                      @keydown.enter.prevent="sendResearchMessage()"
+                                      placeholder="Ask about any company..."
+                                      rows="2"
+                                      class="flex-1 border-2 border-gray-200 rounded-xl px-4 py-3 focus:outline-none resize-none"
+                                      style="border-color: var(--fundlens-gray-200);"
+                                      @focus="$el.style.borderColor = 'var(--fundlens-primary)'"
+                                      @blur="$el.style.borderColor = 'var(--fundlens-gray-200)'"></textarea>
+                            <button @click="sendResearchMessage()" 
+                                    class="px-6 py-3 rounded-xl font-medium text-white hover:shadow-lg"
+                                    style="background: linear-gradient(135deg, var(--fundlens-primary) 0%, var(--fundlens-accent) 100%);">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                        <p class="text-xs text-gray-400 mt-2">Press Enter to send</p>
+                    </div>
+                </div>
+                
+                <!-- Scratchpad View -->
+                <div x-show="currentView === 'scratchpad'" class="fade-in p-8">
+                    <div class="max-w-4xl mx-auto">
+                        <div class="flex justify-between items-center mb-6">
+                            <h1 class="text-2xl font-bold">Research Scratchpad</h1>
+                            <button @click="exportScratchpad()" class="px-4 py-2 rounded-lg text-sm font-medium text-white" style="background: var(--fundlens-primary);">
+                                <i class="fas fa-download mr-2"></i>Export to Markdown
+                            </button>
+                        </div>
+                        
+                        <template x-if="scratchpadItems.length === 0">
+                            <div class="text-center py-20">
+                                <i class="fas fa-bookmark text-6xl text-gray-300 mb-4"></i>
+                                <h2 class="text-xl font-semibold text-gray-900 mb-2">No saved items yet</h2>
+                                <p class="text-gray-600">Save answers from Research Assistant to build your analysis</p>
+                            </div>
+                        </template>
+                        
+                        <div class="space-y-4">
+                            <template x-for="item in scratchpadItems" :key="item.id">
+                                <div class="bg-white rounded-xl p-6 border border-gray-200 metric-card">
+                                    <div x-html="renderMarkdown(item.content)"></div>
+                                    <div x-show="item.notes" class="mt-3 p-3 rounded-lg" style="background: #fef3c7; border-left: 4px solid var(--fundlens-warning);">
+                                        <p class="text-sm text-gray-700"><strong>My Notes:</strong> <span x-text="item.notes"></span></p>
+                                    </div>
+                                    <div class="flex justify-between items-center text-xs text-gray-400 mt-3">
+                                        <span x-text="item.timestamp"></span>
+                                        <button @click="deleteFromScratchpad(item.id)" style="color: var(--fundlens-error);">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- IC Memo View -->
+                <div x-show="currentView === 'ic-memo'" class="fade-in p-8">
+                    <div class="max-w-4xl mx-auto">
+                        <h1 class="text-2xl font-bold mb-6">Investment Committee Memo</h1>
+                        
+                        <template x-if="!memoGenerated">
+                            <div class="bg-white rounded-xl p-8 border border-gray-200 text-center">
+                                <div class="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6" style="background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);">
+                                    <i class="fas fa-file-export text-3xl" style="color: var(--fundlens-success);"></i>
+                                </div>
+                                <h2 class="text-xl font-semibold mb-4">Generate IC Memo</h2>
+                                <p class="text-gray-600 mb-6">Create a comprehensive investment memo using your research and analysis</p>
+                                <div class="border border-blue-200 rounded-lg p-4 mb-6 text-left max-w-md mx-auto" style="background: #eff6ff;">
+                                    <h3 class="font-semibold mb-2" style="color: var(--fundlens-primary);">Memo will include:</h3>
+                                    <ul class="text-sm space-y-1" style="color: var(--fundlens-primary);">
+                                        <li><i class="fas fa-check mr-2"></i>Executive Summary</li>
+                                        <li><i class="fas fa-check mr-2"></i>Financial Metrics</li>
+                                        <li><i class="fas fa-check mr-2"></i>Your Research Notes (<span x-text="scratchpadCount"></span> items)</li>
+                                        <li><i class="fas fa-check mr-2"></i>Investment Recommendation</li>
+                                    </ul>
+                                </div>
+                                <button @click="generateMemo()" 
+                                        class="px-8 py-3 rounded-xl font-medium text-white hover:shadow-lg"
+                                        style="background: linear-gradient(135deg, var(--fundlens-success) 0%, var(--fundlens-secondary) 100%);">
+                                    <i class="fas fa-magic mr-2"></i>Generate Memo
+                                </button>
+                            </div>
+                        </template>
+                        
+                        <template x-if="memoGenerated">
+                            <div class="bg-white rounded-xl p-8 border border-gray-200">
+                                <div class="prose max-w-none" x-html="memoContent"></div>
+                                
+                                <div class="flex gap-3 mt-6 pt-6 border-t border-gray-200">
+                                    <button @click="downloadMemoPDF()" class="flex-1 px-6 py-3 rounded-lg font-medium text-white" style="background: var(--fundlens-primary);">
+                                        <i class="fas fa-download mr-2"></i>Download PDF
+                                    </button>
+                                    <button @click="memoGenerated = false" 
+                                            class="flex-1 border border-gray-300 px-6 py-3 rounded-lg font-medium hover:bg-gray-50">
+                                        Generate New
+                                    </button>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function dealWorkspace() {
+            return {
+                // Current state
+                currentView: 'analysis',
+                analysisTab: 'quantitative',
+                
+                // Deal info
+                dealInfo: {
+                    ticker: '',
+                    name: '',
+                    sector: ''
+                },
+                
+                // Loading states
+                loading: true,
+                loadingQualitative: true,
+                
+                // Metrics data
+                metrics: {
+                    revenue: 0,
+                    revenueGrowth: '',
+                    netIncome: 0,
+                    netIncomeGrowth: '',
+                    opMargin: '',
+                    opMarginChange: '',
+                    fcf: 0,
+                    fcfGrowth: ''
+                },
+                
+                // Qualitative data
+                qualitativeData: [],
+                
+                // Research
+                researchMessages: [],
+                researchInput: '',
+                
+                // Scratchpad
+                scratchpadItems: [],
+                scratchpadCount: 0,
+                
+                // IC Memo
+                memoGenerated: false,
+                memoContent: '',
+                
+                init() {
+                    // Get deal ID from URL
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const dealId = urlParams.get('dealId');
+                    const ticker = urlParams.get('ticker') || 'AAPL';
+                    
+                    // Load deal info
+                    this.loadDealInfo(ticker);
+                    
+                    // Load data
+                    this.loadFinancialData(ticker);
+                    this.loadQualitativeData(ticker);
+                    this.loadScratchpad();
+                    
+                    // Set up keyboard shortcuts
+                    document.addEventListener('keydown', (e) => {
+                        if (e.metaKey || e.ctrlKey) {
+                            if (e.key === '1') {
+                                e.preventDefault();
+                                this.switchView('analysis');
+                            } else if (e.key === '2') {
+                                e.preventDefault();
+                                this.switchView('research');
+                            } else if (e.key === '3') {
+                                e.preventDefault();
+                                this.switchView('scratchpad');
+                            } else if (e.key === '4') {
+                                e.preventDefault();
+                                this.switchView('ic-memo');
+                            }
+                        }
+                    });
+                    
+                    // Handle hash navigation
+                    if (window.location.hash) {
+                        const view = window.location.hash.substring(1);
+                        if (['analysis', 'research', 'scratchpad', 'ic-memo'].includes(view)) {
+                            this.currentView = view;
+                        }
+                    }
+                },
+                
+                switchView(view) {
+                    this.currentView = view;
+                    window.location.hash = view;
+                },
+                
+                async loadDealInfo(ticker) {
+                    try {
+                        const response = await fetch(`/api/deals/info?ticker=${ticker}`);
+                        if (response.ok) {
+                            this.dealInfo = await response.json();
+                        } else {
+                            // Fallback to demo data
+                            this.dealInfo = {
+                                ticker: ticker,
+                                name: ticker + ' Inc.',
+                                sector: 'Technology'
+                            };
+                        }
+                    } catch (error) {
+                        console.error('Error loading deal info:', error);
+                        this.dealInfo = {
+                            ticker: ticker,
+                            name: ticker + ' Inc.',
+                            sector: 'Technology'
+                        };
+                    }
+                },
+                
+                async loadFinancialData(ticker) {
+                    this.loading = true;
+                    try {
+                        const response = await fetch(`/api/deals/financial-calculator/metrics?ticker=${ticker}`);
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.metrics = {
+                                revenue: data.revenue || 0,
+                                revenueGrowth: data.revenueGrowth || 'N/A',
+                                netIncome: data.netIncome || 0,
+                                netIncomeGrowth: data.netIncomeGrowth || 'N/A',
+                                opMargin: data.opMargin || 'N/A',
+                                opMarginChange: data.opMarginChange || 'N/A',
+                                fcf: data.fcf || 0,
+                                fcfGrowth: data.fcfGrowth || 'N/A'
+                            };
+                        }
+                    } catch (error) {
+                        console.error('Error loading financial data:', error);
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+                
+                async loadQualitativeData(ticker) {
+                    this.loadingQualitative = true;
+                    try {
+                        const response = await fetch(`/api/deals/qualitative-analysis?ticker=${ticker}`);
+                        if (response.ok) {
+                            this.qualitativeData = await response.json();
+                        }
+                    } catch (error) {
+                        console.error('Error loading qualitative data:', error);
+                    } finally {
+                        this.loadingQualitative = false;
+                    }
+                },
+                
+                async loadScratchpad() {
+                    try {
+                        const response = await fetch('/api/research/notebook/items');
+                        if (response.ok) {
+                            this.scratchpadItems = await response.json();
+                            this.scratchpadCount = this.scratchpadItems.length;
+                        }
+                    } catch (error) {
+                        console.error('Error loading scratchpad:', error);
+                    }
+                },
+                
+                quickQuery(query) {
+                    this.researchInput = query;
+                    this.sendResearchMessage();
+                },
+                
+                async sendResearchMessage() {
+                    if (!this.researchInput.trim()) return;
+                    
+                    const userMessage = {
+                        id: Date.now(),
+                        role: 'user',
+                        content: this.researchInput
+                    };
+                    
+                    this.researchMessages.push(userMessage);
+                    this.researchInput = '';
+                    
+                    try {
+                        const response = await fetch('/api/research/chat', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                message: userMessage.content,
+                                ticker: this.dealInfo.ticker
+                            })
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.researchMessages.push({
+                                id: Date.now() + 1,
+                                role: 'assistant',
+                                content: data.response
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Error sending message:', error);
+                        this.researchMessages.push({
+                            id: Date.now() + 1,
+                            role: 'assistant',
+                            content: 'Sorry, I encountered an error. Please try again.'
+                        });
+                    }
+                },
+                
+                async saveToScratchpad(message) {
+                    const notes = prompt('Add your notes (optional):');
+                    
+                    try {
+                        const response = await fetch('/api/research/notebook/items', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                content: message.content,
+                                notes: notes || '',
+                                ticker: this.dealInfo.ticker
+                            })
+                        });
+                        
+                        if (response.ok) {
+                            await this.loadScratchpad();
+                            alert('Saved to scratchpad!');
+                        }
+                    } catch (error) {
+                        console.error('Error saving to scratchpad:', error);
+                        alert('Error saving to scratchpad');
+                    }
+                },
+                
+                async deleteFromScratchpad(id) {
+                    if (!confirm('Remove this item?')) return;
+                    
+                    try {
+                        const response = await fetch(`/api/research/notebook/items/${id}`, {
+                            method: 'DELETE'
+                        });
+                        
+                        if (response.ok) {
+                            await this.loadScratchpad();
+                        }
+                    } catch (error) {
+                        console.error('Error deleting item:', error);
+                    }
+                },
+                
+                async exportScratchpad() {
+                    try {
+                        const response = await fetch('/api/research/notebook/export');
+                        if (response.ok) {
+                            const blob = await response.blob();
+                            const url = window.URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `scratchpad-${this.dealInfo.ticker}-${new Date().toISOString().split('T')[0]}.md`;
+                            document.body.appendChild(a);
+                            a.click();
+                            window.URL.revokeObjectURL(url);
+                            document.body.removeChild(a);
+                        }
+                    } catch (error) {
+                        console.error('Error exporting scratchpad:', error);
+                        alert('Error exporting scratchpad');
+                    }
+                },
+                
+                async generateMemo() {
+                    try {
+                        const response = await fetch('/api/deals/document-generation/ic-memo', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                ticker: this.dealInfo.ticker,
+                                scratchpadItems: this.scratchpadItems
+                            })
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.memoContent = this.renderMarkdown(data.content);
+                            this.memoGenerated = true;
+                        }
+                    } catch (error) {
+                        console.error('Error generating memo:', error);
+                        alert('Error generating memo');
+                    }
+                },
+                
+                async downloadMemoPDF() {
+                    try {
+                        const response = await fetch('/api/deals/document-generation/export-pdf', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                ticker: this.dealInfo.ticker,
+                                content: this.memoContent
+                            })
+                        });
+                        
+                        if (response.ok) {
+                            const blob = await response.blob();
+                            const url = window.URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `IC-Memo-${this.dealInfo.ticker}-${new Date().toISOString().split('T')[0]}.pdf`;
+                            document.body.appendChild(a);
+                            a.click();
+                            window.URL.revokeObjectURL(url);
+                            document.body.removeChild(a);
+                        }
+                    } catch (error) {
+                        console.error('Error downloading PDF:', error);
+                        alert('Error downloading PDF');
+                    }
+                },
+                
+                async exportToExcel() {
+                    try {
+                        const response = await fetch(`/api/deals/export/excel?ticker=${this.dealInfo.ticker}`);
+                        if (response.ok) {
+                            const blob = await response.blob();
+                            const url = window.URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `${this.dealInfo.ticker}-Financial-Statements-${new Date().toISOString().split('T')[0]}.xlsx`;
+                            document.body.appendChild(a);
+                            a.click();
+                            window.URL.revokeObjectURL(url);
+                            document.body.removeChild(a);
+                        }
+                    } catch (error) {
+                        console.error('Error exporting to Excel:', error);
+                        alert('Error exporting to Excel');
+                    }
+                },
+                
+                exportData() {
+                    // Quick export button in header
+                    this.exportToExcel();
+                },
+                
+                formatCurrency(value) {
+                    if (!value) return '$0';
+                    const billion = value / 1000000000;
+                    if (billion >= 1) {
+                        return `$${billion.toFixed(1)}B`;
+                    }
+                    const million = value / 1000000;
+                    return `$${million.toFixed(1)}M`;
+                },
+                
+                renderMarkdown(text) {
+                    if (!text) return '';
+                    try {
+                        return marked.parse(text);
+                    } catch (error) {
+                        console.error('Error rendering markdown:', error);
+                        return text;
+                    }
+                }
+            };
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,93 @@
+# =============================================================================
+# FundLens - Docker Compose for Local Development & Testing
+# Mirrors production ECS Fargate sidecar architecture
+# =============================================================================
+
+version: '3.8'
+
+services:
+  # ---------------------------------------------------------------------------
+  # NestJS Backend (Primary Container)
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: fundlens-backend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - PYTHON_PARSER_URL=http://python-parser:8000
+      # AWS Configuration
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      # Database
+      - DATABASE_URL=${DATABASE_URL}
+      # Cognito
+      - COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID}
+      - COGNITO_APP_CLIENT_ID=${COGNITO_APP_CLIENT_ID}
+      - COGNITO_APP_CLIENT_SECRET=${COGNITO_APP_CLIENT_SECRET}
+      - COGNITO_REGION=${COGNITO_REGION:-us-east-1}
+      # Bedrock
+      - BEDROCK_KB_ID=${BEDROCK_KB_ID}
+      - BEDROCK_DATA_SOURCE_ID=${BEDROCK_DATA_SOURCE_ID}
+      - BEDROCK_CHUNKS_BUCKET=${BEDROCK_CHUNKS_BUCKET}
+      # S3
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - S3_DATA_LAKE_BUCKET=${S3_DATA_LAKE_BUCKET}
+      # Lambda
+      - KB_SYNC_LAMBDA_NAME=${KB_SYNC_LAMBDA_NAME}
+      # SEC
+      - SEC_USER_AGENT=${SEC_USER_AGENT:-FundLensAI/1.0}
+      - REQUEST_DELAY_MS=${REQUEST_DELAY_MS:-150}
+      - CACHE_TTL_MS=${CACHE_TTL_MS:-86400000}
+      # Platform Admin
+      - PLATFORM_ADMIN_KEY=${PLATFORM_ADMIN_KEY}
+    depends_on:
+      python-parser:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - fundlens-network
+
+  # ---------------------------------------------------------------------------
+  # Python Parser (Sidecar Container)
+  # ---------------------------------------------------------------------------
+  python-parser:
+    build:
+      context: ./python_parser
+      dockerfile: Dockerfile
+      target: production
+    container_name: fundlens-python-parser
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PORT=8000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - fundlens-network
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  fundlens-network:
+    driver: bridge
+    name: fundlens-network

@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Platform Administration</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- Design System -->
+    <link rel="stylesheet" href="/css/design-system.css">
+    <script src="/js/theme-toggle.js"></script>
+    
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: var(--font-sans) !important; }
+        body {
+            font-family: var(--font-sans) !important;
+            background: var(--color-navy-900) !important;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+        .auth-screen {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .auth-box {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 40px;
+            width: 100%;
+            max-width: 400px;
+        }
+        .auth-box h1 {
+            font-size: 24px;
+            margin-bottom: 8px;
+            color: #f8fafc;
+        }
+        .auth-box p {
+            color: #94a3b8;
+            margin-bottom: 24px;
+            font-size: 14px;
+        }
+        .form-group { margin-bottom: 20px; }
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #94a3b8;
+        }
+</style>
+</head>
+<body>
+    <!-- Auth Screen -->
+    <div id="authScreen" class="auth-screen">
+        <div class="auth-box">
+            <h1>🔐 Platform Admin</h1>
+            <p>Enter your admin API key to access the platform administration console.</p>
+            <div class="form-group">
+                <label for="adminKey">Admin API Key</label>
+                <input type="password" id="adminKey" placeholder="Enter your admin key">
+            </div>
+            <button id="authBtn" class="btn btn-primary" style="width: 100%;">Authenticate</button>
+            <div id="authError" class="error-msg"></div>
+        </div>
+    </div>
+
+    <!-- Main Admin Console (hidden until authenticated) -->
+    <div id="adminConsole" class="admin-console" style="display: none;">
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <h2>🛡️ FundLens Admin</h2>
+            </div>
+            <ul class="nav-menu">
+                <li class="nav-item active" data-section="dashboard">📊 Dashboard</li>
+                <li class="nav-item" data-section="clients">🏢 Clients</li>
+                <li class="nav-item" data-section="newClient">➕ New Client</li>
+                <li class="nav-item" data-section="users">👥 Users</li>
+            </ul>
+            <div class="sidebar-footer">
+                <button id="logoutBtn" class="btn btn-secondary">🚪 Logout</button>
+            </div>
+        </nav>
+        <main class="main-content">
+            <!-- Dashboard Section -->
+            <section id="dashboardSection" class="section active">
+                <h1>Platform Dashboard</h1>
+                <div class="stats-grid" id="statsGrid">
+                    <div class="stat-card"><div class="stat-value" id="totalClients">-</div><div class="stat-label">Total Clients</div></div>
+                    <div class="stat-card"><div class="stat-value" id="activeClients">-</div><div class="stat-label">Active Clients</div></div>
+                    <div class="stat-card"><div class="stat-value" id="totalUsers">-</div><div class="stat-label">Total Users</div></div>
+                    <div class="stat-card"><div class="stat-value" id="totalDeals">-</div><div class="stat-label">Total Deals</div></div>
+                </div>
+                <div class="card" style="margin-top: 24px;">
+                    <h3>Clients by Tier</h3>
+                    <div id="tierBreakdown" class="tier-breakdown"></div>
+                </div>
+            </section>
+
+            <!-- Clients Section -->
+            <section id="clientsSection" class="section">
+                <div class="section-header">
+                    <h1>Client Management</h1>
+                    <button class="btn btn-primary" onclick="showSection('newClient')">+ New Client</button>
+                </div>
+                <div class="card">
+                    <div class="table-controls">
+                        <select id="clientStatusFilter">
+                            <option value="">All Status</option>
+                            <option value="active">Active</option>
+                            <option value="suspended">Suspended</option>
+                        </select>
+                        <select id="clientTierFilter">
+                            <option value="">All Tiers</option>
+                            <option value="free">Free</option>
+                            <option value="pro">Pro</option>
+                            <option value="enterprise">Enterprise</option>
+                        </select>
+                        <button class="btn btn-secondary" onclick="loadClients()">🔄 Refresh</button>
+                    </div>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Slug</th>
+                                <th>Tier</th>
+                                <th>Status</th>
+                                <th>Users</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="clientsTableBody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- New Client Section -->
+            <section id="newClientSection" class="section">
+                <h1>Create New Client</h1>
+                <div class="card" style="max-width: 600px;">
+                    <form id="newClientForm">
+                        <div class="form-group">
+                            <label for="clientName">Organization Name *</label>
+                            <input type="text" id="clientName" required placeholder="Acme Capital Partners">
+                        </div>
+                        <div class="form-group">
+                            <label for="clientSlug">Slug (optional)</label>
+                            <input type="text" id="clientSlug" placeholder="acme-capital (auto-generated if empty)">
+                        </div>
+                        <div class="form-group">
+                            <label for="clientTier">Tier *</label>
+                            <select id="clientTier" required>
+                                <option value="free">Free</option>
+                                <option value="pro">Pro</option>
+                                <option value="enterprise" selected>Enterprise</option>
+                            </select>
+                        </div>
+                        <hr style="border-color: #334155; margin: 24px 0;">
+                        <h3 style="margin-bottom: 16px;">Initial Admin User</h3>
+                        <div class="form-group">
+                            <label for="adminEmail">Admin Email *</label>
+                            <input type="email" id="adminEmail" required placeholder="admin@company.com">
+                        </div>
+                        <div class="form-group">
+                            <label for="adminPassword">Admin Password *</label>
+                            <input type="password" id="adminPassword" required placeholder="Min 12 chars, mixed case, number, special">
+                            <button type="button" class="btn btn-secondary" style="margin-top: 8px;" onclick="generatePassword()">Generate Secure Password</button>
+                        </div>
+                        <div id="newClientError" class="error-msg"></div>
+                        <div id="newClientSuccess" class="success-msg"></div>
+                        <button type="submit" class="btn btn-primary">Create Client</button>
+                    </form>
+                </div>
+            </section>
+
+            <!-- Users Section -->
+            <section id="usersSection" class="section">
+                <h1>User Management</h1>
+                <div class="card">
+                    <div class="form-group" style="max-width: 400px;">
+                        <label for="userClientSelect">Select Client</label>
+                        <select id="userClientSelect" onchange="loadClientUsers()">
+                            <option value="">-- Select a client --</option>
+                        </select>
+                    </div>
+                    <div id="userManagement" style="display: none;">
+                        <div class="section-header" style="margin-top: 24px;">
+                            <h3 id="selectedClientName">Users</h3>
+                            <button class="btn btn-primary" onclick="showAddUserModal()">+ Add User</button>
+                        </div>
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Email</th>
+                                    <th>Role</th>
+                                    <th>Created</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="usersTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Add User Modal -->
+    <div id="addUserModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Add User to Client</h2>
+                <button class="close-btn" onclick="closeModal('addUserModal')">&times;</button>
+            </div>
+            <form id="addUserForm">
+                <div class="form-group">
+                    <label for="newUserEmail">Email *</label>
+                    <input type="email" id="newUserEmail" required placeholder="user@company.com">
+                </div>
+                <div class="form-group">
+                    <label for="newUserPassword">Password *</label>
+                    <input type="password" id="newUserPassword" required>
+                    <button type="button" class="btn btn-secondary" style="margin-top: 8px;" onclick="generateUserPassword()">Generate</button>
+                </div>
+                <div class="form-group">
+                    <label for="newUserRole">Role *</label>
+                    <select id="newUserRole" required>
+                        <option value="viewer">Viewer</option>
+                        <option value="analyst" selected>Analyst</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                </div>
+                <div id="addUserError" class="error-msg"></div>
+                <button type="submit" class="btn btn-primary">Add User</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Client Details Modal -->
+    <div id="clientDetailsModal" class="modal" style="display: none;">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h2 id="clientDetailsTitle">Client Details</h2>
+                <button class="close-btn" onclick="closeModal('clientDetailsModal')">&times;</button>
+            </div>
+            <div id="clientDetailsContent"></div>
+        </div>
+    </div>
+
+    <style>
+        input, select {
+            width: 100%;
+            padding: 12px;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            color: #e2e8f0;
+            font-size: 14px;
+        }
+        input:focus, select:focus {
+            outline: none;
+            border-color: #3b82f6;
+        }
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: #3b82f6;
+            color: white;
+        }
+        .btn-primary:hover { background: #2563eb; }
+        .btn-secondary {
+            background: #334155;
+            color: #e2e8f0;
+        }
+        .btn-secondary:hover { background: #475569; }
+        .btn-danger {
+            background: #dc2626;
+            color: white;
+        }
+        .btn-danger:hover { background: #b91c1c; }
+        .btn-success {
+            background: #16a34a;
+            color: white;
+        }
+        .error-msg {
+            color: #f87171;
+            font-size: 14px;
+            margin-top: 12px;
+            display: none;
+        }
+        .success-msg {
+            color: #4ade80;
+            font-size: 14px;
+            margin-top: 12px;
+            display: none;
+        }
+        .admin-console {
+            display: flex;
+            min-height: 100vh;
+        }
+        .sidebar {
+            width: 260px;
+            background: #1e293b;
+            border-right: 1px solid #334155;
+            display: flex;
+            flex-direction: column;
+        }
+        .sidebar-header {
+            padding: 24px;
+            border-bottom: 1px solid #334155;
+        }
+        .sidebar-header h2 {
+            font-size: 18px;
+            color: #f8fafc;
+        }
+        .nav-menu {
+            list-style: none;
+            padding: 16px 0;
+            flex: 1;
+        }
+        .nav-item {
+            padding: 12px 24px;
+            cursor: pointer;
+            color: #94a3b8;
+            transition: all 0.2s;
+        }
+        .nav-item:hover {
+            background: #334155;
+            color: #f8fafc;
+        }
+        .nav-item.active {
+            background: #3b82f6;
+            color: white;
+        }
+        .sidebar-footer {
+            padding: 16px 24px;
+            border-top: 1px solid #334155;
+        }
+        .main-content {
+            flex: 1;
+            padding: 32px;
+            overflow-y: auto;
+        }
+
+        .section { display: none; }
+        .section.active { display: block; }
+        .section h1 {
+            font-size: 28px;
+            margin-bottom: 24px;
+            color: #f8fafc;
+        }
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+        .stat-card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 24px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 36px;
+            font-weight: 700;
+            color: #3b82f6;
+        }
+        .stat-label {
+            color: #94a3b8;
+            margin-top: 8px;
+        }
+        .card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 24px;
+        }
+        .card h3 {
+            margin-bottom: 16px;
+            color: #f8fafc;
+        }
+        .tier-breakdown {
+            display: flex;
+            gap: 24px;
+            flex-wrap: wrap;
+        }
+        .tier-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .tier-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .tier-free { background: #334155; color: #94a3b8; }
+        .tier-pro { background: #1d4ed8; color: white; }
+        .tier-enterprise { background: #7c3aed; color: white; }
+        .table-controls {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .table-controls select {
+            width: auto;
+            min-width: 150px;
+        }
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .data-table th, .data-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #334155;
+        }
+        .data-table th {
+            color: #94a3b8;
+            font-weight: 500;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+        .data-table td {
+            color: #e2e8f0;
+        }
+        .data-table tr:hover {
+            background: #334155;
+        }
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .status-active { background: #166534; color: #4ade80; }
+        .status-suspended { background: #7f1d1d; color: #f87171; }
+        .role-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+        }
+        .role-admin { background: #7c3aed; color: white; }
+        .role-analyst { background: #1d4ed8; color: white; }
+        .role-viewer { background: #334155; color: #94a3b8; }
+
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 24px;
+            width: 100%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .modal-large { max-width: 800px; }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+        .modal-header h2 {
+            color: #f8fafc;
+        }
+        .close-btn {
+            background: none;
+            border: none;
+            color: #94a3b8;
+            font-size: 24px;
+            cursor: pointer;
+        }
+        .close-btn:hover { color: #f8fafc; }
+        .action-btns {
+            display: flex;
+            gap: 8px;
+        }
+        .action-btns .btn {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #94a3b8;
+        }
+        hr { border: none; border-top: 1px solid #334155; margin: 16px 0; }
+    </style>
+
+    <script>
+        // State
+        let adminKey = '';
+        let clients = [];
+        let selectedClientId = '';
+        const API_BASE = '/api/v1/internal/ops';
+
+        // API Helper
+        async function api(endpoint, method = 'GET', body = null) {
+            const options = {
+                method,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-admin-key': adminKey
+                }
+            };
+            if (body) options.body = JSON.stringify(body);
+            
+            const response = await fetch(`${API_BASE}${endpoint}`, options);
+            const data = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(data.message || 'API request failed');
+            }
+            return data;
+        }
+
+        // Authentication
+        document.getElementById('authBtn').addEventListener('click', async () => {
+            const key = document.getElementById('adminKey').value.trim();
+            if (!key) {
+                showError('authError', 'Please enter your admin key');
+                return;
+            }
+            
+            adminKey = key;
+            try {
+                await api('/stats');
+                document.getElementById('authScreen').style.display = 'none';
+                document.getElementById('adminConsole').style.display = 'flex';
+                loadDashboard();
+                loadClientsForSelect();
+            } catch (e) {
+                showError('authError', 'Invalid admin key');
+                adminKey = '';
+            }
+        });
+
+        document.getElementById('adminKey').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') document.getElementById('authBtn').click();
+        });
+
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            adminKey = '';
+            document.getElementById('adminConsole').style.display = 'none';
+            document.getElementById('authScreen').style.display = 'flex';
+            document.getElementById('adminKey').value = '';
+        });
+
+        // Navigation
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const section = item.dataset.section;
+                showSection(section);
+            });
+        });
+
+        function showSection(section) {
+            document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            
+            document.querySelector(`[data-section="${section}"]`).classList.add('active');
+            document.getElementById(`${section}Section`).classList.add('active');
+            
+            if (section === 'dashboard') loadDashboard();
+            if (section === 'clients') loadClients();
+        }
+
+        // Dashboard
+        async function loadDashboard() {
+            try {
+                const { stats } = await api('/stats');
+                document.getElementById('totalClients').textContent = stats.totalClients;
+                document.getElementById('activeClients').textContent = stats.activeClients;
+                document.getElementById('totalUsers').textContent = stats.totalUsers;
+                document.getElementById('totalDeals').textContent = stats.totalDeals;
+                
+                const tierHtml = Object.entries(stats.clientsByTier || {}).map(([tier, count]) => 
+                    `<div class="tier-item"><span class="tier-badge tier-${tier}">${tier}</span><span>${count}</span></div>`
+                ).join('');
+                document.getElementById('tierBreakdown').innerHTML = tierHtml || '<span style="color:#94a3b8">No clients yet</span>';
+            } catch (e) {
+                console.error('Failed to load dashboard:', e);
+            }
+        }
+
+        // Clients
+        async function loadClients() {
+            const status = document.getElementById('clientStatusFilter').value;
+            const tier = document.getElementById('clientTierFilter').value;
+            
+            try {
+                const params = new URLSearchParams();
+                if (status) params.append('status', status);
+                if (tier) params.append('tier', tier);
+                
+                const { clients: data } = await api(`/clients?${params}`);
+                clients = data;
+                
+                const tbody = document.getElementById('clientsTableBody');
+                tbody.innerHTML = clients.map(c => `
+                    <tr>
+                        <td><strong>${escapeHtml(c.name)}</strong></td>
+                        <td><code>${escapeHtml(c.slug)}</code></td>
+                        <td><span class="tier-badge tier-${c.tier}">${c.tier}</span></td>
+                        <td><span class="status-badge status-${c.status}">${c.status}</span></td>
+                        <td>${c.userCount}</td>
+                        <td>${formatDate(c.createdAt)}</td>
+                        <td>
+                            <div class="action-btns">
+                                <button class="btn btn-secondary" onclick="viewClient('${c.id}')">View</button>
+                                ${c.status === 'active' 
+                                    ? `<button class="btn btn-danger" onclick="suspendClient('${c.id}')">Suspend</button>`
+                                    : `<button class="btn btn-success" onclick="reactivateClient('${c.id}')">Activate</button>`
+                                }
+                            </div>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (e) {
+                console.error('Failed to load clients:', e);
+            }
+        }
+
+        async function loadClientsForSelect() {
+            try {
+                const { clients: data } = await api('/clients');
+                clients = data;
+                const select = document.getElementById('userClientSelect');
+                select.innerHTML = '<option value="">-- Select a client --</option>' +
+                    clients.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+            } catch (e) {
+                console.error('Failed to load clients for select:', e);
+            }
+        }
+
+        async function viewClient(id) {
+            try {
+                const { client } = await api(`/clients/${id}`);
+                const { users } = await api(`/clients/${id}/users`);
+                
+                document.getElementById('clientDetailsTitle').textContent = client.name;
+                document.getElementById('clientDetailsContent').innerHTML = `
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+                        <div>
+                            <h4 style="color: #94a3b8; margin-bottom: 8px;">Details</h4>
+                            <p><strong>ID:</strong> <code>${client.id}</code></p>
+                            <p><strong>Slug:</strong> ${client.slug}</p>
+                            <p><strong>Tier:</strong> <span class="tier-badge tier-${client.tier}">${client.tier}</span></p>
+                            <p><strong>Status:</strong> <span class="status-badge status-${client.status}">${client.status}</span></p>
+                            <p><strong>Created:</strong> ${formatDate(client.createdAt)}</p>
+                        </div>
+                        <div>
+                            <h4 style="color: #94a3b8; margin-bottom: 8px;">Settings</h4>
+                            <pre style="background: #0f172a; padding: 12px; border-radius: 8px; font-size: 12px; overflow: auto;">${JSON.stringify(client.settings, null, 2)}</pre>
+                        </div>
+                    </div>
+                    <hr>
+                    <h4 style="color: #94a3b8; margin-bottom: 12px;">Users (${users.length})</h4>
+                    <table class="data-table">
+                        <thead><tr><th>Email</th><th>Role</th><th>Created</th></tr></thead>
+                        <tbody>
+                            ${users.map(u => `
+                                <tr>
+                                    <td>${escapeHtml(u.email)}</td>
+                                    <td><span class="role-badge role-${u.role}">${u.role}</span></td>
+                                    <td>${formatDate(u.createdAt)}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+                document.getElementById('clientDetailsModal').style.display = 'flex';
+            } catch (e) {
+                alert('Failed to load client details: ' + e.message);
+            }
+        }
+
+        async function suspendClient(id) {
+            if (!confirm('Are you sure you want to suspend this client? All users will lose access.')) return;
+            try {
+                await api(`/clients/${id}/suspend`, 'POST', { reason: 'Suspended via admin console' });
+                loadClients();
+            } catch (e) {
+                alert('Failed to suspend client: ' + e.message);
+            }
+        }
+
+        async function reactivateClient(id) {
+            if (!confirm('Reactivate this client?')) return;
+            try {
+                await api(`/clients/${id}/reactivate`, 'POST');
+                loadClients();
+            } catch (e) {
+                alert('Failed to reactivate client: ' + e.message);
+            }
+        }
+
+        // Create Client
+        document.getElementById('newClientForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            hideMessages();
+            
+            const data = {
+                name: document.getElementById('clientName').value.trim(),
+                slug: document.getElementById('clientSlug').value.trim() || undefined,
+                tier: document.getElementById('clientTier').value,
+                adminEmail: document.getElementById('adminEmail').value.trim(),
+                adminPassword: document.getElementById('adminPassword').value
+            };
+            
+            try {
+                const result = await api('/clients', 'POST', data);
+                showSuccess('newClientSuccess', `Client "${result.client.name}" created successfully! Admin user: ${result.adminUser.email}`);
+                document.getElementById('newClientForm').reset();
+                loadClientsForSelect();
+            } catch (e) {
+                showError('newClientError', e.message);
+            }
+        });
+
+        function generatePassword() {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%^&*';
+            let password = '';
+            for (let i = 0; i < 16; i++) {
+                password += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            // Ensure requirements
+            password = password.substring(0, 12) + 'Aa1!';
+            document.getElementById('adminPassword').value = password;
+            document.getElementById('adminPassword').type = 'text';
+            setTimeout(() => { document.getElementById('adminPassword').type = 'password'; }, 3000);
+        }
+
+        // Users
+        async function loadClientUsers() {
+            const clientId = document.getElementById('userClientSelect').value;
+            if (!clientId) {
+                document.getElementById('userManagement').style.display = 'none';
+                return;
+            }
+            
+            selectedClientId = clientId;
+            const client = clients.find(c => c.id === clientId);
+            document.getElementById('selectedClientName').textContent = `Users for ${client?.name || 'Client'}`;
+            
+            try {
+                const { users } = await api(`/clients/${clientId}/users`);
+                const tbody = document.getElementById('usersTableBody');
+                tbody.innerHTML = users.map(u => `
+                    <tr>
+                        <td>${escapeHtml(u.email)}</td>
+                        <td><span class="role-badge role-${u.role}">${u.role}</span></td>
+                        <td>${formatDate(u.createdAt)}</td>
+                        <td>
+                            <div class="action-btns">
+                                <select onchange="updateUserRole('${encodeURIComponent(u.email)}', this.value)" style="width: auto; padding: 6px;">
+                                    <option value="">Change Role</option>
+                                    <option value="viewer">Viewer</option>
+                                    <option value="analyst">Analyst</option>
+                                    <option value="admin">Admin</option>
+                                </select>
+                                <button class="btn btn-danger" onclick="removeUser('${encodeURIComponent(u.email)}')">Remove</button>
+                            </div>
+                        </td>
+                    </tr>
+                `).join('');
+                document.getElementById('userManagement').style.display = 'block';
+            } catch (e) {
+                alert('Failed to load users: ' + e.message);
+            }
+        }
+
+        function showAddUserModal() {
+            document.getElementById('addUserForm').reset();
+            hideMessages();
+            document.getElementById('addUserModal').style.display = 'flex';
+        }
+
+        function generateUserPassword() {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%^&*';
+            let password = '';
+            for (let i = 0; i < 16; i++) {
+                password += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            password = password.substring(0, 12) + 'Aa1!';
+            document.getElementById('newUserPassword').value = password;
+            document.getElementById('newUserPassword').type = 'text';
+            setTimeout(() => { document.getElementById('newUserPassword').type = 'password'; }, 3000);
+        }
+
+        document.getElementById('addUserForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            hideMessages();
+            
+            const data = {
+                email: document.getElementById('newUserEmail').value.trim(),
+                password: document.getElementById('newUserPassword').value,
+                role: document.getElementById('newUserRole').value
+            };
+            
+            try {
+                await api(`/clients/${selectedClientId}/users`, 'POST', data);
+                closeModal('addUserModal');
+                loadClientUsers();
+            } catch (e) {
+                showError('addUserError', e.message);
+            }
+        });
+
+        async function updateUserRole(email, role) {
+            if (!role) return;
+            try {
+                await api(`/clients/${selectedClientId}/users/${email}/role`, 'PUT', { role });
+                loadClientUsers();
+            } catch (e) {
+                alert('Failed to update role: ' + e.message);
+            }
+        }
+
+        async function removeUser(email) {
+            if (!confirm('Remove this user? They will lose all access.')) return;
+            try {
+                await api(`/clients/${selectedClientId}/users/${email}`, 'DELETE');
+                loadClientUsers();
+            } catch (e) {
+                alert('Failed to remove user: ' + e.message);
+            }
+        }
+
+        // Utilities
+        function closeModal(id) {
+            document.getElementById(id).style.display = 'none';
+        }
+
+        function showError(id, msg) {
+            const el = document.getElementById(id);
+            el.textContent = msg;
+            el.style.display = 'block';
+        }
+
+        function showSuccess(id, msg) {
+            const el = document.getElementById(id);
+            el.textContent = msg;
+            el.style.display = 'block';
+        }
+
+        function hideMessages() {
+            document.querySelectorAll('.error-msg, .success-msg').forEach(el => el.style.display = 'none');
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '-';
+            return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+        }
+
+        // Close modals on outside click
+        document.querySelectorAll('.modal').forEach(modal => {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) modal.style.display = 'none';
+            });
+        });
+    </script>
+</body>
+</html>

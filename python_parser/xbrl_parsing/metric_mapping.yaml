@@ -1,0 +1,358 @@
+# Enhanced configuration-driven XBRL metrics mapping
+conventions:
+  ttm: TTM_SUM sums the last 4 consecutive *fiscal* quarters using frames or period matching
+  period_filter: 'Match element periodType: ''instant'' vs ''duration'''
+  unit_filter: Filter facts by expected unit (USD/shares/percent)
+  dimension_policy: Use non-dimensional facts for consolidated totals unless metric specifies an axis/member
+  sign_policy: Normalize sign using element balance and label conventions
+
+frames:
+  quarter_len_days: [60, 120]   # for Q detection if you're not using Frames API
+  ttm_method: roll_4q_duration  # sum 4 consecutive quarters
+
+unit_candidates: [USD, iso4217:USD]
+unit_normalize_to: USD       # store normalized value too
+
+validation:
+  min: -1e15
+  max:  1e15
+rounding:
+  unit: USD
+  decimals: 0
+
+metrics:
+- id: rev_ttm
+  name: Revenue (TTM)
+  period_type: duration_ttm
+  taxonomy_tags:
+    priority: [us-gaap:Revenues, us-gaap:SalesRevenueNet, ifrs-full:Revenue]
+    alternates_by_industry:
+      BANKS: [us-gaap:InterestAndDividendIncomeOperating, us-gaap:NoninterestIncome]
+  unit_candidates: [USD, iso4217:USD]
+  dimensions:
+    prefer_members:
+      LegalEntityAxis: ConsolidatedEntitiesMember
+    forbid_axes:
+      SegmentAxis: "*"
+      ProductOrServiceAxis: "*"
+  sign_rule: positive
+  synonyms: [sales, total revenue]
+  fallback_to_dom_table:
+    enabled: false
+
+- id: rev_cagr
+  name: Revenue CAGR
+  period_type: multi_period_duration
+  taxonomy_tags:
+    priority: [us-gaap:Revenues, us-gaap:SalesRevenueNet]
+  unit_candidates: [percent, USD]
+  sign_rule: signed
+  synonyms: [revenue growth, sales growth]
+  fallback_to_dom_table:
+    enabled: false
+
+- id: gross_profit
+  name: Gross Profit
+  period_type: duration
+  taxonomy_tags:
+    priority: [us-gaap:GrossProfit]
+    fallback: [us-gaap:Revenues, us-gaap:CostOfGoodsAndServicesSold]
+  unit_candidates: [USD, iso4217:USD]
+  sign_rule: positive
+  synonyms: [gross margin, gross income]
+  fallback_to_dom_table:
+    enabled: false
+
+- id: gross_margin_pct
+  name: Gross Margin
+  period_type: duration
+  taxonomy_tags:
+    priority: [us-gaap:GrossProfit, us-gaap:Revenues]
+  unit_candidates: [percent, USD]
+  sign_rule: signed
+  synonyms: [gross margin percentage]
+  fallback_to_dom_table:
+    enabled: false
+
+- id: ebit
+  name: EBIT (Operating Income)
+  period_type: duration
+  taxonomy_tags:
+    priority: [us-gaap:OperatingIncomeLoss]
+    fallback: [us-gaap:GrossProfit, us-gaap:OperatingExpenses]
+  unit_candidates: [USD, iso4217:USD]
+  sign_rule: signed_balance=credit
+  synonyms: [operating income, operating profit]
+  fallback_to_dom_table:
+    enabled: false
+
+- id: ebitda
+  name: EBITDA
+  period_type: duration
+  taxonomy_tags:
+    priority: [us-gaap:OperatingIncomeLoss, us-gaap:DepreciationAndAmortization]
+  unit_candidates: [USD, iso4217:USD]
+  sign_rule: signed_balance=credit
+  synonyms: [earnings before interest taxes depreciation amortization]
+  fallback_to_dom_table:
+    enabled: false
+
+- id: net_income
+  name: Net Income
+  period_type: duration
+  taxonomy_tags:
+    priority: [us-gaap:NetIncomeLoss, us-gaap:ProfitLoss]
+  unit_candidates: [USD, iso4217:USD]
+  sign_rule: signed_balance=credit
+  synonyms: [net profit, bottom line]
+  fallback_to_dom_table:
+    enabled: false
+
+- id: net_margin_pct
+  name: Net Margin
+  period_type: duration
+  taxonomy_tags:
+    priority: [us-gaap:NetIncomeLoss, us-gaap:Revenues]
+  unit_candidates: [percent, USD]
+  sign_rule: signed
+  synonyms: [net margin percentage, profit margin]
+  fallback_to_dom_table:
+    enabled: false
+
+- id: fcf
+  name: Free Cash Flow (FCF)
+  period_type: duration
+  taxonomy_tags:
+    priority: [us-gaap:NetCashProvidedByUsedInOperatingActivities, us-gaap:PaymentsToAcquirePropertyPlantAndEquipment]
+  unit_candidates: [USD, iso4217:USD]
+  sign_rule: signed
+  synonyms: [free cash flow, operating cash flow minus capex]
+  fallback_to_dom_table:
+    enabled: false
+
+- id: fcf_yield_pct
+  name: FCF Yield
+  period_type: duration_ttm_vs_instant
+  taxonomy_tags:
+    priority: [FCF_TTM, Price, SharesOutstanding]
+  unit_candidates: [percent]
+  sign_rule: signed
+  synonyms: [free cash flow yield]
+  fallback_to_dom_table:
+    enabled: true
+    table_keywords: ["FCF", "yield", "market cap"]
+    columns_map:
+      fcf: ["Free Cash Flow", "FCF"]
+      market_cap: ["Market Cap", "Market Capitalization"]
+      shares: ["Shares Outstanding", "Outstanding Shares"]
+
+# Example for repurchases (as mentioned in solution)
+- id: repurchases_shares
+  name: Shares Repurchased (Program)
+  period_type: duration
+  taxonomy_tags:
+    priority:
+      - us-gaap:RepurchaseOfCommonStockShares
+      - us-gaap:RepurchaseOfCapitalStockNumberOfSharesPurchased
+  unit_candidates: [shares]
+  fallback_to_dom_table:
+    enabled: true
+    table_keywords: ["Purchases of Equity Securities", "repurchases"]
+    columns_map:
+      period:  ["Period", "Month", "Quarter"]
+      shares:  ["Total Number of Shares Purchased as Part of Publicly Announced Plans or Programs"]
+      avg_px:  ["Average Price Paid Per Share"]
+      dollars: ["Approximate Dollar Value of Shares That May Yet Be Purchased Under the Plans or Programs"]
+
+# ============ MEDIA COMPANY METRICS ============
+- id: programming_and_production
+  name: Programming and Production
+  period_type: duration
+  taxonomy_tags:
+    priority:
+      - cmcsa:ProgrammingAndProduction
+      - us-gaap:ProgrammingCosts
+      - us-gaap:CostOfGoodsAndServicesSoldProgrammingAndProduction
+  unit_candidates: [USD, iso4217:USD]
+  sign_rule: positive
+  synonyms: [programming costs, content costs]
+  fallback_to_dom_table:
+    enabled: false
+
+- id: advertising_revenue
+  name: Advertising Revenue
+  period_type: duration
+  taxonomy_tags:
+    priority:
+      - us-gaap:AdvertisingRevenue
+      - cmcsa:AdvertisingRevenue
+      - dis:AdvertisingRevenue
+  unit_candidates: [USD, iso4217:USD]
+  sign_rule: positive
+  synonyms: [ad revenue]
+  fallback_to_dom_table:
+    enabled: false
+
+- id: subscription_revenue
+  name: Subscription Revenue
+  period_type: duration
+  taxonomy_tags:
+    priority:
+      - us-gaap:SubscriptionRevenue
+      - nflx:StreamingRevenue
+      - cmcsa:SubscriptionRevenue
+  unit_candidates: [USD, iso4217:USD]
+  sign_rule: positive
+  synonyms: [streaming revenue]
+  fallback_to_dom_table:
+    enabled: false
+
+# ============ INSURANCE COMPANY METRICS ============
+- id: premiums_earned_net
+  name: Premiums Earned, Net
+  period_type: duration
+  taxonomy_tags:
+    priority:
+      - us-gaap:PremiumsEarnedNet
+      - us-gaap:InsurancePremiumsRevenue
+  unit_candidates: [USD, iso4217:USD]
+  sign_rule: positive
+  synonyms: [net premiums earned, insurance premiums]
+  fallback_to_dom_table:
+    enabled: false
+
+- id: policyholder_benefits_and_claims
+  name: Policyholder Benefits and Claims
+  period_type: duration
+  taxonomy_tags:
+    priority:
+      - us-gaap:PolicyholderBenefitsAndClaimsIncurredNet
+      - us-gaap:BenefitsLossesAndExpenses
+  unit_candidates: [USD, iso4217:USD]
+  sign_rule: positive
+  synonyms: [claims incurred, benefits and claims]
+  fallback_to_dom_table:
+    enabled: false
+
+- id: combined_ratio
+  name: Combined Ratio
+  period_type: duration
+  taxonomy_tags:
+    priority:
+      - us-gaap:CombinedRatio
+      - us-gaap:PropertyCasualtyCombinedRatio
+  unit_candidates: [percent]
+  sign_rule: positive
+  synonyms: []
+  fallback_to_dom_table:
+    enabled: false
+
+# ============ TELECOM COMPANY METRICS ============
+- id: wireless_service_revenue
+  name: Wireless Service Revenue
+  period_type: duration
+  taxonomy_tags:
+    priority:
+      - us-gaap:WirelessServiceRevenue
+      - t:WirelessServiceRevenue
+      - vz:WirelessServiceRevenue
+  unit_candidates: [USD, iso4217:USD]
+  sign_rule: positive
+  synonyms: [mobile service revenue]
+  fallback_to_dom_table:
+    enabled: false
+
+- id: arpu
+  name: Average Revenue Per User (ARPU)
+  period_type: duration
+  taxonomy_tags:
+    priority:
+      - us-gaap:AverageRevenuePerUser
+      - t:ARPU
+      - vz:ARPU
+  unit_candidates: [USD, iso4217:USD]
+  sign_rule: positive
+  synonyms: [average revenue per user]
+  fallback_to_dom_table:
+    enabled: false
+
+# ============ REAL ESTATE / REIT METRICS ============
+- id: rental_revenue
+  name: Rental Revenue
+  period_type: duration
+  taxonomy_tags:
+    priority:
+      - us-gaap:RentalRevenue
+      - us-gaap:OperatingLeaseLeaseIncome
+      - us-gaap:LeaseIncome
+  unit_candidates: [USD, iso4217:USD]
+  sign_rule: positive
+  synonyms: [lease revenue, rent income]
+  fallback_to_dom_table:
+    enabled: false
+
+- id: funds_from_operations
+  name: Funds From Operations (FFO)
+  period_type: duration
+  taxonomy_tags:
+    priority:
+      - us-gaap:FundsFromOperations
+      - us-gaap:AdjustedFundsFromOperations
+  unit_candidates: [USD, iso4217:USD]
+  sign_rule: signed
+  synonyms: [ffo]
+  fallback_to_dom_table:
+    enabled: false
+
+- id: net_operating_income
+  name: Net Operating Income (NOI)
+  period_type: duration
+  taxonomy_tags:
+    priority:
+      - us-gaap:NetOperatingIncome
+      - us-gaap:RealEstateRevenueNet
+  unit_candidates: [USD, iso4217:USD]
+  sign_rule: signed
+  synonyms: [noi]
+  fallback_to_dom_table:
+    enabled: false
+
+# ============ UTILITY COMPANY METRICS ============
+- id: electric_utility_revenue
+  name: Electric Utility Revenue
+  period_type: duration
+  taxonomy_tags:
+    priority:
+      - us-gaap:ElectricUtilityRevenue
+      - us-gaap:RegulatedElectricRevenue
+  unit_candidates: [USD, iso4217:USD]
+  sign_rule: positive
+  synonyms: [electric revenue, electricity revenue]
+  fallback_to_dom_table:
+    enabled: false
+
+- id: gas_utility_revenue
+  name: Gas Utility Revenue
+  period_type: duration
+  taxonomy_tags:
+    priority:
+      - us-gaap:GasUtilityRevenue
+      - us-gaap:RegulatedGasRevenue
+  unit_candidates: [USD, iso4217:USD]
+  sign_rule: positive
+  synonyms: [gas revenue, natural gas revenue]
+  fallback_to_dom_table:
+    enabled: false
+
+- id: rate_base
+  name: Rate Base
+  period_type: instant
+  taxonomy_tags:
+    priority:
+      - us-gaap:RateBase
+      - us-gaap:RegulatoryRateBase
+  unit_candidates: [USD, iso4217:USD]
+  sign_rule: positive
+  synonyms: []
+  fallback_to_dom_table:
+    enabled: false

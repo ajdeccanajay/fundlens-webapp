@@ -1,0 +1,1577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FundLens - SEC Data Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #667eea;
+            --primary-dark: #5568d3;
+            --secondary: #764ba2;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --info: #3b82f6;
+            --light: #f8fafc;
+            --dark: #1e293b;
+            --border: #e2e8f0;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: var(--dark);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+            animation: fadeInDown 0.6s ease-out;
+        }
+
+        .header h1 {
+            font-size: 3rem;
+            margin-bottom: 12px;
+            font-weight: 700;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.95;
+            font-weight: 300;
+        }
+
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .tabs {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            animation: fadeIn 0.8s ease-out;
+        }
+
+        .tab {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            color: white;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            padding: 14px 28px;
+            font-size: 1rem;
+            font-weight: 600;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .tab::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s;
+        }
+
+        .tab:hover::before {
+            left: 100%;
+        }
+
+        .tab:hover {
+            background: rgba(255, 255, 255, 0.25);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .tab.active {
+            background: white;
+            color: var(--primary);
+            border-color: white;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .tab-content {
+            display: none;
+            animation: fadeIn 0.4s ease-out;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 32px;
+            box-shadow: var(--shadow-lg);
+            margin-bottom: 24px;
+            transition: transform 0.3s, box-shadow 0.3s;
+            border: 1px solid var(--border);
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
+        }
+
+        .card h2 {
+            font-size: 1.75rem;
+            margin-bottom: 8px;
+            color: var(--dark);
+            font-weight: 700;
+        }
+
+        .card > p {
+            color: #64748b;
+            margin-bottom: 24px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: white;
+            padding: 28px;
+            border-radius: 16px;
+            text-align: center;
+            transition: transform 0.3s, box-shadow 0.3s;
+            box-shadow: var(--shadow);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
+            animation: pulse 3s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 0.5; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+        }
+
+        .stat-card:hover {
+            transform: translateY(-4px) scale(1.02);
+            box-shadow: 0 20px 40px rgba(102, 126, 234, 0.3);
+        }
+
+        .stat-value {
+            font-size: 3rem;
+            font-weight: 800;
+            margin-bottom: 8px;
+            position: relative;
+            z-index: 1;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-label {
+            font-size: 1rem;
+            opacity: 0.95;
+            font-weight: 500;
+            position: relative;
+            z-index: 1;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: var(--dark);
+            font-size: 0.95rem;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid var(--border);
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: all 0.3s;
+            font-family: inherit;
+            background: white;
+        }
+
+        textarea {
+            min-height: 120px;
+            resize: vertical;
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+            cursor: text;
+            user-select: text;
+            -webkit-user-select: text;
+            pointer-events: auto;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        button {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: white;
+            border: none;
+            padding: 14px 32px;
+            font-size: 1rem;
+            font-weight: 600;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: var(--shadow);
+            position: relative;
+            overflow: hidden;
+        }
+
+        button::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+
+        button:hover::after {
+            width: 300px;
+            height: 300px;
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        button.secondary {
+            background: linear-gradient(135deg, #64748b 0%, #475569 100%);
+        }
+
+        button.secondary:hover:not(:disabled) {
+            box-shadow: 0 8px 24px rgba(100, 116, 139, 0.4);
+        }
+
+        .button-group {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 36px;
+            background: var(--light);
+            border-radius: 18px;
+            overflow: hidden;
+            margin: 24px 0;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.06);
+            border: 1px solid var(--border);
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary) 0%, var(--secondary) 100%);
+            transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 0.95rem;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+        }
+
+        .ticker-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .ticker-badge {
+            background: var(--light);
+            padding: 10px 18px;
+            border-radius: 24px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s;
+            border: 2px solid var(--border);
+            font-size: 0.9rem;
+        }
+
+        .ticker-badge:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow);
+        }
+
+        .ticker-badge.success {
+            background: #d1fae5;
+            color: #065f46;
+            border-color: #6ee7b7;
+        }
+
+        .ticker-badge.failed {
+            background: #fee2e2;
+            color: #991b1b;
+            border-color: #fca5a5;
+        }
+
+        .ticker-badge.processing {
+            background: #fef3c7;
+            color: #92400e;
+            border-color: #fcd34d;
+            animation: pulse-badge 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse-badge {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin-top: 20px;
+            font-size: 0.95rem;
+        }
+
+        th, td {
+            padding: 16px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: white;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-size: 0.85rem;
+        }
+
+        th:first-child {
+            border-top-left-radius: 12px;
+        }
+
+        th:last-child {
+            border-top-right-radius: 12px;
+        }
+
+        tbody tr {
+            transition: all 0.2s;
+        }
+
+        tbody tr:hover {
+            background: #f1f5f9;
+            transform: scale(1.01);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        tbody tr:last-child td:first-child {
+            border-bottom-left-radius: 12px;
+        }
+
+        tbody tr:last-child td:last-child {
+            border-bottom-right-radius: 12px;
+        }
+
+        .value-positive {
+            color: var(--success);
+            font-weight: 600;
+        }
+
+        .value-negative {
+            color: var(--danger);
+            font-weight: 600;
+        }
+
+        .value-cell {
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+            font-size: 1.05rem;
+            font-weight: 700;
+        }
+
+        .confidence-high {
+            color: var(--success);
+            font-weight: 600;
+        }
+
+        .confidence-medium {
+            color: var(--warning);
+            font-weight: 600;
+        }
+
+        .confidence-low {
+            color: var(--info);
+            font-weight: 600;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--primary);
+        }
+
+        .spinner {
+            border: 4px solid var(--light);
+            border-top: 4px solid var(--primary);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 24px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .alert {
+            padding: 18px 24px;
+            border-radius: 12px;
+            margin-bottom: 24px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: var(--shadow);
+        }
+
+        .alert::before {
+            font-size: 1.5rem;
+        }
+
+        .alert-success {
+            background: #d1fae5;
+            color: #065f46;
+            border-left: 4px solid var(--success);
+        }
+
+        .alert-success::before {
+            content: '✓';
+        }
+
+        .alert-error {
+            background: #fee2e2;
+            color: #991b1b;
+            border-left: 4px solid var(--danger);
+        }
+
+        .alert-error::before {
+            content: '✕';
+        }
+
+        .alert-info {
+            background: #dbeafe;
+            color: #1e40af;
+            border-left: 4px solid var(--info);
+        }
+
+        .alert-info::before {
+            content: 'ℹ';
+        }
+
+        .metric-card {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            border: 2px solid var(--border);
+            transition: all 0.3s;
+        }
+
+        .metric-card:hover {
+            border-color: var(--primary);
+            box-shadow: 0 8px 24px rgba(102, 126, 234, 0.15);
+        }
+
+        .metric-card h4 {
+            color: var(--primary);
+            margin-bottom: 16px;
+            font-size: 1.3rem;
+            font-weight: 700;
+            border-bottom: 3px solid var(--primary);
+            padding-bottom: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .metric-card h3 {
+            color: var(--dark);
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 3px solid var(--primary);
+        }
+
+        .section-header {
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.3s;
+            padding: 16px;
+            border-radius: 12px;
+            margin: -16px -16px 16px -16px;
+        }
+
+        .section-header:hover {
+            background: var(--light);
+        }
+
+        .section-icon {
+            display: inline-block;
+            transition: transform 0.3s;
+            margin-right: 8px;
+            font-size: 0.9em;
+        }
+
+        .section-icon.expanded {
+            transform: rotate(90deg);
+        }
+
+        .chunk-preview {
+            background: var(--light);
+            padding: 16px;
+            border-radius: 8px;
+            border-left: 4px solid var(--primary);
+            margin-bottom: 16px;
+            transition: all 0.3s;
+        }
+
+        .chunk-preview:hover {
+            background: #e2e8f0;
+            box-shadow: var(--shadow);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .badge-primary {
+            background: #ddd6fe;
+            color: #5b21b6;
+        }
+
+        .badge-success {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .badge-info {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        @media (max-width: 1024px) {
+            .grid {
+                grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            }
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 12px;
+            }
+
+            .header h1 {
+                font-size: 2rem;
+            }
+
+            .header p {
+                font-size: 1rem;
+            }
+
+            .grid {
+                grid-template-columns: 1fr;
+            }
+
+            .tabs {
+                flex-direction: column;
+            }
+
+            .tab {
+                width: 100%;
+                text-align: center;
+            }
+
+            .button-group {
+                flex-direction: column;
+            }
+
+            button {
+                width: 100%;
+            }
+
+            .card {
+                padding: 20px;
+            }
+
+            table {
+                font-size: 0.85rem;
+            }
+
+            th, td {
+                padding: 10px 8px;
+            }
+
+            .stat-value {
+                font-size: 2.5rem;
+            }
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #64748b;
+        }
+
+        .empty-state-icon {
+            font-size: 4rem;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+
+        .empty-state-text {
+            font-size: 1.1rem;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 FundLens SEC Data Dashboard</h1>
+            <p>Multi-company financial data extraction and analysis platform</p>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('overview')">📈 Overview</button>
+            <button class="tab" onclick="switchTab('batch')">📥 Batch Ingestion</button>
+            <button class="tab" onclick="switchTab('query')">🔍 Query Data</button>
+            <button class="tab" onclick="switchTab('companies')">🏢 Companies</button>
+        </div>
+
+        <!-- Overview Tab -->
+        <div id="overview-tab" class="tab-content active">
+            <div class="grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-companies">-</div>
+                    <div class="stat-label">Companies</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-metrics">-</div>
+                    <div class="stat-label">Total Metrics</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-chunks">-</div>
+                    <div class="stat-label">Narrative Chunks</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-mappings">-</div>
+                    <div class="stat-label">Metric Mappings</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>🚀 Quick Actions</h2>
+                <p>Get started with common operations</p>
+                <div class="button-group">
+                    <button onclick="ingestTop10()">🔥 Ingest Top 10 Companies</button>
+                    <button onclick="switchTab('batch')" class="secondary">📥 Custom Batch</button>
+                    <button onclick="switchTab('query')" class="secondary">🔍 Query Data</button>
+                    <button onclick="refreshStats()" class="secondary">🔄 Refresh</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>📋 Recent Activity</h2>
+                <div id="recent-activity">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📭</div>
+                        <div class="empty-state-text">No recent activity</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Batch Ingestion Tab -->
+        <div id="batch-tab" class="tab-content">
+            <div class="card">
+                <h2>📥 Batch Ingestion</h2>
+                <p>Ingest multiple companies in parallel with progress tracking</p>
+
+                <div class="form-group">
+                    <label for="tickers">🎯 Tickers (one per line or comma-separated)</label>
+                    <textarea id="tickers" placeholder="AAPL&#10;MSFT&#10;GOOGL&#10;AMZN&#10;TSLA"></textarea>
+                    <button type="button" onclick="document.getElementById('tickers').value=''; document.getElementById('tickers').focus();" class="secondary" style="margin-top: 8px; padding: 8px 16px; font-size: 0.85rem;">🗑️ Clear Tickers</button>
+                </div>
+
+                <div class="form-group">
+                    <label for="maxConcurrent">⚡ Max Concurrent Processing (1-5)</label>
+                    <input type="number" id="maxConcurrent" value="3" min="1" max="5">
+                </div>
+
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="skipExisting" checked style="width: auto;">
+                        <span>Skip already processed companies</span>
+                    </label>
+                </div>
+
+                <button onclick="startBatchIngestion()" id="batch-btn">▶️ Start Batch Ingestion</button>
+
+                <div id="batch-progress" style="display: none; margin-top: 40px;">
+                    <h3 style="color: var(--dark); margin-bottom: 16px;">📊 Progress</h3>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progress-fill">0%</div>
+                    </div>
+                    <div id="batch-stats" style="background: var(--light); padding: 20px; border-radius: 12px; margin-bottom: 20px;"></div>
+                    <div id="batch-results" class="ticker-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Query Tab -->
+        <div id="query-tab" class="tab-content">
+            <div class="card">
+                <h2>🔍 Query Financial Data</h2>
+                <p>Search and analyze financial metrics and narratives</p>
+                
+                <div class="form-group">
+                    <label for="query-ticker">🏢 Ticker Symbol</label>
+                    <input type="text" id="query-ticker" placeholder="AAPL" style="text-transform: uppercase;">
+                </div>
+
+                <div class="button-group">
+                    <button onclick="queryMetrics()">📊 Financial Statements</button>
+                    <button onclick="queryComputedMetrics()" class="secondary">🧮 Computed Metrics</button>
+                    <button onclick="queryNarratives()" class="secondary">📄 Narratives</button>
+                </div>
+
+                <div id="query-results" style="margin-top: 40px;"></div>
+            </div>
+        </div>
+
+        <!-- Companies Tab -->
+        <div id="companies-tab" class="tab-content">
+            <div class="card">
+                <h2>🏢 Ingested Companies</h2>
+                <p>View all companies currently in the database</p>
+                <button onclick="loadCompanies()" class="secondary" style="margin-bottom: 24px;">🔄 Refresh List</button>
+                <div id="companies-list">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Loading companies...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:3000/api/sec';
+        let currentBatchId = null;
+        let progressInterval = null;
+
+        // Format large numbers with proper units
+        function formatNumber(value) {
+            const num = parseFloat(value);
+            const absNum = Math.abs(num);
+            
+            if (absNum >= 1e12) {
+                return { value: (num / 1e12).toFixed(2), unit: 'T', formatted: `${(num / 1e12).toFixed(2)}T` };
+            } else if (absNum >= 1e9) {
+                return { value: (num / 1e9).toFixed(2), unit: 'B', formatted: `${(num / 1e9).toFixed(2)}B` };
+            } else if (absNum >= 1e6) {
+                return { value: (num / 1e6).toFixed(2), unit: 'M', formatted: `${(num / 1e6).toFixed(2)}M` };
+            } else if (absNum >= 1e3) {
+                return { value: (num / 1e3).toFixed(2), unit: 'K', formatted: `${(num / 1e3).toFixed(2)}K` };
+            } else {
+                return { value: num.toFixed(2), unit: '', formatted: num.toFixed(2) };
+            }
+        }
+
+        // Get confidence class
+        function getConfidenceClass(score) {
+            if (score >= 0.9) return 'confidence-high';
+            if (score >= 0.7) return 'confidence-medium';
+            return 'confidence-low';
+        }
+
+        // Get confidence icon
+        function getConfidenceIcon(score) {
+            if (score >= 0.9) return '🟢';
+            if (score >= 0.7) return '🟡';
+            return '🔵';
+        }
+
+        // Tab switching
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            
+            const tabs = document.querySelectorAll('.tab');
+            tabs.forEach(tab => {
+                if (tab.textContent.toLowerCase().includes(tabName)) {
+                    tab.classList.add('active');
+                }
+            });
+            
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+
+            if (tabName === 'companies') {
+                loadCompanies();
+            }
+        }
+
+        // Load stats on page load
+        window.addEventListener('load', () => {
+            refreshStats();
+            loadCompanies();
+        });
+
+        async function refreshStats() {
+            try {
+                const [tickers, mappings] = await Promise.all([
+                    fetch(`${API_BASE}/query/tickers`).then(r => r.json()),
+                    fetch(`${API_BASE}/mappings`).then(r => r.json())
+                ]);
+
+                document.getElementById('stat-companies').textContent = tickers.count || 0;
+                
+                const totalMetrics = tickers.tickers?.reduce((sum, t) => sum + t.metricsCount, 0) || 0;
+                document.getElementById('stat-metrics').textContent = totalMetrics.toLocaleString();
+                
+                const totalChunks = tickers.tickers?.reduce((sum, t) => sum + (t.chunksCount || 0), 0) || 0;
+                document.getElementById('stat-chunks').textContent = totalChunks.toLocaleString();
+                
+                document.getElementById('stat-mappings').textContent = mappings.length || 0;
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+
+        async function ingestTop10() {
+            if (!confirm('Ingest top 10 companies? This may take 10-15 minutes.')) return;
+
+            const btn = document.querySelector('button[onclick*="ingestTop10"]');
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = '⏳ Processing...';
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/batch-ingest-top10`, {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+                currentBatchId = data.batchId;
+
+                switchTab('batch');
+                document.getElementById('batch-progress').style.display = 'block';
+                
+                startProgressPolling();
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = '🔥 Ingest Top 10 Companies';
+                }
+            }
+        }
+
+        async function startBatchIngestion() {
+            const tickersText = document.getElementById('tickers').value.trim();
+            if (!tickersText) {
+                alert('Please enter at least one ticker');
+                return;
+            }
+
+            const tickers = tickersText
+                .split(/[\n,]/)
+                .map(t => t.trim().toUpperCase())
+                .filter(t => t.length > 0);
+
+            const maxConcurrent = parseInt(document.getElementById('maxConcurrent').value);
+            const skipExisting = document.getElementById('skipExisting').checked;
+
+            const btn = document.getElementById('batch-btn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Processing...';
+
+            try {
+                const response = await fetch(`${API_BASE}/batch-ingest`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tickers, maxConcurrent, skipExisting })
+                });
+
+                const data = await response.json();
+                currentBatchId = data.batchId;
+
+                document.getElementById('batch-progress').style.display = 'block';
+                startProgressPolling();
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+                btn.disabled = false;
+                btn.textContent = '▶️ Start Batch Ingestion';
+            }
+        }
+
+        function startProgressPolling() {
+            if (progressInterval) clearInterval(progressInterval);
+            
+            progressInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`${API_BASE}/batch-progress/${currentBatchId}`);
+                    const progress = await response.json();
+                    
+                    updateProgress(progress);
+                    
+                    if (progress.endTime) {
+                        clearInterval(progressInterval);
+                        document.getElementById('batch-btn').disabled = false;
+                        document.getElementById('batch-btn').textContent = '▶️ Start Batch Ingestion';
+                        refreshStats();
+                    }
+                } catch (error) {
+                    console.error('Error polling progress:', error);
+                }
+            }, 2000);
+        }
+
+        function updateProgress(progress) {
+            const percent = Math.round((progress.completed / progress.total) * 100);
+            document.getElementById('progress-fill').style.width = `${percent}%`;
+            document.getElementById('progress-fill').textContent = `${percent}%`;
+
+            const duration = progress.endTime 
+                ? Math.round((new Date(progress.endTime) - new Date(progress.startTime)) / 1000)
+                : Math.round((new Date() - new Date(progress.startTime)) / 1000);
+
+            document.getElementById('batch-stats').innerHTML = `
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; font-size: 0.95rem;">
+                    <div>
+                        <div style="color: #64748b; font-size: 0.85rem; margin-bottom: 4px;">COMPLETED</div>
+                        <div style="font-size: 1.5rem; font-weight: 700; color: var(--dark);">${progress.completed}/${progress.total}</div>
+                    </div>
+                    <div>
+                        <div style="color: #64748b; font-size: 0.85rem; margin-bottom: 4px;">SUCCESSFUL</div>
+                        <div style="font-size: 1.5rem; font-weight: 700; color: var(--success);">${progress.successful}</div>
+                    </div>
+                    <div>
+                        <div style="color: #64748b; font-size: 0.85rem; margin-bottom: 4px;">FAILED</div>
+                        <div style="font-size: 1.5rem; font-weight: 700; color: var(--danger);">${progress.failed}</div>
+                    </div>
+                    <div>
+                        <div style="color: #64748b; font-size: 0.85rem; margin-bottom: 4px;">DURATION</div>
+                        <div style="font-size: 1.5rem; font-weight: 700; color: var(--dark);">${duration}s</div>
+                    </div>
+                </div>
+            `;
+
+            const resultsHtml = progress.results.map(r => {
+                const statusClass = r.status === 'success' ? 'success' : r.status === 'failed' ? 'failed' : 'processing';
+                const icon = r.status === 'success' ? '✅' : r.status === 'failed' ? '❌' : '⏳';
+                return `
+                    <div class="ticker-badge ${statusClass}">
+                        ${icon} <strong>${r.ticker}</strong>
+                        ${r.metricsCount ? `<span class="badge badge-success">${r.metricsCount} metrics</span>` : ''}
+                        ${r.error ? `<span style="font-size: 0.85em;">- ${r.error}</span>` : ''}
+                    </div>
+                `;
+            }).join('');
+
+            document.getElementById('batch-results').innerHTML = resultsHtml;
+        }
+
+        function buildFinancialStatements(ticker, metrics) {
+            // Group by statement type and metric name
+            const byStatement = {
+                'balance_sheet': {},
+                'income_statement': {},
+                'cash_flow': {}
+            };
+
+            // Get unique periods (fiscal years) - we want annual data
+            const periods = new Set();
+            
+            metrics.forEach(m => {
+                const statement = m.statementType;
+                if (!byStatement[statement]) return;
+                
+                // Only include annual data (10-K)
+                if (m.filingType === '10-K' && m.periodType === 'annual') {
+                    periods.add(m.fiscalPeriod);
+                    
+                    if (!byStatement[statement][m.metric]) {
+                        byStatement[statement][m.metric] = {};
+                    }
+                    
+                    // Store by period
+                    byStatement[statement][m.metric][m.fiscalPeriod] = {
+                        value: m.value,
+                        rawLabel: m.rawLabel,
+                        confidence: m.confidenceScore || 0
+                    };
+                }
+            });
+
+            // Sort periods descending (most recent first)
+            const sortedPeriods = Array.from(periods).sort().reverse().slice(0, 3);
+            
+            if (sortedPeriods.length === 0) {
+                return '<div class="alert alert-info">No annual (10-K) data found for this company.</div>';
+            }
+
+            // Build each statement table
+            const statementLabels = {
+                'balance_sheet': '💰 Balance Sheet',
+                'income_statement': '📊 Income Statement',
+                'cash_flow': '💵 Cash Flow Statement'
+            };
+
+            let html = `
+                <div class="alert alert-success">
+                    Financial Statements for <strong>${ticker}</strong> - Annual Data (10-K)
+                    <br><small style="opacity: 0.8;">Showing ${sortedPeriods.length} most recent fiscal years: ${sortedPeriods.join(', ')}</small>
+                </div>
+            `;
+
+            // Build each statement
+            Object.entries(byStatement).forEach(([statementType, metricsData]) => {
+                const metricNames = Object.keys(metricsData);
+                if (metricNames.length === 0) return;
+
+                html += `
+                    <div class="metric-card" style="margin-bottom: 32px;">
+                        <h3>${statementLabels[statementType]}</h3>
+                        <div class="table-wrapper">
+                            <table style="width: 100%;">
+                                <thead>
+                                    <tr>
+                                        <th style="text-align: left; min-width: 250px;">Line Item</th>
+                                        ${sortedPeriods.map(p => `<th style="text-align: right;">${p}</th>`).join('')}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                `;
+
+                // Add each metric as a row
+                metricNames.forEach(metricName => {
+                    const metricData = metricsData[metricName];
+                    const displayName = metricName.replace(/_/g, ' ').toUpperCase();
+                    
+                    // Get raw label from first available period
+                    const firstPeriodData = metricData[sortedPeriods[0]] || metricData[sortedPeriods[1]] || metricData[sortedPeriods[2]];
+                    const rawLabel = firstPeriodData?.rawLabel || displayName;
+                    
+                    html += `<tr>`;
+                    html += `<td style="font-weight: 600; color: var(--dark);" title="${rawLabel}">${displayName}</td>`;
+                    
+                    sortedPeriods.forEach(period => {
+                        const data = metricData[period];
+                        if (data) {
+                            const formatted = formatNumber(data.value);
+                            const valueClass = parseFloat(data.value) < 0 ? 'value-negative' : '';
+                            const confidenceIcon = getConfidenceIcon(data.confidence);
+                            
+                            html += `
+                                <td style="text-align: right; font-family: 'SF Mono', Monaco, monospace;" class="value-cell ${valueClass}">
+                                    <span title="Confidence: ${(data.confidence * 100).toFixed(0)}%">${confidenceIcon}</span>
+                                    ${formatted.formatted}
+                                </td>
+                            `;
+                        } else {
+                            html += `<td style="text-align: right; color: #94a3b8;">—</td>`;
+                        }
+                    });
+                    
+                    html += `</tr>`;
+                });
+
+                html += `
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+            });
+
+            return html;
+        }
+
+        async function queryMetrics() {
+            const ticker = document.getElementById('query-ticker').value.trim().toUpperCase();
+            if (!ticker) {
+                alert('Please enter a ticker');
+                return;
+            }
+
+            document.getElementById('query-results').innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading financial statements...</p></div>';
+
+            try {
+                const response = await fetch(`${API_BASE}/query/metrics?ticker=${ticker}&limit=1000`);
+                const data = await response.json();
+
+                if (data.count === 0) {
+                    document.getElementById('query-results').innerHTML = `
+                        <div class="alert alert-info">
+                            No metrics found for ${ticker}. Try ingesting this company first.
+                        </div>
+                    `;
+                    return;
+                }
+
+                // Build financial statement tables
+                const html = buildFinancialStatements(ticker, data.metrics);
+                document.getElementById('query-results').innerHTML = html;
+            } catch (error) {
+                document.getElementById('query-results').innerHTML = `
+                    <div class="alert alert-error">Error: ${error.message}</div>
+                `;
+            }
+        }
+
+        async function queryNarratives() {
+            const ticker = document.getElementById('query-ticker').value.trim().toUpperCase();
+            if (!ticker) {
+                alert('Please enter a ticker');
+                return;
+            }
+
+            document.getElementById('query-results').innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading narratives...</p></div>';
+
+            try {
+                const response = await fetch(`${API_BASE}/query/narratives/${ticker}?limit=50`);
+                const data = await response.json();
+
+                if (data.count === 0) {
+                    document.getElementById('query-results').innerHTML = `
+                        <div class="alert alert-info">
+                            No narratives found for ${ticker}. Try ingesting this company first.
+                        </div>
+                    `;
+                    return;
+                }
+
+                // Group by section type
+                const groupedChunks = {};
+                data.chunks.forEach(c => {
+                    if (!groupedChunks[c.sectionType]) {
+                        groupedChunks[c.sectionType] = [];
+                    }
+                    groupedChunks[c.sectionType].push(c);
+                });
+
+                const sectionsHtml = Object.entries(groupedChunks).map(([sectionType, chunks]) => {
+                    const totalWords = chunks.reduce((sum, c) => sum + c.content.split(' ').length, 0);
+                    const sectionId = `section-${sectionType}`;
+                    
+                    const chunksHtml = chunks.map((c, idx) => {
+                        const chunkId = `chunk-${sectionType}-${idx}`;
+                        const preview = c.content.substring(0, 250);
+                        const wordCount = c.content.split(' ').length;
+                        
+                        return `
+                            <div class="chunk-preview">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                    <strong style="color: var(--primary);">Chunk ${c.chunkIndex + 1}</strong>
+                                    <span class="badge badge-info">${wordCount} words</span>
+                                </div>
+                                <div style="color: #475569; font-size: 0.95rem; line-height: 1.8;">
+                                    <div id="${chunkId}-preview">${preview}...</div>
+                                    <div id="${chunkId}-full" style="display: none;">${c.content}</div>
+                                    <button onclick="toggleChunk('${chunkId}')" 
+                                            style="margin-top: 12px; padding: 8px 16px; font-size: 0.9em; background: linear-gradient(135deg, #64748b 0%, #475569 100%);">
+                                        <span id="${chunkId}-btn">📖 Show Full Text</span>
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+
+                    return `
+                        <div class="metric-card">
+                            <div class="section-header" onclick="toggleSection('${sectionId}')">
+                                <h4 style="margin: 0; border: none; padding: 0;">
+                                    <span class="section-icon" id="${sectionId}-icon">▶</span>
+                                    ${sectionType.replace(/_/g, ' ').toUpperCase()}
+                                    <div style="display: flex; gap: 12px; font-size: 0.85rem; font-weight: 500;">
+                                        <span class="badge badge-success">${chunks.length} chunks</span>
+                                        <span class="badge badge-info">${totalWords.toLocaleString()} words</span>
+                                    </div>
+                                </h4>
+                            </div>
+                            <div id="${sectionId}" style="display: none; margin-top: 20px;">
+                                ${chunksHtml}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                const totalChunks = data.chunks.length;
+                const totalWords = data.chunks.reduce((sum, c) => sum + c.content.split(' ').length, 0);
+
+                document.getElementById('query-results').innerHTML = `
+                    <div class="alert alert-success">
+                        Found <strong>${totalChunks}</strong> narrative chunks (<strong>${totalWords.toLocaleString()}</strong> words) across <strong>${Object.keys(groupedChunks).length}</strong> sections
+                    </div>
+                    ${sectionsHtml}
+                `;
+            } catch (error) {
+                document.getElementById('query-results').innerHTML = `
+                    <div class="alert alert-error">Error: ${error.message}</div>
+                `;
+            }
+        }
+
+        function toggleSection(sectionId) {
+            const section = document.getElementById(sectionId);
+            const icon = document.getElementById(`${sectionId}-icon`);
+            
+            if (section.style.display === 'none') {
+                section.style.display = 'block';
+                icon.classList.add('expanded');
+            } else {
+                section.style.display = 'none';
+                icon.classList.remove('expanded');
+            }
+        }
+
+        function toggleChunk(chunkId) {
+            const preview = document.getElementById(`${chunkId}-preview`);
+            const full = document.getElementById(`${chunkId}-full`);
+            const btn = document.getElementById(`${chunkId}-btn`);
+            
+            if (full.style.display === 'none') {
+                preview.style.display = 'none';
+                full.style.display = 'block';
+                btn.textContent = '📕 Show Less';
+            } else {
+                preview.style.display = 'block';
+                full.style.display = 'none';
+                btn.textContent = '📖 Show Full Text';
+            }
+        }
+
+        async function queryComputedMetrics() {
+            const ticker = document.getElementById('query-ticker').value.trim().toUpperCase();
+            if (!ticker) {
+                alert('Please enter a ticker');
+                return;
+            }
+
+            document.getElementById('query-results').innerHTML = '<div class="loading"><div class="spinner"></div><p>Computing metrics...</p></div>';
+
+            try {
+                const [grossMargin, netMargin] = await Promise.all([
+                    fetch(`${API_BASE}/computed/gross-margin/${ticker}`).then(r => r.json()).catch(() => null),
+                    fetch(`${API_BASE}/computed/net-margin/${ticker}`).then(r => r.json()).catch(() => null)
+                ]);
+
+                if ((!grossMargin || grossMargin.length === 0) && (!netMargin || netMargin.length === 0)) {
+                    document.getElementById('query-results').innerHTML = `
+                        <div class="alert alert-info">
+                            No computed metrics available for ${ticker}. Make sure the company has been ingested with revenue, gross profit, and net income data.
+                        </div>
+                    `;
+                    return;
+                }
+
+                // Get periods from the data (most recent 3 years)
+                const allPeriods = new Set();
+                if (grossMargin) grossMargin.forEach(m => allPeriods.add(m.fiscalPeriod));
+                if (netMargin) netMargin.forEach(m => allPeriods.add(m.fiscalPeriod));
+                const sortedPeriods = Array.from(allPeriods).sort().reverse().slice(0, 3);
+
+                // Organize data by period
+                const grossMarginByPeriod = {};
+                const netMarginByPeriod = {};
+                
+                if (grossMargin) {
+                    grossMargin.forEach(m => {
+                        if (sortedPeriods.includes(m.fiscalPeriod)) {
+                            grossMarginByPeriod[m.fiscalPeriod] = m;
+                        }
+                    });
+                }
+                
+                if (netMargin) {
+                    netMargin.forEach(m => {
+                        if (sortedPeriods.includes(m.fiscalPeriod)) {
+                            netMarginByPeriod[m.fiscalPeriod] = m;
+                        }
+                    });
+                }
+
+                // Build comparison table
+                let html = `
+                    <div class="alert alert-success">
+                        Computed Metrics Comparison for <strong>${ticker}</strong>
+                        <br><small style="opacity: 0.8;">Showing ${sortedPeriods.length} most recent fiscal years: ${sortedPeriods.join(', ')}</small>
+                    </div>
+                    
+                    <div class="metric-card">
+                        <h3>🧮 Financial Ratios Comparison</h3>
+                        <div class="table-wrapper">
+                            <table style="width: 100%;">
+                                <thead>
+                                    <tr>
+                                        <th style="text-align: left; min-width: 200px;">Metric</th>
+                                        ${sortedPeriods.map(p => `<th style="text-align: right;">${p}</th>`).join('')}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                `;
+
+                // Gross Margin row
+                if (grossMargin && grossMargin.length > 0) {
+                    html += `<tr>`;
+                    html += `<td style="font-weight: 600; color: var(--dark);">Gross Margin %</td>`;
+                    sortedPeriods.forEach(period => {
+                        const data = grossMarginByPeriod[period];
+                        if (data) {
+                            html += `<td style="text-align: right; font-family: 'SF Mono', Monaco, monospace;" class="value-cell value-positive"><strong>${data.value}%</strong></td>`;
+                        } else {
+                            html += `<td style="text-align: right; color: #94a3b8;">—</td>`;
+                        }
+                    });
+                    html += `</tr>`;
+                    
+                    // Gross Profit row
+                    html += `<tr style="background: #f8fafc;">`;
+                    html += `<td style="padding-left: 24px; color: #64748b; font-size: 0.9em;">Gross Profit</td>`;
+                    sortedPeriods.forEach(period => {
+                        const data = grossMarginByPeriod[period];
+                        if (data && data.components && data.components[0]) {
+                            const formatted = formatNumber(data.components[0].value);
+                            html += `<td style="text-align: right; font-family: 'SF Mono', Monaco, monospace; font-size: 0.9em;">${formatted.formatted}</td>`;
+                        } else {
+                            html += `<td style="text-align: right; color: #94a3b8;">—</td>`;
+                        }
+                    });
+                    html += `</tr>`;
+                    
+                    // Revenue row (for gross margin)
+                    html += `<tr style="background: #f8fafc;">`;
+                    html += `<td style="padding-left: 24px; color: #64748b; font-size: 0.9em;">Revenue</td>`;
+                    sortedPeriods.forEach(period => {
+                        const data = grossMarginByPeriod[period];
+                        if (data && data.components && data.components[1]) {
+                            const formatted = formatNumber(data.components[1].value);
+                            html += `<td style="text-align: right; font-family: 'SF Mono', Monaco, monospace; font-size: 0.9em;">${formatted.formatted}</td>`;
+                        } else {
+                            html += `<td style="text-align: right; color: #94a3b8;">—</td>`;
+                        }
+                    });
+                    html += `</tr>`;
+                }
+
+                // Net Margin row
+                if (netMargin && netMargin.length > 0) {
+                    html += `<tr>`;
+                    html += `<td style="font-weight: 600; color: var(--dark); padding-top: 16px;">Net Margin %</td>`;
+                    sortedPeriods.forEach(period => {
+                        const data = netMarginByPeriod[period];
+                        if (data) {
+                            html += `<td style="text-align: right; font-family: 'SF Mono', Monaco, monospace; padding-top: 16px;" class="value-cell value-positive"><strong>${data.value}%</strong></td>`;
+                        } else {
+                            html += `<td style="text-align: right; color: #94a3b8; padding-top: 16px;">—</td>`;
+                        }
+                    });
+                    html += `</tr>`;
+                    
+                    // Net Income row
+                    html += `<tr style="background: #f8fafc;">`;
+                    html += `<td style="padding-left: 24px; color: #64748b; font-size: 0.9em;">Net Income</td>`;
+                    sortedPeriods.forEach(period => {
+                        const data = netMarginByPeriod[period];
+                        if (data && data.components && data.components[0]) {
+                            const formatted = formatNumber(data.components[0].value);
+                            html += `<td style="text-align: right; font-family: 'SF Mono', Monaco, monospace; font-size: 0.9em;">${formatted.formatted}</td>`;
+                        } else {
+                            html += `<td style="text-align: right; color: #94a3b8;">—</td>`;
+                        }
+                    });
+                    html += `</tr>`;
+                    
+                    // Revenue row (for net margin) - only if not already shown
+                    if (!grossMargin || grossMargin.length === 0) {
+                        html += `<tr style="background: #f8fafc;">`;
+                        html += `<td style="padding-left: 24px; color: #64748b; font-size: 0.9em;">Revenue</td>`;
+                        sortedPeriods.forEach(period => {
+                            const data = netMarginByPeriod[period];
+                            if (data && data.components && data.components[1]) {
+                                const formatted = formatNumber(data.components[1].value);
+                                html += `<td style="text-align: right; font-family: 'SF Mono', Monaco, monospace; font-size: 0.9em;">${formatted.formatted}</td>`;
+                            } else {
+                                html += `<td style="text-align: right; color: #94a3b8;">—</td>`;
+                            }
+                        });
+                        html += `</tr>`;
+                    }
+                }
+
+                html += `
+                                </tbody>
+                            </table>
+                        </div>
+                        <div style="margin-top: 16px; padding: 12px; background: #f8fafc; border-radius: 8px; font-size: 0.9em; color: #64748b;">
+                            <strong>Formulas:</strong><br>
+                            ${grossMargin && grossMargin.length > 0 ? `• Gross Margin = (Gross Profit / Revenue) × 100<br>` : ''}
+                            ${netMargin && netMargin.length > 0 ? `• Net Margin = (Net Income / Revenue) × 100` : ''}
+                        </div>
+                    </div>
+                `;
+
+                document.getElementById('query-results').innerHTML = html;
+            } catch (error) {
+                document.getElementById('query-results').innerHTML = `
+                    <div class="alert alert-error">Error: ${error.message}</div>
+                `;
+            }
+        }
+
+        async function loadCompanies() {
+            document.getElementById('companies-list').innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading companies...</p></div>';
+
+            try {
+                const response = await fetch(`${API_BASE}/ingested-tickers`);
+                const companies = await response.json();
+
+                if (companies.length === 0) {
+                    document.getElementById('companies-list').innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">🏢</div>
+                            <div class="empty-state-text">No companies ingested yet</div>
+                            <p style="margin-top: 12px; color: #64748b;">Use batch ingestion to get started</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                const tableHtml = `
+                    <div class="table-wrapper">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>🏢 Ticker</th>
+                                    <th>📊 Metrics</th>
+                                    <th>📄 Narrative Chunks</th>
+                                    <th>📅 Latest Filing</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${companies.map(c => `
+                                    <tr>
+                                        <td><strong style="font-size: 1.1rem; color: var(--primary);">${c.ticker}</strong></td>
+                                        <td><span class="badge badge-success">${c.metricsCount.toLocaleString()}</span></td>
+                                        <td><span class="badge badge-info">${c.chunksCount.toLocaleString()}</span></td>
+                                        <td>${c.latestFiling}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+
+                document.getElementById('companies-list').innerHTML = tableHtml;
+            } catch (error) {
+                document.getElementById('companies-list').innerHTML = `
+                    <div class="alert alert-error">Error loading companies: ${error.message}</div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>

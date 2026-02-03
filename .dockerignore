@@ -1,0 +1,62 @@
+# =============================================================================
+# Docker Ignore - FundLens Backend
+# =============================================================================
+
+# Dependencies
+node_modules
+npm-debug.log
+yarn-error.log
+
+# Build outputs
+dist
+coverage
+.nyc_output
+
+# Development files
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+
+# IDE and editor files
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# Test files
+test
+tests
+*.spec.ts
+*.test.ts
+jest.config.js
+test/
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Local development
+local-s3-storage
+logs
+*.log
+
+# Infrastructure (not needed in container)
+infrastructure/
+.kiro/
+rebuild-specs/
+
+# Scripts (deployment scripts not needed in container)
+scripts/
+
+# Python parser (built separately)
+python_parser/
+
+# Misc
+.DS_Store
+Thumbs.db
+*.tgz
+*.tar.gz

@@ -1,0 +1,2370 @@
+conventions:
+  ttm: TTM_SUM sums the last 4 consecutive fiscal quarters
+  period_filter: Match element periodType instant vs duration
+  unit_filter: Filter facts by expected unit (USD/shares/percent)
+  dimension_policy: Use non-dimensional facts for consolidated totals
+  sign_policy: Normalize sign using element balance and label conventions
+frames:
+  quarter_len_days:
+    - 60
+    - 120
+  ttm_method: roll_4q_duration
+unit_candidates:
+  - USD
+  - iso4217:USD
+  - shares
+  - percent
+unit_normalize_to: USD
+validation:
+  min: -1000000000000000
+  max: 1000000000000000
+rounding:
+  unit: USD
+  decimals: 0
+metrics:
+  - id: accounts_payable
+    name: Accounts Payable
+    canonical_name: Accounts Payable
+    statement_type: balance_sheet
+    period_type: instant
+    synonyms:
+      primary:
+        - accounts payable
+        - payables
+        - trade payables
+        - ap
+        - accounts payable current
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:AccountsPayableCurrent
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: accounts_payable_change
+    name: AP Change
+    canonical_name: AP Change
+    statement_type: cash_flow
+    period_type: duration
+    synonyms:
+      primary:
+        - change in accounts payable
+        - ap change
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: accounts_receivable
+    name: Accounts Receivable
+    canonical_name: Accounts Receivable
+    statement_type: balance_sheet
+    period_type: instant
+    synonyms:
+      primary:
+        - accounts receivable
+        - receivables
+        - trade receivables
+        - ar
+        - accounts receivable net current
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:AccountsReceivableNetCurrent
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: accounts_receivable_change
+    name: AR Change
+    canonical_name: AR Change
+    statement_type: cash_flow
+    period_type: duration
+    synonyms:
+      primary:
+        - change in accounts receivable
+        - ar change
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: accrued_expenses
+    name: Accrued Expenses
+    canonical_name: Accrued Expenses
+    statement_type: balance_sheet
+    period_type: instant
+    synonyms:
+      primary:
+        - accrued expenses
+        - accrued liabilities
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: accumulated_other_comprehensive_income
+    name: AOCI
+    canonical_name: AOCI
+    statement_type: balance_sheet
+    period_type: instant
+    synonyms:
+      primary:
+        - aoci
+        - accumulated other comprehensive income
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: acquisitions
+    name: Acquisitions
+    canonical_name: Acquisitions
+    statement_type: cash_flow
+    period_type: duration
+    synonyms:
+      primary:
+        - business acquisitions
+        - acquisition of businesses
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: additional_paid_in_capital
+    name: Additional Paid-in Capital
+    canonical_name: Additional Paid-in Capital
+    statement_type: balance_sheet
+    period_type: instant
+    synonyms:
+      primary:
+        - apic
+        - paid in capital
+        - capital surplus
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: advertising_revenue
+    name: Advertising Revenue
+    statement_type: income_statement
+    period_type: duration
+    taxonomy_tags:
+      priority:
+        - us-gaap:AdvertisingRevenue
+        - cmcsa:AdvertisingRevenue
+        - dis:AdvertisingRevenue
+    unit_candidates:
+      - USD
+      - iso4217:USD
+    sign_rule: positive
+    synonyms:
+      - ad revenue
+    fallback_to_dom_table:
+      enabled: false
+  - id: arpu
+    name: ARPU
+    canonical_name: Average Revenue Per User
+    statement_type: income_statement
+    period_type: duration
+    industry: telecom
+    synonyms:
+      primary:
+        - average revenue per user
+        - arpu
+        - revenue per subscriber
+        - arps
+    semantic_hints:
+      - revenue per customer metric
+    sign_rule: positive
+    unit_candidates:
+      - USD
+  - id: asset_sales
+    name: Asset Sales
+    canonical_name: Asset Sales
+    statement_type: cash_flow
+    period_type: duration
+    synonyms:
+      primary:
+        - proceeds from asset sales
+        - sale of assets
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: asset_turnover
+    name: Asset Turnover
+    canonical_name: Asset Turnover
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - asset turnover
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: book_value_per_share
+    name: Book Value per Share
+    canonical_name: Book Value per Share
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - book value per share
+        - bvps
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: capex
+    name: Capital Expenditures
+    canonical_name: Capital Expenditures
+    statement_type: cash_flow
+    period_type: duration
+    synonyms:
+      primary:
+        - capital expenditures
+        - capex
+        - cap ex
+        - capital spending
+        - pp&e purchases
+        - property plant and equipment purchases
+        - payments to acquire property plant and equipment
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:PaymentsToAcquirePropertyPlantAndEquipment
+    semantic_hints:
+      - cash spent on fixed assets
+      - investment in property and equipment
+    fuzzy_matches:
+      - cap-ex
+      - capital exp
+    related_metrics:
+      - fcf
+      - operating_cash_flow
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: capital_lease_obligations
+    name: Capital Lease Obligations
+    canonical_name: Capital Lease Obligations
+    statement_type: balance_sheet
+    period_type: instant
+    synonyms:
+      primary:
+        - capital leases
+        - finance leases
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: cash
+    name: Cash
+    canonical_name: Cash and Cash Equivalents
+    statement_type: balance_sheet
+    period_type: instant
+    synonyms:
+      primary:
+        - cash
+        - cash and cash equivalents
+        - cash and equivalents
+        - cash equivalents
+        - liquid assets
+        - cash on hand
+        - cash and short term investments
+        - >-
+          cash cash equivalents restricted cash and restricted cash equivalents period increase decrease including
+          exchange rate effect
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:CashAndCashEquivalentsAtCarryingValue
+          - us-gaap:Cash
+          - us-gaap:CashCashEquivalentsAndShortTermInvestments
+    semantic_hints:
+      - most liquid assets
+      - cash on hand and equivalents
+      - immediately available funds
+    fuzzy_matches:
+      - cash equiv
+      - cash & equivalents
+    related_metrics:
+      - current_assets
+      - total_assets
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: change_in_working_capital
+    name: Change in Working Capital
+    canonical_name: Change in Working Capital
+    statement_type: cash_flow
+    period_type: duration
+    synonyms:
+      primary:
+        - change in working capital
+        - working capital change
+        - increase decrease in working capital
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:IncreaseDecreaseInOperatingCapital
+    sign_rule: signed
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: combined_ratio
+    name: Combined Ratio
+    canonical_name: Combined Ratio
+    statement_type: income_statement
+    period_type: duration
+    industry: insurance
+    synonyms:
+      primary:
+        - combined ratio
+        - loss ratio plus expense ratio
+        - underwriting ratio
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:PropertyCasualtyCombinedRatio
+    semantic_hints:
+      - insurance profitability metric
+    sign_rule: positive
+    unit_candidates:
+      - percent
+  - id: common_stock
+    name: Common Stock
+    canonical_name: Common Stock
+    statement_type: balance_sheet
+    period_type: instant
+    synonyms:
+      primary:
+        - common stock
+        - common shares
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: cost_of_revenue
+    name: Cost of Revenue
+    canonical_name: Cost of Goods Sold
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - cost of goods sold
+        - cogs
+        - cost of revenue
+        - cost of sales
+        - production costs
+        - cost of services
+        - cost of products sold
+        - cost of goods and services sold
+      industry_specific:
+        manufacturing:
+          - manufacturing costs
+          - factory costs
+          - direct production costs
+        saas:
+          - hosting costs
+          - subscription delivery costs
+          - service costs
+          - cost of revenue saas
+        insurance:
+          - claims paid
+          - losses incurred
+          - claims expense
+          - insurance claims paid
+        banking:
+          - interest expense on deposits
+          - cost of funds
+        retail:
+          - cost of merchandise sold
+          - inventory costs
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:CostOfGoodsAndServicesSold
+          - us-gaap:CostOfRevenue
+          - us-gaap:CostOfSales
+          - us-gaap:CostOfGoodsSold
+        by_industry:
+          insurance:
+            - us-gaap:PolicyholderBenefitsAndClaimsIncurredNet
+          banking:
+            - us-gaap:InterestExpenseDeposits
+      ifrs:
+        priority:
+          - ifrs-full:CostOfSales
+      company_specific:
+        AAPL:
+          - aapl:CostOfSales
+        MSFT:
+          - msft:CostOfRevenue
+        GOOGL:
+          - goog:CostOfRevenues
+        AMZN:
+          - amzn:CostOfSales
+    semantic_hints:
+      - direct costs of producing goods
+      - variable costs tied to production volume
+      - expenses directly attributable to revenue generation
+      - cost to deliver products or services
+    fuzzy_matches:
+      - cost of good sold
+      - cog
+      - cost-of-goods-sold
+      - costs of goods sold
+      - cost of good
+      - cogs expense
+    related_metrics:
+      - revenue
+      - gross_profit
+      - gross_margin_pct
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+    calculation:
+      formula: revenue - gross_profit
+      required:
+        - revenue
+        - gross_profit
+      confidence: 0.95
+  - id: current_assets
+    name: Current Assets
+    canonical_name: Current Assets
+    statement_type: balance_sheet
+    period_type: instant
+    synonyms:
+      primary:
+        - current assets
+        - total current assets
+        - assets current
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:AssetsCurrent
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: current_liabilities
+    name: Current Liabilities
+    canonical_name: Current Liabilities
+    statement_type: balance_sheet
+    period_type: instant
+    synonyms:
+      primary:
+        - current liabilities
+        - total current liabilities
+        - liabilities current
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:LiabilitiesCurrent
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: current_ratio
+    name: Current Ratio
+    canonical_name: Current Ratio
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - current ratio
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: debt_issuance
+    name: Debt Issuance
+    canonical_name: Debt Issuance
+    statement_type: cash_flow
+    period_type: duration
+    synonyms:
+      primary:
+        - debt issued
+        - proceeds from debt
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: debt_repayment
+    name: Debt Repayment
+    canonical_name: Debt Repayment
+    statement_type: cash_flow
+    period_type: duration
+    synonyms:
+      primary:
+        - debt repaid
+        - repayment of debt
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: debt_to_equity
+    name: Debt to Equity
+    canonical_name: Debt to Equity
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - debt to equity
+        - d/e ratio
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: deferred_revenue
+    name: Deferred Revenue
+    canonical_name: Deferred Revenue
+    statement_type: balance_sheet
+    period_type: instant
+    synonyms:
+      primary:
+        - deferred revenue
+        - unearned revenue
+        - contract liabilities
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: deferred_tax_assets
+    name: Deferred Tax Assets
+    canonical_name: Deferred Tax Assets
+    statement_type: balance_sheet
+    period_type: instant
+    synonyms:
+      primary:
+        - deferred tax assets
+        - dta
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: deferred_tax_liabilities
+    name: Deferred Tax Liabilities
+    canonical_name: Deferred Tax Liabilities
+    statement_type: balance_sheet
+    period_type: instant
+    synonyms:
+      primary:
+        - deferred tax liabilities
+        - dtl
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: deferred_taxes_cf
+    name: Deferred Taxes (CF)
+    canonical_name: Deferred Taxes (CF)
+    statement_type: cash_flow
+    period_type: duration
+    synonyms:
+      primary:
+        - deferred taxes cash flow
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: depreciation_amortization
+    name: Depreciation & Amortization
+    canonical_name: Depreciation & Amortization
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - depreciation and amortization
+        - d&a
+        - da
+        - amortization of intangibles
+        - depreciation expense
+        - amortization expense
+        - depreciation and amortisation
+        - depreciation depletion and amortization
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:DepreciationAndAmortization
+          - us-gaap:Depreciation
+          - us-gaap:AmortizationOfIntangibleAssets
+    semantic_hints:
+      - non-cash expense for tangible and intangible assets
+      - asset depreciation over time
+      - amortization of acquired assets
+    fuzzy_matches:
+      - d&a
+      - d and a
+      - depreciation
+    related_metrics:
+      - ebitda
+      - operating_income
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: discontinued_operations
+    name: Discontinued Operations
+    canonical_name: Discontinued Operations
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - discontinued operations
+        - income from discontinued ops
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: dividends_paid
+    name: Dividends Paid
+    canonical_name: Dividends Paid
+    statement_type: cash_flow
+    period_type: duration
+    synonyms:
+      primary:
+        - dividends paid
+        - cash dividends
+        - dividend payments
+        - payments of dividends
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:PaymentsOfDividends
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: ebit
+    name: EBIT (Operating Income)
+    statement_type: income_statement
+    period_type: duration
+    taxonomy_tags:
+      priority:
+        - us-gaap:OperatingIncomeLoss
+      fallback:
+        - us-gaap:GrossProfit
+        - us-gaap:OperatingExpenses
+    unit_candidates:
+      - USD
+      - iso4217:USD
+    sign_rule: signed_balance=credit
+    synonyms:
+      - operating income
+      - operating profit
+    fallback_to_dom_table:
+      enabled: false
+  - id: ebitda
+    name: EBITDA
+    canonical_name: EBITDA
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - ebitda
+        - earnings before interest taxes depreciation amortization
+        - adjusted ebitda
+        - operating ebitda
+    semantic_hints:
+      - operating income plus depreciation and amortization
+      - cash earnings from operations
+      - earnings before non-cash charges
+    related_metrics:
+      - operating_income
+      - depreciation_amortization
+    sign_rule: signed_balance=credit
+    unit_candidates:
+      - USD
+      - iso4217:USD
+    calculation:
+      formula: operating_income + depreciation_amortization
+      required:
+        - operating_income
+        - depreciation_amortization
+      confidence: 0.95
+  - id: effective_tax_rate
+    name: Effective Tax Rate
+    canonical_name: Effective Tax Rate
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - effective tax rate
+        - tax rate
+        - etr
+    sign_rule: positive
+    unit_candidates:
+      - percent
+  - id: efficiency_ratio
+    name: Efficiency Ratio
+    canonical_name: Efficiency Ratio
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - efficiency ratio
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: electric_utility_revenue
+    name: Electric Utility Revenue
+    statement_type: income_statement
+    period_type: duration
+    taxonomy_tags:
+      priority:
+        - us-gaap:ElectricUtilityRevenue
+        - us-gaap:RegulatedElectricRevenue
+    unit_candidates:
+      - USD
+      - iso4217:USD
+    sign_rule: positive
+    synonyms:
+      - electric revenue
+      - electricity revenue
+    fallback_to_dom_table:
+      enabled: false
+  - id: enterprise_value
+    name: Enterprise Value
+    canonical_name: Enterprise Value
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - enterprise value
+        - ev
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: eps_basic
+    name: EPS (Basic)
+    canonical_name: Earnings Per Share - Basic
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - earnings per share
+        - eps
+        - basic eps
+        - earnings per share basic
+        - eps basic
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:EarningsPerShareBasic
+    semantic_hints:
+      - net income divided by shares outstanding
+    sign_rule: signed
+    unit_candidates:
+      - USD
+      - USD/shares
+  - id: eps_diluted
+    name: EPS (Diluted)
+    canonical_name: Earnings Per Share - Diluted
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - diluted earnings per share
+        - diluted eps
+        - earnings per share diluted
+        - eps diluted
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:EarningsPerShareDiluted
+    semantic_hints:
+      - eps including dilutive securities
+    sign_rule: signed
+    unit_candidates:
+      - USD
+      - USD/shares
+  - id: equity_issuance
+    name: Equity Issuance
+    canonical_name: Equity Issuance
+    statement_type: cash_flow
+    period_type: duration
+    synonyms:
+      primary:
+        - stock issued
+        - proceeds from stock issuance
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: expense_ratio
+    name: Expense Ratio
+    canonical_name: Expense Ratio
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - expense ratio
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: extraordinary_items
+    name: Extraordinary Items
+    canonical_name: Extraordinary Items
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - extraordinary items
+        - unusual items
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: fcf
+    name: Free Cash Flow
+    canonical_name: Free Cash Flow
+    statement_type: cash_flow
+    period_type: duration
+    synonyms:
+      primary:
+        - free cash flow
+        - fcf
+        - unlevered free cash flow
+        - operating cash flow minus capex
+    semantic_hints:
+      - cash available after capital expenditures
+      - discretionary cash flow
+    related_metrics:
+      - operating_cash_flow
+      - capex
+    sign_rule: signed
+    unit_candidates:
+      - USD
+      - iso4217:USD
+    calculation:
+      formula: operating_cash_flow - capex
+      required:
+        - operating_cash_flow
+        - capex
+      confidence: 0.95
+  - id: fcf_yield_pct
+    name: FCF Yield
+    statement_type: cash_flow
+    period_type: duration_ttm_vs_instant
+    taxonomy_tags:
+      priority:
+        - FCF_TTM
+        - Price
+        - SharesOutstanding
+    unit_candidates:
+      - percent
+    sign_rule: signed
+    synonyms:
+      - free cash flow yield
+    fallback_to_dom_table:
+      enabled: true
+      table_keywords:
+        - FCF
+        - yield
+        - market cap
+      columns_map:
+        fcf:
+          - Free Cash Flow
+          - FCF
+        market_cap:
+          - Market Cap
+          - Market Capitalization
+        shares:
+          - Shares Outstanding
+          - Outstanding Shares
+  - id: financing_cash_flow
+    name: Financing Cash Flow
+    canonical_name: Financing Cash Flow
+    statement_type: cash_flow
+    period_type: duration
+    synonyms:
+      primary:
+        - cash from financing
+        - financing activities
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: funds_from_operations
+    name: FFO
+    canonical_name: Funds From Operations
+    statement_type: cash_flow
+    period_type: duration
+    industry: real_estate
+    synonyms:
+      primary:
+        - funds from operations
+        - ffo
+        - adjusted funds from operations
+        - affo
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:FundsFromOperations
+    semantic_hints:
+      - reit cash flow metric
+    sign_rule: signed
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: gas_utility_revenue
+    name: Gas Utility Revenue
+    statement_type: income_statement
+    period_type: duration
+    taxonomy_tags:
+      priority:
+        - us-gaap:GasUtilityRevenue
+        - us-gaap:RegulatedGasRevenue
+    unit_candidates:
+      - USD
+      - iso4217:USD
+    sign_rule: positive
+    synonyms:
+      - gas revenue
+      - natural gas revenue
+    fallback_to_dom_table:
+      enabled: false
+  - id: goodwill
+    name: Goodwill
+    canonical_name: Goodwill
+    statement_type: balance_sheet
+    period_type: instant
+    synonyms:
+      primary:
+        - goodwill
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:Goodwill
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: gross_margin_pct
+    name: Gross Margin %
+    canonical_name: Gross Margin Percentage
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - gross margin
+        - gross margin percentage
+        - gross margin %
+        - gross profit margin
+        - gpm
+        - gross margin ratio
+    semantic_hints:
+      - gross profit as percentage of revenue
+      - profitability after direct costs
+      - margin percentage
+    related_metrics:
+      - gross_profit
+      - revenue
+    sign_rule: signed
+    unit_candidates:
+      - percent
+    calculation:
+      formula: (gross_profit / revenue) * 100
+      required:
+        - gross_profit
+        - revenue
+      confidence: 0.99
+  - id: gross_profit
+    name: Gross Profit
+    canonical_name: Gross Profit
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - gross profit
+        - gross margin
+        - gross income
+        - gross earnings
+        - gross operating profit
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:GrossProfit
+      ifrs:
+        priority:
+          - ifrs-full:GrossProfit
+    semantic_hints:
+      - revenue minus cost of goods sold
+      - profit before operating expenses
+      - margin after direct costs
+    related_metrics:
+      - revenue
+      - cost_of_revenue
+      - gross_margin_pct
+    sign_rule: signed_balance=credit
+    unit_candidates:
+      - USD
+      - iso4217:USD
+    calculation:
+      formula: revenue - cost_of_revenue
+      required:
+        - revenue
+        - cost_of_revenue
+      confidence: 0.99
+  - id: intangible_assets
+    name: Intangible Assets
+    canonical_name: Intangible Assets
+    statement_type: balance_sheet
+    period_type: instant
+    synonyms:
+      primary:
+        - intangible assets
+        - intangibles
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:IntangibleAssetsNetExcludingGoodwill
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: interest_coverage
+    name: Interest Coverage
+    canonical_name: Interest Coverage
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - interest coverage
+        - times interest earned
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: interest_expense
+    name: Interest Expense
+    canonical_name: Interest Expense
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - interest expense
+        - finance costs
+        - borrowing costs
+        - interest paid
+        - debt service costs
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:InterestExpense
+    semantic_hints:
+      - expense on borrowings
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: interest_income
+    name: Interest Income
+    canonical_name: Interest Income
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - interest income
+        - investment income
+        - interest revenue
+        - interest earned
+        - interest and dividend income
+        - investment income interest
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:InterestIncomeOperating
+          - us-gaap:InvestmentIncomeInterest
+    semantic_hints:
+      - income from interest-bearing assets
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: inventory
+    name: Inventory
+    canonical_name: Inventory
+    statement_type: balance_sheet
+    period_type: instant
+    synonyms:
+      primary:
+        - inventory
+        - inventories
+        - stock
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:InventoryNet
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: inventory_change
+    name: Inventory Change
+    canonical_name: Inventory Change
+    statement_type: cash_flow
+    period_type: duration
+    synonyms:
+      primary:
+        - change in inventory
+        - inventory change
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: inventory_turnover
+    name: Inventory Turnover
+    canonical_name: Inventory Turnover
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - inventory turnover
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: investing_cash_flow
+    name: Investing Cash Flow
+    canonical_name: Investing Cash Flow
+    statement_type: cash_flow
+    period_type: duration
+    synonyms:
+      primary:
+        - cash from investing
+        - investing activities
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: investment_income_insurance
+    name: Investment Income
+    canonical_name: Investment Income
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - investment income insurance
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: license_revenue
+    name: License Revenue
+    canonical_name: License Revenue
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - license revenue
+        - licensing revenue
+        - royalty revenue
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: loan_loss_reserves
+    name: Loan Loss Reserves
+    canonical_name: Loan Loss Reserves
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - loan loss reserves
+        - allowance for loan losses
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: long_term_debt
+    name: Long-term Debt
+    canonical_name: Long-term Debt
+    statement_type: balance_sheet
+    period_type: instant
+    synonyms:
+      primary:
+        - long term debt
+        - non-current debt
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: long_term_investments
+    name: Long-term Investments
+    canonical_name: Long-term Investments
+    statement_type: balance_sheet
+    period_type: instant
+    synonyms:
+      primary:
+        - long term investments
+        - non-current investments
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: loss_ratio
+    name: Loss Ratio
+    canonical_name: Loss Ratio
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - loss ratio
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: minority_interest
+    name: Minority Interest
+    canonical_name: Minority Interest
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - minority interest
+        - noncontrolling interest
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: net_charge_offs
+    name: Net Charge-offs
+    canonical_name: Net Charge-offs
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - net charge offs
+        - loan charge offs
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: net_income
+    name: Net Income
+    canonical_name: Net Income
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - net income
+        - net profit
+        - net earnings
+        - bottom line
+        - profit after tax
+        - net income attributable
+        - earnings
+        - profit
+        - net income loss
+        - net income loss available to common stockholders basic
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:NetIncomeLoss
+          - us-gaap:ProfitLoss
+          - us-gaap:NetIncomeLossAvailableToCommonStockholdersBasic
+    semantic_hints:
+      - final profit after all expenses and taxes
+      - bottom line earnings
+      - profit attributable to shareholders
+    fuzzy_matches:
+      - net inc
+      - net profit
+      - earnings
+    related_metrics:
+      - revenue
+      - operating_income
+      - net_margin_pct
+    sign_rule: signed_balance=credit
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: net_income_common
+    name: Net Income to Common
+    canonical_name: Net Income to Common
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - net income to common
+        - net income available to common
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: net_interest_income
+    name: Net Interest Income
+    canonical_name: Net Interest Income
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - net interest income
+        - nii
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: net_interest_margin
+    name: Net Interest Margin
+    canonical_name: Net Interest Margin
+    statement_type: income_statement
+    period_type: duration
+    industry: banking
+    synonyms:
+      primary:
+        - net interest margin
+        - nim
+        - interest margin
+    semantic_hints:
+      - bank profitability from lending
+    sign_rule: positive
+    unit_candidates:
+      - percent
+  - id: net_margin_pct
+    name: Net Margin %
+    canonical_name: Net Profit Margin
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - net margin
+        - net margin percentage
+        - net profit margin
+        - profit margin
+        - net margin %
+        - npm
+    semantic_hints:
+      - net income as percentage of revenue
+      - bottom line profitability
+      - profit margin after all expenses
+    related_metrics:
+      - net_income
+      - revenue
+    sign_rule: signed
+    unit_candidates:
+      - percent
+    calculation:
+      formula: (net_income / revenue) * 100
+      required:
+        - net_income
+        - revenue
+      confidence: 0.99
+  - id: net_operating_income
+    name: Net Operating Income (NOI)
+    statement_type: income_statement
+    period_type: duration
+    taxonomy_tags:
+      priority:
+        - us-gaap:NetOperatingIncome
+        - us-gaap:RealEstateRevenueNet
+    unit_candidates:
+      - USD
+      - iso4217:USD
+    sign_rule: signed
+    synonyms:
+      - noi
+    fallback_to_dom_table:
+      enabled: false
+  - id: noninterest_income
+    name: Noninterest Income
+    canonical_name: Noninterest Income
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - noninterest income
+        - fee income
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: nonperforming_loans
+    name: Nonperforming Loans
+    canonical_name: Nonperforming Loans
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - nonperforming loans
+        - npl
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: operating_cash_flow
+    name: Operating Cash Flow
+    canonical_name: Cash Flow from Operations
+    statement_type: cash_flow
+    period_type: duration
+    synonyms:
+      primary:
+        - operating cash flow
+        - cash from operations
+        - ocf
+        - cash flow from operating activities
+        - net cash provided by operating activities
+        - operating activities cash flow
+        - net cash provided by used in operating activities
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:NetCashProvidedByUsedInOperatingActivities
+    semantic_hints:
+      - cash generated from core operations
+      - operating activities cash flow
+    fuzzy_matches:
+      - op cash flow
+      - operating cf
+    related_metrics:
+      - fcf
+      - net_income
+    sign_rule: signed
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: operating_income
+    name: Operating Income
+    canonical_name: Operating Income
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - operating income
+        - operating profit
+        - ebit
+        - income from operations
+        - operating earnings
+        - earnings before interest and taxes
+        - operating income loss
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:OperatingIncomeLoss
+    semantic_hints:
+      - gross profit minus operating expenses
+      - profit from core operations
+      - earnings before interest and taxes
+    fuzzy_matches:
+      - operating inc
+      - op income
+      - ebit
+    related_metrics:
+      - gross_profit
+      - sga
+      - r_and_d
+      - ebitda
+    sign_rule: signed_balance=credit
+    unit_candidates:
+      - USD
+      - iso4217:USD
+    calculation:
+      formula: gross_profit - sga - r_and_d - depreciation_amortization
+      required:
+        - gross_profit
+        - sga
+      confidence: 0.9
+  - id: other_income_expense
+    name: Other Income/Expense
+    canonical_name: Other Income/Expense
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - other income
+        - other expense
+        - non-operating income
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: payables_turnover
+    name: Payables Turnover
+    canonical_name: Payables Turnover
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - payables turnover
+        - ap turnover
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: pension_liabilities
+    name: Pension Liabilities
+    canonical_name: Pension Liabilities
+    statement_type: balance_sheet
+    period_type: instant
+    synonyms:
+      primary:
+        - pension liabilities
+        - pension obligations
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: policyholder_benefits_and_claims
+    name: Policyholder Benefits and Claims
+    statement_type: income_statement
+    period_type: duration
+    taxonomy_tags:
+      priority:
+        - us-gaap:PolicyholderBenefitsAndClaimsIncurredNet
+        - us-gaap:BenefitsLossesAndExpenses
+    unit_candidates:
+      - USD
+      - iso4217:USD
+    sign_rule: positive
+    synonyms:
+      - claims incurred
+      - benefits and claims
+    fallback_to_dom_table:
+      enabled: false
+  - id: ppe_net
+    name: PP&E Net
+    canonical_name: Property, Plant & Equipment (Net)
+    statement_type: balance_sheet
+    period_type: instant
+    synonyms:
+      primary:
+        - property plant and equipment
+        - ppe
+        - pp&e
+        - fixed assets
+        - net ppe
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:PropertyPlantAndEquipmentNet
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: preferred_dividends
+    name: Preferred Dividends
+    canonical_name: Preferred Dividends
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - preferred dividends
+        - preferred stock dividends
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: preferred_stock
+    name: Preferred Stock
+    canonical_name: Preferred Stock
+    statement_type: balance_sheet
+    period_type: instant
+    synonyms:
+      primary:
+        - preferred stock
+        - preferred shares
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: premiums_earned
+    name: Premiums Earned
+    canonical_name: Premiums Earned
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - premiums earned
+        - net premiums earned
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: premiums_earned_net
+    name: Premiums Earned, Net
+    statement_type: income_statement
+    period_type: duration
+    taxonomy_tags:
+      priority:
+        - us-gaap:PremiumsEarnedNet
+        - us-gaap:InsurancePremiumsRevenue
+    unit_candidates:
+      - USD
+      - iso4217:USD
+    sign_rule: positive
+    synonyms:
+      - net premiums earned
+      - insurance premiums
+    fallback_to_dom_table:
+      enabled: false
+  - id: premiums_written
+    name: Premiums Written
+    canonical_name: Premiums Written
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - premiums written
+        - gross premiums written
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: pretax_income
+    name: Pretax Income
+    canonical_name: Pretax Income
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - pretax income
+        - income before tax
+        - ebt
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: product_revenue
+    name: Product Revenue
+    canonical_name: Product Revenue
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - product revenue
+        - product sales
+        - goods revenue
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: programming_and_production
+    name: Programming and Production
+    statement_type: income_statement
+    period_type: duration
+    taxonomy_tags:
+      priority:
+        - cmcsa:ProgrammingAndProduction
+        - us-gaap:ProgrammingCosts
+        - us-gaap:CostOfGoodsAndServicesSoldProgrammingAndProduction
+    unit_candidates:
+      - USD
+      - iso4217:USD
+    sign_rule: positive
+    synonyms:
+      - programming costs
+      - content costs
+    fallback_to_dom_table:
+      enabled: false
+  - id: provision_for_loan_losses
+    name: Provision for Loan Losses
+    canonical_name: Provision for Loan Losses
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - provision for loan losses
+        - credit losses
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: quick_ratio
+    name: Quick Ratio
+    canonical_name: Quick Ratio
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - quick ratio
+        - acid test
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: r_and_d
+    name: R&D
+    canonical_name: Research & Development
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - research and development
+        - r&d
+        - rnd
+        - r and d
+        - product development
+        - technology expense
+        - engineering expense
+        - research expense
+        - development costs
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:ResearchAndDevelopmentExpense
+    semantic_hints:
+      - expenses related to development of new products
+      - innovation and research costs
+      - product development expenses
+    fuzzy_matches:
+      - r&d expense
+      - r and d
+      - rnd expense
+    related_metrics:
+      - operating_income
+      - sga
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: rate_base
+    name: Rate Base
+    statement_type: balance_sheet
+    period_type: instant
+    taxonomy_tags:
+      priority:
+        - us-gaap:RateBase
+        - us-gaap:RegulatoryRateBase
+    unit_candidates:
+      - USD
+      - iso4217:USD
+    sign_rule: positive
+    synonyms: []
+    fallback_to_dom_table:
+      enabled: false
+  - id: receivables_turnover
+    name: Receivables Turnover
+    canonical_name: Receivables Turnover
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - receivables turnover
+        - ar turnover
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: rental_revenue
+    name: Rental Revenue
+    statement_type: income_statement
+    period_type: duration
+    taxonomy_tags:
+      priority:
+        - us-gaap:RentalRevenue
+        - us-gaap:OperatingLeaseLeaseIncome
+        - us-gaap:LeaseIncome
+    unit_candidates:
+      - USD
+      - iso4217:USD
+    sign_rule: positive
+    synonyms:
+      - lease revenue
+      - rent income
+    fallback_to_dom_table:
+      enabled: false
+  - id: repurchases_shares
+    name: Shares Repurchased (Program)
+    statement_type: cash_flow
+    period_type: duration
+    taxonomy_tags:
+      priority:
+        - us-gaap:RepurchaseOfCommonStockShares
+        - us-gaap:RepurchaseOfCapitalStockNumberOfSharesPurchased
+    unit_candidates:
+      - shares
+    fallback_to_dom_table:
+      enabled: true
+      table_keywords:
+        - Purchases of Equity Securities
+        - repurchases
+      columns_map:
+        period:
+          - Period
+          - Month
+          - Quarter
+        shares:
+          - Total Number of Shares Purchased as Part of Publicly Announced Plans or Programs
+        avg_px:
+          - Average Price Paid Per Share
+        dollars:
+          - Approximate Dollar Value of Shares That May Yet Be Purchased Under the Plans or Programs
+  - id: retained_earnings
+    name: Retained Earnings
+    canonical_name: Retained Earnings
+    statement_type: balance_sheet
+    period_type: instant
+    synonyms:
+      primary:
+        - retained earnings
+        - accumulated earnings
+        - retained earnings accumulated deficit
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:RetainedEarningsAccumulatedDeficit
+    sign_rule: signed
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: rev_cagr
+    name: Revenue CAGR
+    statement_type: income_statement
+    period_type: multi_period_duration
+    taxonomy_tags:
+      priority:
+        - us-gaap:Revenues
+        - us-gaap:SalesRevenueNet
+    unit_candidates:
+      - percent
+      - USD
+    sign_rule: signed
+    synonyms:
+      - revenue growth
+      - sales growth
+    fallback_to_dom_table:
+      enabled: false
+  - id: rev_ttm
+    name: Revenue (TTM)
+    statement_type: income_statement
+    period_type: duration_ttm
+    taxonomy_tags:
+      priority:
+        - us-gaap:Revenues
+        - us-gaap:SalesRevenueNet
+        - ifrs-full:Revenue
+      alternates_by_industry:
+        BANKS:
+          - us-gaap:InterestAndDividendIncomeOperating
+          - us-gaap:NoninterestIncome
+    unit_candidates:
+      - USD
+      - iso4217:USD
+    dimensions:
+      prefer_members:
+        LegalEntityAxis: ConsolidatedEntitiesMember
+      forbid_axes:
+        SegmentAxis: '*'
+        ProductOrServiceAxis: '*'
+    sign_rule: positive
+    synonyms:
+      - sales
+      - total revenue
+    fallback_to_dom_table:
+      enabled: false
+  - id: revenue
+    name: Revenue
+    canonical_name: Revenue
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - revenue
+        - revenues
+        - net revenue
+        - net revenues
+        - sales
+        - net sales
+        - total sales
+        - operating revenues
+        - turnover
+        - top line
+        - total revenue
+        - revenue from contract with customer excluding assessed tax
+      industry_specific:
+        insurance:
+          - premiums
+          - premiums written
+          - earned premiums
+          - net premiums
+        banking:
+          - net interest income
+          - interest revenue
+          - net interest margin
+        saas:
+          - subscription revenue
+          - recurring revenue
+          - saas revenue
+          - hosting revenue
+          - service revenue
+        energy:
+          - royalties
+          - royalty income
+          - royalties received
+          - license revenue
+          - ip revenue
+        media:
+          - royalties
+          - content revenue
+          - licensing revenue
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:Revenues
+          - us-gaap:SalesRevenueNet
+          - us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax
+        by_industry:
+          insurance:
+            - us-gaap:PremiumsEarnedNet
+          banking:
+            - us-gaap:InterestAndDividendIncomeOperating
+      ifrs:
+        priority:
+          - ifrs-full:Revenue
+    semantic_hints:
+      - top-line inflow from operations
+      - income from primary business activities
+      - gross receipts from customers
+    fuzzy_matches:
+      - revenu
+      - reveneus
+      - sales revenue
+    related_metrics:
+      - cost_of_revenue
+      - gross_profit
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: roa
+    name: Return on Assets
+    canonical_name: Return on Assets
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - roa
+        - return on assets
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: roe
+    name: Return on Equity
+    canonical_name: Return on Equity
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - roe
+        - return on equity
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: roic
+    name: Return on Invested Capital
+    canonical_name: Return on Invested Capital
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - roic
+        - return on invested capital
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: service_revenue
+    name: Service Revenue
+    canonical_name: Service Revenue
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - service revenue
+        - services revenue
+        - service sales
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: sga
+    name: SG&A
+    canonical_name: Selling, General & Administrative
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - selling general and administrative
+        - sg&a
+        - sga
+        - sales and marketing
+        - administrative expense
+        - distribution expense
+        - selling expenses
+        - general and administrative
+        - operating expenses
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:SellingGeneralAndAdministrativeExpense
+          - us-gaap:OperatingExpenses
+    semantic_hints:
+      - operating expenses excluding r&d and depreciation
+      - sales, marketing, and administrative costs
+      - overhead expenses
+    fuzzy_matches:
+      - sg&a
+      - sga expense
+      - sg and a
+    related_metrics:
+      - operating_income
+      - r_and_d
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: share_repurchases
+    name: Share Repurchases
+    canonical_name: Share Repurchases
+    statement_type: cash_flow
+    period_type: duration
+    synonyms:
+      primary:
+        - share repurchases
+        - stock buybacks
+        - treasury stock purchases
+        - repurchase of common stock
+        - payments for repurchase of common stock
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:PaymentsForRepurchaseOfCommonStock
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: shareholders_equity
+    name: Shareholders' Equity
+    canonical_name: Shareholders' Equity
+    statement_type: balance_sheet
+    period_type: instant
+    synonyms:
+      primary:
+        - shareholders equity
+        - stockholders equity
+        - equity
+        - total equity
+        - shareholders' equity
+        - stockholders' equity
+        - book value
+        - net worth
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:StockholdersEquity
+          - us-gaap:ShareholdersEquity
+    semantic_hints:
+      - assets minus liabilities
+      - book value of equity
+      - net worth
+    fuzzy_matches:
+      - shareholder equity
+      - stockholder equity
+    related_metrics:
+      - total_assets
+      - total_liabilities
+    sign_rule: signed
+    unit_candidates:
+      - USD
+      - iso4217:USD
+    calculation:
+      formula: total_assets - total_liabilities
+      required:
+        - total_assets
+        - total_liabilities
+      confidence: 0.99
+  - id: shares_outstanding
+    name: Shares Outstanding
+    canonical_name: Shares Outstanding
+    statement_type: balance_sheet
+    period_type: instant
+    synonyms:
+      primary:
+        - shares outstanding
+        - common shares outstanding
+        - weighted average shares
+        - basic shares outstanding
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:CommonStockSharesOutstanding
+          - us-gaap:WeightedAverageNumberOfSharesOutstandingBasic
+    semantic_hints:
+      - number of shares held by shareholders
+    sign_rule: positive
+    unit_candidates:
+      - shares
+  - id: short_term_debt
+    name: Short-term Debt
+    canonical_name: Short-term Debt
+    statement_type: balance_sheet
+    period_type: instant
+    synonyms:
+      primary:
+        - short term debt
+        - current debt
+        - current portion of long term debt
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: short_term_investments
+    name: Short-term Investments
+    canonical_name: Short-term Investments
+    statement_type: balance_sheet
+    period_type: instant
+    synonyms:
+      primary:
+        - short term investments
+        - marketable securities
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: stock_based_comp_cf
+    name: Stock-Based Comp (CF)
+    canonical_name: Stock-Based Comp (CF)
+    statement_type: cash_flow
+    period_type: duration
+    synonyms:
+      primary:
+        - stock based compensation cash flow
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: stock_based_compensation
+    name: Stock-Based Compensation
+    canonical_name: Stock-Based Compensation
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - stock based compensation
+        - sbc
+        - share based payment
+        - stock compensation
+        - equity compensation
+        - share based compensation
+        - stock options expense
+        - rsu expense
+        - restricted stock units
+        - allocated share based compensation expense
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:ShareBasedCompensation
+          - us-gaap:AllocatedShareBasedCompensationExpense
+    semantic_hints:
+      - non-cash expense for employee equity
+      - stock options and rsu expense
+      - equity-based employee compensation
+    fuzzy_matches:
+      - stock-based comp
+      - sbc expense
+    related_metrics:
+      - sga
+      - r_and_d
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: subscription_revenue
+    name: Subscription Revenue
+    statement_type: income_statement
+    period_type: duration
+    taxonomy_tags:
+      priority:
+        - us-gaap:SubscriptionRevenue
+        - nflx:StreamingRevenue
+        - cmcsa:SubscriptionRevenue
+    unit_candidates:
+      - USD
+      - iso4217:USD
+    sign_rule: positive
+    synonyms:
+      - streaming revenue
+    fallback_to_dom_table:
+      enabled: false
+  - id: tangible_book_value
+    name: Tangible Book Value
+    canonical_name: Tangible Book Value
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - tangible book value
+        - tbv
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: tax_expense
+    name: Tax Expense
+    canonical_name: Income Tax Expense
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - income tax expense
+        - tax expense
+        - provision for income taxes
+        - income taxes
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:IncomeTaxExpenseBenefit
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: tier_1_capital_ratio
+    name: Tier 1 Capital Ratio
+    canonical_name: Tier 1 Capital Ratio
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - tier 1 capital ratio
+        - tier 1 ratio
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: total_assets
+    name: Total Assets
+    canonical_name: Total Assets
+    statement_type: balance_sheet
+    period_type: instant
+    synonyms:
+      primary:
+        - total assets
+        - assets
+        - total asset
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:Assets
+    semantic_hints:
+      - sum of all company assets
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: total_capital_ratio
+    name: Total Capital Ratio
+    canonical_name: Total Capital Ratio
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - total capital ratio
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: total_debt
+    name: Total Debt
+    canonical_name: Total Debt
+    statement_type: balance_sheet
+    period_type: instant
+    synonyms:
+      primary:
+        - total debt
+        - debt
+        - total borrowings
+        - total liabilities debt
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:DebtCurrent
+          - us-gaap:LongTermDebt
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: total_liabilities
+    name: Total Liabilities
+    canonical_name: Total Liabilities
+    statement_type: balance_sheet
+    period_type: instant
+    synonyms:
+      primary:
+        - total liabilities
+        - liabilities
+        - total liability
+    taxonomy_tags:
+      us_gaap:
+        priority:
+          - us-gaap:Liabilities
+    semantic_hints:
+      - sum of all company liabilities
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: treasury_stock
+    name: Treasury Stock
+    canonical_name: Treasury Stock
+    statement_type: balance_sheet
+    period_type: instant
+    synonyms:
+      primary:
+        - treasury stock
+        - treasury shares
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: underwriting_income
+    name: Underwriting Income
+    canonical_name: Underwriting Income
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - underwriting income
+        - underwriting profit
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD
+  - id: wireless_service_revenue
+    name: Wireless Service Revenue
+    statement_type: income_statement
+    period_type: duration
+    taxonomy_tags:
+      priority:
+        - us-gaap:WirelessServiceRevenue
+        - t:WirelessServiceRevenue
+        - vz:WirelessServiceRevenue
+    unit_candidates:
+      - USD
+      - iso4217:USD
+    sign_rule: positive
+    synonyms:
+      - mobile service revenue
+    fallback_to_dom_table:
+      enabled: false
+  - id: working_capital
+    name: Working Capital
+    canonical_name: Working Capital
+    statement_type: income_statement
+    period_type: duration
+    synonyms:
+      primary:
+        - working capital
+        - net working capital
+    sign_rule: positive
+    unit_candidates:
+      - USD
+      - iso4217:USD

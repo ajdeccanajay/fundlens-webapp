@@ -1,0 +1,151 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'FundLens Security Groups Stack - Production Infrastructure'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues:
+      - production
+      - staging
+    Description: Environment name
+
+  VpcStackName:
+    Type: String
+    Default: fundlens-vpc-production
+    Description: Name of the VPC CloudFormation stack
+
+  ExistingRDSSecurityGroupId:
+    Type: String
+    Default: ''
+    Description: Existing RDS security group ID to update (optional)
+
+Conditions:
+  HasExistingRDSSecurityGroup: !Not [!Equals [!Ref ExistingRDSSecurityGroupId, '']]
+  CreateNewRDSSecurityGroup: !Equals [!Ref ExistingRDSSecurityGroupId, '']
+
+Resources:
+  # ===========================================================================
+  # ALB Security Group
+  # ===========================================================================
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub 'fundlens-${Environment}-alb-sg'
+      GroupDescription: Security group for Application Load Balancer
+      VpcId:
+        Fn::ImportValue: !Sub '${VpcStackName}-VpcId'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: '0.0.0.0/0'
+          Description: HTTP from internet (redirects to HTTPS)
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: '0.0.0.0/0'
+          Description: HTTPS from internet
+      Tags:
+        - Key: Name
+          Value: !Sub 'fundlens-${Environment}-alb-sg'
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ===========================================================================
+  # ECS Tasks Security Group
+  # ===========================================================================
+  ECSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub 'fundlens-${Environment}-ecs-sg'
+      GroupDescription: Security group for ECS Fargate tasks
+      VpcId:
+        Fn::ImportValue: !Sub '${VpcStackName}-VpcId'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+          Description: NestJS from ALB only
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: '0.0.0.0/0'
+          Description: All outbound traffic (via NAT Gateway)
+      Tags:
+        - Key: Name
+          Value: !Sub 'fundlens-${Environment}-ecs-sg'
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ===========================================================================
+  # ALB Egress to ECS (explicit rule)
+  # ===========================================================================
+  ALBToECSEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref ALBSecurityGroup
+      IpProtocol: tcp
+      FromPort: 3000
+      ToPort: 3000
+      DestinationSecurityGroupId: !Ref ECSSecurityGroup
+      Description: Allow ALB to reach ECS tasks
+
+  # ===========================================================================
+  # RDS Security Group (new, if not using existing)
+  # ===========================================================================
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: CreateNewRDSSecurityGroup
+    Properties:
+      GroupName: !Sub 'fundlens-${Environment}-rds-sg'
+      GroupDescription: Security group for RDS PostgreSQL
+      VpcId:
+        Fn::ImportValue: !Sub '${VpcStackName}-VpcId'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref ECSSecurityGroup
+          Description: PostgreSQL from ECS tasks only
+      Tags:
+        - Key: Name
+          Value: !Sub 'fundlens-${Environment}-rds-sg'
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ===========================================================================
+  # Ingress rule for existing RDS Security Group
+  # ===========================================================================
+  ExistingRDSIngressFromECS:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasExistingRDSSecurityGroup
+    Properties:
+      GroupId: !Ref ExistingRDSSecurityGroupId
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      SourceSecurityGroupId: !Ref ECSSecurityGroup
+      Description: PostgreSQL from ECS tasks (FundLens production)
+
+Outputs:
+  ALBSecurityGroupId:
+    Description: ALB Security Group ID
+    Value: !Ref ALBSecurityGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-ALBSecurityGroupId'
+
+  ECSSecurityGroupId:
+    Description: ECS Security Group ID
+    Value: !Ref ECSSecurityGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-ECSSecurityGroupId'
+
+  RDSSecurityGroupId:
+    Description: RDS Security Group ID
+    Value: !If
+      - HasExistingRDSSecurityGroup
+      - !Ref ExistingRDSSecurityGroupId
+      - !Ref RDSSecurityGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-RDSSecurityGroupId'

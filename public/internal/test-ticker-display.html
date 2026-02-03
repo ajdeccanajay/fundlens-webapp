@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Ticker Display</title>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-box { border: 2px solid #333; padding: 20px; margin: 20px 0; border-radius: 8px; }
+        .success { border-color: #10b981; background: #d1fae5; }
+        .error { border-color: #ef4444; background: #fee2e2; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Ticker Display Test</h1>
+    
+    <div class="test-box" x-data="testWorkspace()" x-init="init()">
+        <h2>Alpine.js Component Test</h2>
+        <p><strong>Ticker:</strong> <span x-text="dealInfo.ticker"></span></p>
+        <p><strong>Name:</strong> <span x-text="dealInfo.name"></span></p>
+        <p><strong>Sector:</strong> <span x-text="dealInfo.sector"></span></p>
+        <p><strong>Full Display:</strong> <span x-text="dealInfo.ticker + ' - ' + dealInfo.name"></span></p>
+    </div>
+    
+    <div class="test-box">
+        <h2>Direct JavaScript Test</h2>
+        <p id="js-test">Testing...</p>
+    </div>
+    
+    <div class="test-box">
+        <h2>Instructions</h2>
+        <ol>
+            <li>Open this page with: <code>?ticker=AAPL</code></li>
+            <li>Check if ticker displays correctly above</li>
+            <li>Should show "AAPL - AAPL Inc."</li>
+            <li>If it shows "undefined - undefined", there's an Alpine.js issue</li>
+        </ol>
+    </div>
+    
+    <script>
+        // Direct JS test
+        const urlParams = new URLSearchParams(window.location.search);
+        const ticker = urlParams.get('ticker') || 'AAPL';
+        document.getElementById('js-test').innerHTML = `
+            <strong>URL Ticker:</strong> ${ticker}<br>
+            <strong>Display:</strong> ${ticker} - ${ticker} Inc.<br>
+            <strong>Status:</strong> <span style="color: green;">✅ JavaScript works</span>
+        `;
+        
+        // Alpine.js component
+        function testWorkspace() {
+            return {
+                dealInfo: {
+                    ticker: 'Loading...',
+                    name: 'Loading...',
+                    sector: 'Loading...'
+                },
+                
+                init() {
+                    console.log('🎯 Init called');
+                    
+                    // SET TICKER FIRST
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const ticker = urlParams.get('ticker') || 'AAPL';
+                    
+                    this.dealInfo = {
+                        ticker: ticker,
+                        name: ticker + ' Inc.',
+                        sector: 'Technology'
+                    };
+                    
+                    console.log('✅ Ticker set:', this.dealInfo);
+                }
+            };
+        }
+    </script>
+</body>
+</html>

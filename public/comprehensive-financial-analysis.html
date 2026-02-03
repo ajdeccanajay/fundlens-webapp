@@ -1,0 +1,2137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FundLens - Comprehensive Financial Analysis</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- Design System -->
+    <link rel="stylesheet" href="/css/design-system.css">
+    <script src="/js/theme-toggle.js"></script>
+    
+    <!-- Keep Tailwind for gradual migration -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Marked.js for Markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Highlight.js for code syntax highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <style>
+        /* Force design system fonts */
+        * { font-family: var(--font-sans) !important; }
+        code, pre, .font-mono { font-family: var(--font-mono) !important; }
+        
+        [x-cloak] { display: none !important; }
+        .metric-card { background: white; border-radius: 0.75rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); padding: 1.5rem; border: 1px solid #f3f4f6; }
+        .metric-value { font-size: 1.5rem; font-weight: 700; }
+        .metric-label { font-size: 0.875rem; color: #6b7280; font-weight: 500; }
+        .section-header { font-size: 1.25rem; font-weight: 700; color: #111827; margin-bottom: 1rem; display: flex; align-items: center; }
+        .annual-table { width: 100%; font-size: 0.875rem; }
+        .annual-table th { text-align: left; padding: 0.5rem 0.75rem; background: #f9fafb; font-weight: 600; color: #374151; }
+        .annual-table td { padding: 0.5rem 0.75rem; border-top: 1px solid #f3f4f6; }
+        .breadcrumb { display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; color: #6b7280; }
+        .breadcrumb a { color: #4f46e5; text-decoration: none; }
+        .breadcrumb a:hover { text-decoration: underline; }
+        .qa-card { background: #f8fafc; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1rem; border-left: 4px solid #6366f1; position: relative; }
+        .qa-card.cached { border-left-color: #10b981; }
+        .qa-question { font-weight: 600; color: #1f2937; margin-bottom: 0.5rem; }
+        .qa-answer { color: #4b5563; line-height: 1.6; white-space: pre-wrap; }
+        .cached-badge { position: absolute; top: 0.5rem; right: 0.5rem; background: #10b981; color: white; font-size: 0.65rem; padding: 0.15rem 0.4rem; border-radius: 0.25rem; font-weight: 500; }
+        .tab-btn { padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+        .tab-btn.active { background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; }
+        .tab-btn:not(.active) { background: #f3f4f6; color: #374151; }
+        .tab-btn:not(.active):hover { background: #e5e7eb; }
+        
+        /* Research Assistant Modal Styles */
+        .message-user {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 18px;
+            padding: 12px 18px;
+            max-width: 80%;
+            margin-left: auto;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+        }
+        
+        .message-assistant {
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 18px;
+            padding: 16px 20px;
+            max-width: 85%;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+        
+        .message-assistant p {
+            margin-bottom: 12px;
+            line-height: 1.6;
+        }
+        
+        .message-assistant p:last-child {
+            margin-bottom: 0;
+        }
+        
+        .typing-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            background: #9ca3af;
+            border-radius: 50%;
+            animation: pulse 1.4s infinite;
+        }
+        
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 0.4; transform: scale(0.8); }
+            50% { opacity: 1; transform: scale(1); }
+        }
+        
+        .source-chip {
+            display: inline-flex;
+            align-items: center;
+            background: #eff6ff;
+            color: #1e40af;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            margin: 4px 4px 4px 0;
+            border: 1px solid #bfdbfe;
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-gray-50 via-white to-indigo-50">
+    <!-- Include Research Navigation -->
+    <div id="research-navigation-container"></div>
+    
+    <div x-data="comprehensiveAnalysis()" x-init="init()" x-cloak>
+        <!-- Header with Breadcrumbs -->
+        <header class="bg-white shadow-lg border-b border-gray-100">
+            <div class="max-w-7xl mx-auto px-4 py-4">
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center">
+                        <div class="w-10 h-10 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center">
+                            <i class="fas fa-chart-line text-white text-lg"></i>
+                        </div>
+                        <div class="ml-3">
+                            <h1 class="text-2xl font-bold text-gray-900">Comprehensive Financial Analysis</h1>
+                            <span class="text-sm text-gray-500" x-text="ticker ? `${ticker} - ${years} Year Analysis` : 'Loading...'"></span>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <!-- Research Tools Navigation -->
+                        <button @click="showResearchModal = true" 
+                                :disabled="!ticker"
+                                class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                            <i class="fas fa-brain"></i>
+                            <span class="hidden sm:inline">Research Assistant</span>
+                        </button>
+                        <button @click="showScratchpad = true" 
+                                class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2 relative">
+                            <i class="fas fa-bookmark"></i>
+                            <span class="hidden sm:inline">Scratchpad</span>
+                            <span x-show="scratchpadCount > 0" 
+                                  class="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center"
+                                  x-text="scratchpadCount"></span>
+                        </button>
+                        <button @click="showICMemo = true" 
+                                :disabled="!ticker"
+                                class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                            <i class="fas fa-file-export"></i>
+                            <span class="hidden sm:inline">IC Memo</span>
+                        </button>
+                        
+                        <!-- Existing ticker input -->
+                        <input type="text" x-model="tickerInput" placeholder="Enter Ticker" 
+                               class="border rounded-lg px-4 py-2 w-32" @keyup.enter="loadMetrics()">
+                        <select x-model="years" class="border rounded-lg px-4 py-2">
+                            <option value="3">3 Years</option>
+                            <option value="5">5 Years</option>
+                        </select>
+                        <button @click="loadMetrics()" class="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700">
+                            <i class="fas fa-sync-alt mr-2"></i>Load
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Tab Navigation -->
+        <div class="max-w-7xl mx-auto px-4 py-4">
+            <div class="flex space-x-2">
+                <button @click="activeTab = 'quantitative'" class="tab-btn" :class="{ 'active': activeTab === 'quantitative' }">
+                    <i class="fas fa-calculator mr-2"></i>Quantitative Metrics
+                </button>
+                <button @click="activeTab = 'qualitative'; loadQualitative()" class="tab-btn" :class="{ 'active': activeTab === 'qualitative' }">
+                    <i class="fas fa-comments mr-2"></i>Qualitative Analysis
+                </button>
+                <button @click="activeTab = 'export'; loadAvailablePeriods()" class="tab-btn" :class="{ 'active': activeTab === 'export' }">
+                    <i class="fas fa-file-excel mr-2"></i>Export to Excel
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="max-w-7xl mx-auto px-4 py-4">
+            <!-- Loading State -->
+            <div x-show="loading" class="text-center py-12">
+                <div class="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+                    <i class="fas fa-chart-bar text-2xl text-indigo-600"></i>
+                </div>
+                <h3 class="text-lg font-semibold text-gray-900">Loading Comprehensive Metrics...</h3>
+            </div>
+
+            <!-- QUANTITATIVE TAB -->
+            <div x-show="!loading && data && activeTab === 'quantitative'" class="space-y-8">
+                
+                <!-- SECTION 1: FINANCIAL PERFORMANCE -->
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h2 class="section-header">
+                        <i class="fas fa-chart-line text-green-600 mr-3"></i>
+                        1. Financial Performance Metrics
+                    </h2>
+                    
+                    <!-- Revenue -->
+                    <div class="mb-8">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">Revenue</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                            <div class="bg-green-50 rounded-lg p-4">
+                                <p class="metric-label">TTM Revenue</p>
+                                <p class="metric-value text-green-700" x-text="formatCurrency(data?.metrics?.revenue?.ttm)"></p>
+                                <p class="text-xs text-green-600">Sum of last 4 quarters (10-Q)</p>
+                            </div>
+                            <div class="bg-green-50 rounded-lg p-4">
+                                <p class="metric-label">Revenue CAGR</p>
+                                <p class="metric-value text-green-700" x-text="formatPercent(data?.metrics?.revenue?.cagr)"></p>
+                                <p class="text-xs text-green-600">Compound Annual Growth Rate</p>
+                            </div>
+                        </div>
+                        <!-- Annual Revenue Table -->
+                        <div x-show="data?.metrics?.revenue?.annual?.length > 0">
+                            <h4 class="font-medium text-gray-700 mb-2">Annual Revenue (from 10-K)</h4>
+                            <table class="annual-table">
+                                <thead><tr><th>Fiscal Year</th><th>Revenue</th><th>YoY Growth</th></tr></thead>
+                                <tbody>
+                                    <template x-for="(item, idx) in data?.metrics?.revenue?.annual?.filter(i => i.period.startsWith('FY'))" :key="item.period">
+                                        <tr>
+                                            <td x-text="item.period"></td>
+                                            <td class="font-semibold" x-text="formatCurrency(item.value)"></td>
+                                            <td x-text="getYoYGrowth(data?.metrics?.revenue?.yoyGrowth, item.period)"></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Gross Profit & Margin -->
+                    <div class="mb-8">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">Gross Profit & Margin</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                            <div class="bg-blue-50 rounded-lg p-4">
+                                <p class="metric-label">Gross Profit TTM</p>
+                                <p class="metric-value text-blue-700" x-text="formatCurrency(data?.metrics?.profitability?.grossProfit?.ttm)"></p>
+                            </div>
+                            <div class="bg-blue-50 rounded-lg p-4">
+                                <p class="metric-label">Gross Margin TTM</p>
+                                <p class="metric-value text-blue-700" x-text="formatPercent(data?.metrics?.profitability?.grossMargin?.ttm)"></p>
+                            </div>
+                        </div>
+                        <div x-show="data?.metrics?.profitability?.grossProfit?.annual?.length > 0">
+                            <h4 class="font-medium text-gray-700 mb-2">Annual Gross Profit & Margin</h4>
+                            <table class="annual-table">
+                                <thead><tr><th>Fiscal Year</th><th>Gross Profit</th><th>Gross Margin</th></tr></thead>
+                                <tbody>
+                                    <template x-for="item in data?.metrics?.profitability?.grossProfit?.annual?.filter(i => i.period.startsWith('FY'))" :key="item.period">
+                                        <tr>
+                                            <td x-text="item.period"></td>
+                                            <td class="font-semibold" x-text="formatCurrency(item.value)"></td>
+                                            <td x-text="getMarginForPeriod(data?.metrics?.profitability?.grossMargin?.annual, item.period)"></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Operating Income (EBIT) -->
+                    <div class="mb-8">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">Operating Income (EBIT)</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                            <div class="bg-indigo-50 rounded-lg p-4">
+                                <p class="metric-label">Operating Income TTM</p>
+                                <p class="metric-value text-indigo-700" x-text="formatCurrency(data?.metrics?.profitability?.operatingIncome?.ttm)"></p>
+                            </div>
+                            <div class="bg-indigo-50 rounded-lg p-4">
+                                <p class="metric-label">Operating Margin TTM</p>
+                                <p class="metric-value text-indigo-700" x-text="formatPercent(data?.metrics?.profitability?.operatingMargin?.ttm)"></p>
+                            </div>
+                        </div>
+                        <div x-show="data?.metrics?.profitability?.operatingIncome?.annual?.length > 0">
+                            <h4 class="font-medium text-gray-700 mb-2">Annual Operating Income</h4>
+                            <table class="annual-table">
+                                <thead><tr><th>Fiscal Year</th><th>Operating Income</th><th>Operating Margin</th></tr></thead>
+                                <tbody>
+                                    <template x-for="item in data?.metrics?.profitability?.operatingIncome?.annual?.filter(i => i.period.startsWith('FY'))" :key="item.period">
+                                        <tr>
+                                            <td x-text="item.period"></td>
+                                            <td class="font-semibold" x-text="formatCurrency(item.value)"></td>
+                                            <td x-text="getMarginForPeriod(data?.metrics?.profitability?.operatingMargin?.annual, item.period)"></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- EBITDA -->
+                    <div class="mb-8">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">EBITDA</h3>
+                        <p class="text-sm text-gray-500 mb-4">EBITDA = Net Income + Taxes + Interest + Depreciation/Amortization</p>
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                            <div class="bg-purple-50 rounded-lg p-4">
+                                <p class="metric-label">EBITDA TTM</p>
+                                <p class="metric-value text-purple-700" x-text="formatCurrency(data?.metrics?.profitability?.ebitda?.ttm)"></p>
+                            </div>
+                            <div class="bg-purple-50 rounded-lg p-4">
+                                <p class="metric-label">EBITDA Margin TTM</p>
+                                <p class="metric-value text-purple-700" x-text="formatPercent(data?.metrics?.profitability?.ebitdaMargin?.ttm)"></p>
+                            </div>
+                        </div>
+                        <div x-show="data?.metrics?.profitability?.ebitda?.annual?.length > 0">
+                            <h4 class="font-medium text-gray-700 mb-2">Annual EBITDA</h4>
+                            <table class="annual-table">
+                                <thead><tr><th>Fiscal Year</th><th>EBITDA</th><th>EBITDA Margin</th></tr></thead>
+                                <tbody>
+                                    <template x-for="item in data?.metrics?.profitability?.ebitda?.annual?.filter(i => i.period.startsWith('FY'))" :key="item.period">
+                                        <tr>
+                                            <td x-text="item.period"></td>
+                                            <td class="font-semibold" x-text="formatCurrency(item.value)"></td>
+                                            <td x-text="getMarginForPeriod(data?.metrics?.profitability?.ebitdaMargin?.annual, item.period)"></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Net Income -->
+                    <div class="mb-8">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">Net Income</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                            <div class="bg-teal-50 rounded-lg p-4">
+                                <p class="metric-label">Net Income TTM</p>
+                                <p class="metric-value text-teal-700" x-text="formatCurrency(data?.metrics?.profitability?.netIncome?.ttm)"></p>
+                            </div>
+                            <div class="bg-teal-50 rounded-lg p-4">
+                                <p class="metric-label">Net Margin TTM</p>
+                                <p class="metric-value text-teal-700" x-text="formatPercent(data?.metrics?.profitability?.netMargin?.ttm)"></p>
+                            </div>
+                        </div>
+                        <div x-show="data?.metrics?.profitability?.netIncome?.annual?.length > 0">
+                            <h4 class="font-medium text-gray-700 mb-2">Annual Net Income</h4>
+                            <table class="annual-table">
+                                <thead><tr><th>Fiscal Year</th><th>Net Income</th><th>Net Margin</th><th>YoY Growth</th></tr></thead>
+                                <tbody>
+                                    <template x-for="item in data?.metrics?.profitability?.netIncome?.annual?.filter(i => i.period.startsWith('FY'))" :key="item.period">
+                                        <tr>
+                                            <td x-text="item.period"></td>
+                                            <td class="font-semibold" x-text="formatCurrency(item.value)"></td>
+                                            <td x-text="getMarginForPeriod(data?.metrics?.profitability?.netMargin?.annual, item.period)"></td>
+                                            <td x-text="getYoYGrowth(data?.metrics?.profitability?.netIncome?.yoyGrowth, item.period)"></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SECTION 2: CASH FLOW METRICS -->
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h2 class="section-header">
+                        <i class="fas fa-money-bill-wave text-purple-600 mr-3"></i>
+                        2. Cash Flow Metrics
+                    </h2>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                        <div class="bg-purple-50 rounded-lg p-4">
+                            <p class="metric-label">Operating Cash Flow TTM</p>
+                            <p class="metric-value text-purple-700" x-text="formatCurrency(data?.metrics?.cashFlow?.operatingCashFlow?.ttm)"></p>
+                            <p class="text-xs text-purple-600">From Cash Flow Statement</p>
+                        </div>
+                        <div class="bg-purple-50 rounded-lg p-4">
+                            <p class="metric-label">Free Cash Flow TTM</p>
+                            <p class="metric-value text-purple-700" x-text="formatCurrency(data?.metrics?.cashFlow?.freeCashFlow?.ttm)"></p>
+                            <p class="text-xs text-purple-600">OCF - CapEx</p>
+                        </div>
+                        <div class="bg-purple-50 rounded-lg p-4">
+                            <p class="metric-label">CapEx TTM</p>
+                            <p class="metric-value text-purple-700" x-text="formatCurrency(data?.metrics?.cashFlow?.capex?.ttm)"></p>
+                        </div>
+                        <div class="bg-purple-50 rounded-lg p-4">
+                            <p class="metric-label">Cash Conversion Ratio TTM</p>
+                            <p class="metric-value text-purple-700" x-text="formatPercent(data?.metrics?.cashFlow?.cashConversionRatio?.ttm)"></p>
+                            <p class="text-xs text-purple-600">FCF / Net Income</p>
+                        </div>
+                    </div>
+
+                    <div x-show="data?.metrics?.cashFlow?.freeCashFlow?.annual?.length > 0">
+                        <h4 class="font-medium text-gray-700 mb-2">Annual Cash Flow</h4>
+                        <table class="annual-table">
+                            <thead><tr><th>Fiscal Year</th><th>Operating CF</th><th>Free Cash Flow</th><th>Cash Conversion</th></tr></thead>
+                            <tbody>
+                                <template x-for="item in data?.metrics?.cashFlow?.freeCashFlow?.annual?.filter(i => i.period.startsWith('FY'))" :key="item.period">
+                                    <tr>
+                                        <td x-text="item.period"></td>
+                                        <td x-text="getValueForPeriod(data?.metrics?.cashFlow?.operatingCashFlow?.annual, item.period, 'currency')"></td>
+                                        <td class="font-semibold" x-text="formatCurrency(item.value)"></td>
+                                        <td x-text="getValueForPeriod(data?.metrics?.cashFlow?.cashConversionRatio?.annual, item.period, 'percent')"></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- SECTION 3: WORKING CAPITAL CYCLE -->
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h2 class="section-header">
+                        <i class="fas fa-sync-alt text-orange-600 mr-3"></i>
+                        3. Working Capital Cycle (Cash Conversion Cycle)
+                    </h2>
+                    <p class="text-sm text-gray-500 mb-4">Cash Conversion Cycle = DSO + DIO - DPO</p>
+                    
+                    <div x-show="data?.metrics?.workingCapital?.dso?.length > 0">
+                        <table class="annual-table">
+                            <thead>
+                                <tr>
+                                    <th>Fiscal Year</th>
+                                    <th>DSO (Days Sales Outstanding)</th>
+                                    <th>DIO (Days Inventory Outstanding)</th>
+                                    <th>DPO (Days Payable Outstanding)</th>
+                                    <th>Cash Conversion Cycle</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="item in data?.metrics?.workingCapital?.dso" :key="item.period">
+                                    <tr>
+                                        <td x-text="item.period"></td>
+                                        <td x-text="formatDays(item.value)"></td>
+                                        <td x-text="getValueForPeriod(data?.metrics?.workingCapital?.dio, item.period, 'days')"></td>
+                                        <td x-text="getValueForPeriod(data?.metrics?.workingCapital?.dpo, item.period, 'days')"></td>
+                                        <td class="font-semibold" x-text="getValueForPeriod(data?.metrics?.workingCapital?.cashConversionCycle, item.period, 'days')"></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- SECTION 4: BALANCE SHEET HEALTH -->
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h2 class="section-header">
+                        <i class="fas fa-balance-scale text-blue-600 mr-3"></i>
+                        4. Balance Sheet Health
+                    </h2>
+                    
+                    <div x-show="data?.metrics?.balanceSheet?.currentRatio?.length > 0">
+                        <table class="annual-table">
+                            <thead>
+                                <tr>
+                                    <th>Fiscal Year</th>
+                                    <th>Current Ratio</th>
+                                    <th>Quick Ratio</th>
+                                    <th>Working Capital</th>
+                                    <th>Debt/Equity</th>
+                                    <th>ROE</th>
+                                    <th>Asset Turnover</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="item in data?.metrics?.balanceSheet?.currentRatio" :key="item.period">
+                                    <tr>
+                                        <td x-text="item.period"></td>
+                                        <td x-text="formatRatio(item.value)"></td>
+                                        <td x-text="getValueForPeriod(data?.metrics?.balanceSheet?.quickRatio, item.period, 'ratio')"></td>
+                                        <td x-text="getValueForPeriod(data?.metrics?.balanceSheet?.workingCapital, item.period, 'currency')"></td>
+                                        <td x-text="getValueForPeriod(data?.metrics?.balanceSheet?.debtToEquity, item.period, 'ratio')"></td>
+                                        <td x-text="getValueForPeriod(data?.metrics?.balanceSheet?.roe, item.period, 'percent')"></td>
+                                        <td x-text="getValueForPeriod(data?.metrics?.balanceSheet?.assetTurnover, item.period, 'ratio')"></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Data Source Info -->
+                <div class="bg-gray-50 rounded-lg p-4 text-sm text-gray-600">
+                    <div class="flex items-center">
+                        <i class="fas fa-info-circle text-gray-400 mr-2"></i>
+                        <span>All metrics calculated deterministically from SEC filings (10-K, 10-Q) using Python calculation engine</span>
+                    </div>
+                    <div class="mt-2 text-xs text-gray-500">
+                        Last calculated: <span x-text="data?.calculationDate ? new Date(data.calculationDate).toLocaleString() : 'N/A'"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- QUALITATIVE TAB -->
+            <div x-show="activeTab === 'qualitative'" class="space-y-6">
+                <!-- Loading State for Qualitative -->
+                <div x-show="qualitativeLoading" class="text-center py-12">
+                    <div class="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+                        <i class="fas fa-brain text-2xl text-purple-600"></i>
+                    </div>
+                    <h3 class="text-lg font-semibold text-gray-900">Querying Knowledge Base...</h3>
+                    <p class="text-gray-500 mt-2">Analyzing SEC filings for qualitative insights</p>
+                </div>
+
+                <!-- Ask Custom Question -->
+                <div class="bg-white rounded-xl shadow-lg p-6" x-show="!qualitativeLoading">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                        <i class="fas fa-question-circle text-indigo-600 mr-2"></i>Ask a Question
+                    </h3>
+                    <div class="flex space-x-4">
+                        <input type="text" x-model="customQuestion" 
+                               placeholder="Ask any question about the company..."
+                               class="flex-1 border rounded-lg px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                               @keyup.enter="askCustomQuestion()">
+                        <button @click="askCustomQuestion()" 
+                                class="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 flex items-center"
+                                :disabled="askingQuestion">
+                            <i class="fas fa-paper-plane mr-2" x-show="!askingQuestion"></i>
+                            <i class="fas fa-spinner fa-spin mr-2" x-show="askingQuestion"></i>
+                            Ask
+                        </button>
+                    </div>
+                    <!-- Custom Answer -->
+                    <div x-show="customAnswer" class="mt-4 qa-card">
+                        <p class="qa-question" x-text="customQuestion"></p>
+                        <p class="qa-answer" x-text="customAnswer"></p>
+                    </div>
+                </div>
+
+                <!-- Qualitative Categories -->
+                <div x-show="!qualitativeLoading && qualitativeData">
+                    <!-- Company Description -->
+                    <div class="bg-white rounded-xl shadow-lg p-6 mb-6" x-show="qualitativeData?.categories?.companyDescription">
+                        <h3 class="section-header"><i class="fas fa-building text-blue-600 mr-3"></i>Company Description</h3>
+                        <template x-for="qa in qualitativeData?.categories?.companyDescription" :key="qa.question">
+                            <div class="qa-card" :class="{ 'cached': qa.cached }">
+                                <span x-show="qa.cached" class="cached-badge">⚡ Instant</span>
+                                <p class="qa-question" x-text="qa.question"></p>
+                                <p class="qa-answer" x-text="qa.answer"></p>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Revenue Breakdown -->
+                    <div class="bg-white rounded-xl shadow-lg p-6 mb-6" x-show="qualitativeData?.categories?.revenueBreakdown">
+                        <h3 class="section-header"><i class="fas fa-chart-pie text-green-600 mr-3"></i>Revenue Breakdown</h3>
+                        <template x-for="qa in qualitativeData?.categories?.revenueBreakdown" :key="qa.question">
+                            <div class="qa-card" :class="{ 'cached': qa.cached }">
+                                <span x-show="qa.cached" class="cached-badge">⚡ Instant</span>
+                                <p class="qa-question" x-text="qa.question"></p>
+                                <p class="qa-answer" x-text="qa.answer"></p>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Growth Drivers -->
+                    <div class="bg-white rounded-xl shadow-lg p-6 mb-6" x-show="qualitativeData?.categories?.growthDrivers">
+                        <h3 class="section-header"><i class="fas fa-rocket text-purple-600 mr-3"></i>Growth Drivers</h3>
+                        <template x-for="qa in qualitativeData?.categories?.growthDrivers" :key="qa.question">
+                            <div class="qa-card" :class="{ 'cached': qa.cached }">
+                                <span x-show="qa.cached" class="cached-badge">⚡ Instant</span>
+                                <p class="qa-question" x-text="qa.question"></p>
+                                <p class="qa-answer" x-text="qa.answer"></p>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Competitive Dynamics -->
+                    <div class="bg-white rounded-xl shadow-lg p-6 mb-6" x-show="qualitativeData?.categories?.competitiveDynamics">
+                        <h3 class="section-header"><i class="fas fa-chess text-orange-600 mr-3"></i>Competitive Dynamics</h3>
+                        <template x-for="qa in qualitativeData?.categories?.competitiveDynamics" :key="qa.question">
+                            <div class="qa-card" :class="{ 'cached': qa.cached }">
+                                <span x-show="qa.cached" class="cached-badge">⚡ Instant</span>
+                                <p class="qa-question" x-text="qa.question"></p>
+                                <p class="qa-answer" x-text="qa.answer"></p>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Industry & TAM -->
+                    <div class="bg-white rounded-xl shadow-lg p-6 mb-6" x-show="qualitativeData?.categories?.industry">
+                        <h3 class="section-header"><i class="fas fa-industry text-teal-600 mr-3"></i>Industry & TAM</h3>
+                        <template x-for="qa in qualitativeData?.categories?.industry" :key="qa.question">
+                            <div class="qa-card" :class="{ 'cached': qa.cached }">
+                                <span x-show="qa.cached" class="cached-badge">⚡ Instant</span>
+                                <p class="qa-question" x-text="qa.question"></p>
+                                <p class="qa-answer" x-text="qa.answer"></p>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Management -->
+                    <div class="bg-white rounded-xl shadow-lg p-6 mb-6" x-show="qualitativeData?.categories?.management">
+                        <h3 class="section-header"><i class="fas fa-users text-indigo-600 mr-3"></i>Management Team</h3>
+                        <template x-for="qa in qualitativeData?.categories?.management" :key="qa.question">
+                            <div class="qa-card" :class="{ 'cached': qa.cached }">
+                                <span x-show="qa.cached" class="cached-badge">⚡ Instant</span>
+                                <p class="qa-question" x-text="qa.question"></p>
+                                <p class="qa-answer" x-text="qa.answer"></p>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Investment Thesis -->
+                    <div class="bg-white rounded-xl shadow-lg p-6 mb-6" x-show="qualitativeData?.categories?.thesis">
+                        <h3 class="section-header"><i class="fas fa-lightbulb text-yellow-600 mr-3"></i>Investment Thesis</h3>
+                        <template x-for="qa in qualitativeData?.categories?.thesis" :key="qa.question">
+                            <div class="qa-card" :class="{ 'cached': qa.cached }">
+                                <span x-show="qa.cached" class="cached-badge">⚡ Instant</span>
+                                <p class="qa-question" x-text="qa.question"></p>
+                                <p class="qa-answer" x-text="qa.answer"></p>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Recent Developments -->
+                    <div class="bg-white rounded-xl shadow-lg p-6 mb-6" x-show="qualitativeData?.categories?.recentDevelopments">
+                        <h3 class="section-header"><i class="fas fa-newspaper text-red-600 mr-3"></i>Recent Developments</h3>
+                        <template x-for="qa in qualitativeData?.categories?.recentDevelopments" :key="qa.question">
+                            <div class="qa-card" :class="{ 'cached': qa.cached }">
+                                <span x-show="qa.cached" class="cached-badge">⚡ Instant</span>
+                                <p class="qa-question" x-text="qa.question"></p>
+                                <p class="qa-answer" x-text="qa.answer"></p>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+
+            <!-- No Data State -->
+            <div x-show="!loading && !data" class="text-center py-12">
+                <div class="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i class="fas fa-exclamation-triangle text-2xl text-yellow-600"></i>
+                </div>
+                <h3 class="text-lg font-semibold text-gray-900 mb-2">No Metrics Available</h3>
+                <p class="text-gray-600 mb-4">Enter a ticker symbol and click Load to calculate metrics.</p>
+            </div>
+
+            <!-- EXPORT TAB - Wizard Style -->
+            <div x-show="activeTab === 'export'" class="space-y-6">
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <div>
+                            <h2 class="text-2xl font-bold text-gray-900">Export Financial Statements</h2>
+                            <p class="text-gray-600">Export comprehensive financial data to Excel for analysis</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Wizard Progress Indicator -->
+                    <div class="mb-8">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center">
+                                <div :class="exportStep >= 1 ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-500'" 
+                                     class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm">1</div>
+                                <span class="ml-2 text-sm font-medium" :class="exportStep >= 1 ? 'text-indigo-600' : 'text-gray-400'">Select Year</span>
+                            </div>
+                            <div class="flex-1 h-1 mx-4" :class="exportStep >= 2 ? 'bg-indigo-600' : 'bg-gray-200'"></div>
+                            <div class="flex items-center">
+                                <div :class="exportStep >= 2 ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-500'" 
+                                     class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm">2</div>
+                                <span class="ml-2 text-sm font-medium" :class="exportStep >= 2 ? 'text-indigo-600' : 'text-gray-400'">Filing Type</span>
+                            </div>
+                            <div class="flex-1 h-1 mx-4" :class="exportStep >= 3 ? 'bg-indigo-600' : 'bg-gray-200'"></div>
+                            <div class="flex items-center">
+                                <div :class="exportStep >= 3 ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-500'" 
+                                     class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm">3</div>
+                                <span class="ml-2 text-sm font-medium" :class="exportStep >= 3 ? 'text-indigo-600' : 'text-gray-400'">Export</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Step 1: Year Selection -->
+                    <div x-show="exportStep === 1" class="space-y-6">
+                        <div class="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl p-6 border border-indigo-100">
+                            <h3 class="text-lg font-semibold text-gray-900 mb-4"><i class="fas fa-calendar-alt mr-2 text-indigo-600"></i>Step 1: Select Year</h3>
+                            <p class="text-gray-600 mb-4">Choose the fiscal year you want to export data for.</p>
+                            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                                <template x-for="year in getAvailableYears()" :key="year">
+                                    <button @click="selectExportYear(year)" 
+                                            :class="exportSelectedYear === year ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-white text-gray-700 border-gray-200 hover:border-indigo-400 hover:bg-indigo-50'"
+                                            class="px-4 py-3 rounded-xl font-medium transition-all border-2 text-center" x-text="year"></button>
+                                </template>
+                            </div>
+                            <div x-show="getAvailableYears().length === 0" class="text-center py-8 text-gray-500">
+                                <i class="fas fa-info-circle text-2xl mb-2"></i>
+                                <p>No data available. Please load a ticker first.</p>
+                            </div>
+                        </div>
+                        <div class="flex justify-end">
+                            <button @click="goToExportStep(2)" :disabled="!exportSelectedYear"
+                                    :class="exportSelectedYear ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-gray-300 text-gray-500 cursor-not-allowed'"
+                                    class="px-6 py-3 rounded-xl font-medium transition-all flex items-center">
+                                Next: Choose Filing Type <i class="fas fa-arrow-right ml-2"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Step 2: Filing Type Selection -->
+                    <div x-show="exportStep === 2" class="space-y-6">
+                        <div class="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl p-6 border border-indigo-100">
+                            <h3 class="text-lg font-semibold text-gray-900 mb-4"><i class="fas fa-file-alt mr-2 text-indigo-600"></i>Step 2: Select Filing Type</h3>
+                            <p class="text-gray-600 mb-4">Choose the type of SEC filing to export for <span class="font-semibold text-indigo-600" x-text="exportSelectedYear"></span>.</p>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <button @click="selectFilingType('10-K')" :disabled="!hasAnnualDataForYear()"
+                                        :class="exportFilingType === '10-K' ? 'border-indigo-600 bg-indigo-50 ring-2 ring-indigo-600' : 'border-gray-200 hover:border-indigo-400 hover:bg-indigo-50'"
+                                        class="p-6 rounded-xl border-2 text-left transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                                    <div class="flex items-center mb-3">
+                                        <div :class="exportFilingType === '10-K' ? 'bg-indigo-600' : 'bg-gray-400'" class="w-10 h-10 rounded-full flex items-center justify-center text-white"><i class="fas fa-file-alt"></i></div>
+                                        <span class="ml-3 font-semibold text-lg">10-K Annual</span>
+                                    </div>
+                                    <p class="text-sm text-gray-600">Full year financial statements with comprehensive data.</p>
+                                    <div x-show="hasAnnualDataForYear()" class="mt-2 text-xs text-green-600"><i class="fas fa-check-circle mr-1"></i>Available</div>
+                                    <div x-show="!hasAnnualDataForYear()" class="mt-2 text-xs text-gray-400"><i class="fas fa-times-circle mr-1"></i>Not available</div>
+                                </button>
+                                <button @click="selectFilingType('10-Q')" :disabled="!hasQuarterlyDataForYear()"
+                                        :class="exportFilingType === '10-Q' ? 'border-indigo-600 bg-indigo-50 ring-2 ring-indigo-600' : 'border-gray-200 hover:border-indigo-400 hover:bg-indigo-50'"
+                                        class="p-6 rounded-xl border-2 text-left transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                                    <div class="flex items-center mb-3">
+                                        <div :class="exportFilingType === '10-Q' ? 'bg-indigo-600' : 'bg-gray-400'" class="w-10 h-10 rounded-full flex items-center justify-center text-white"><i class="fas fa-calendar-alt"></i></div>
+                                        <span class="ml-3 font-semibold text-lg">10-Q Quarterly</span>
+                                    </div>
+                                    <p class="text-sm text-gray-600">Quarterly financial statements (Q1, Q2, Q3).</p>
+                                    <div x-show="hasQuarterlyDataForYear()" class="mt-2 text-xs text-green-600"><i class="fas fa-check-circle mr-1"></i><span x-text="getQuarterCountForYear()"></span> quarters available</div>
+                                    <div x-show="!hasQuarterlyDataForYear()" class="mt-2 text-xs text-gray-400"><i class="fas fa-times-circle mr-1"></i>Not available</div>
+                                </button>
+                                <button @click="selectFilingType('8-K')" :disabled="!availablePeriods.has8KFilings"
+                                        :class="exportFilingType === '8-K' ? 'border-indigo-600 bg-indigo-50 ring-2 ring-indigo-600' : 'border-gray-200 hover:border-indigo-400 hover:bg-indigo-50'"
+                                        class="p-6 rounded-xl border-2 text-left transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                                    <div class="flex items-center mb-3">
+                                        <div :class="exportFilingType === '8-K' ? 'bg-indigo-600' : 'bg-gray-400'" class="w-10 h-10 rounded-full flex items-center justify-center text-white"><i class="fas fa-bolt"></i></div>
+                                        <span class="ml-3 font-semibold text-lg">8-K Events</span>
+                                    </div>
+                                    <p class="text-sm text-gray-600">Material event disclosures (earnings, M&A, etc.).</p>
+                                    <div x-show="availablePeriods.has8KFilings" class="mt-2 text-xs text-green-600"><i class="fas fa-check-circle mr-1"></i>Available</div>
+                                    <div x-show="!availablePeriods.has8KFilings" class="mt-2 text-xs text-gray-400"><i class="fas fa-times-circle mr-1"></i>Not available</div>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="flex justify-between">
+                            <button @click="goToExportStep(1)" class="px-6 py-3 rounded-xl font-medium transition-all bg-gray-100 text-gray-700 hover:bg-gray-200 flex items-center"><i class="fas fa-arrow-left mr-2"></i>Back</button>
+                            <button @click="goToExportStep(3)" :disabled="!exportFilingType"
+                                    :class="exportFilingType ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-gray-300 text-gray-500 cursor-not-allowed'"
+                                    class="px-6 py-3 rounded-xl font-medium transition-all flex items-center">Next: Export Options <i class="fas fa-arrow-right ml-2"></i></button>
+                        </div>
+                    </div>
+                    
+                    <!-- Step 3: Export Options -->
+                    <div x-show="exportStep === 3" class="space-y-6">
+                        <div class="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl p-4 border border-emerald-200">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-4">
+                                    <div class="bg-emerald-100 p-2 rounded-lg"><i class="fas fa-check-circle text-emerald-600 text-xl"></i></div>
+                                    <div>
+                                        <p class="text-sm text-gray-600">Exporting</p>
+                                        <p class="font-semibold text-gray-900"><span x-text="ticker"></span> • <span x-text="exportFilingType"></span> • <span x-text="exportFilingType === '8-K' ? 'Date Range' : exportSelectedYear"></span></p>
+                                    </div>
+                                </div>
+                                <button @click="goToExportStep(1)" class="text-sm text-indigo-600 hover:text-indigo-800"><i class="fas fa-edit mr-1"></i>Change</button>
+                            </div>
+                        </div>
+                        
+                        <!-- 10-Q Quarter Selection -->
+                        <div x-show="exportFilingType === '10-Q'" class="bg-white rounded-xl border border-gray-200 p-6">
+                            <label class="block text-sm font-medium text-gray-700 mb-3">Select Quarters to Export</label>
+                            <div class="flex flex-wrap gap-3">
+                                <template x-for="quarter in getQuartersForSelectedYear()" :key="quarter">
+                                    <label class="inline-flex items-center px-4 py-3 rounded-lg border cursor-pointer transition-all"
+                                           :class="selectedQuarters.includes(quarter) ? 'bg-indigo-100 border-indigo-400' : 'bg-gray-50 border-gray-200 hover:border-indigo-300'">
+                                        <input type="checkbox" :value="quarter" x-model="selectedQuarters" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                                        <span class="ml-2 text-sm font-medium text-gray-700" x-text="quarter"></span>
+                                    </label>
+                                </template>
+                            </div>
+                            <div class="mt-2"><button @click="selectAllQuarters()" class="text-sm text-indigo-600 hover:text-indigo-800">Select All Quarters</button></div>
+                        </div>
+                        
+                        <!-- 8-K Date Range Selection -->
+                        <div x-show="exportFilingType === '8-K'" class="bg-white rounded-xl border border-gray-200 p-6">
+                            <label class="block text-sm font-medium text-gray-700 mb-3">Select Date Range for 8-K Filings</label>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-xs text-gray-500 mb-1">Start Date</label>
+                                    <input type="date" x-model="eightKStartDate" 
+                                           :min="availablePeriods.earliest8KDate"
+                                           :max="availablePeriods.latest8KDate"
+                                           class="w-full px-4 py-3 rounded-lg border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                                </div>
+                                <div>
+                                    <label class="block text-xs text-gray-500 mb-1">End Date</label>
+                                    <input type="date" x-model="eightKEndDate"
+                                           :min="eightKStartDate || availablePeriods.earliest8KDate"
+                                           :max="availablePeriods.latest8KDate"
+                                           class="w-full px-4 py-3 rounded-lg border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                                </div>
+                            </div>
+                            <div x-show="availablePeriods.earliest8KDate && availablePeriods.latest8KDate" class="mt-3 text-xs text-gray-500">
+                                <i class="fas fa-info-circle mr-1"></i>Available range: <span x-text="availablePeriods.earliest8KDate"></span> to <span x-text="availablePeriods.latest8KDate"></span>
+                            </div>
+                            <div class="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                                <p class="text-sm text-amber-800"><i class="fas fa-exclamation-triangle mr-2"></i>8-K filings contain event disclosures (earnings announcements, M&A, etc.), not full financial statements.</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Statement Selection (hidden for 8-K) -->
+                        <div x-show="exportFilingType !== '8-K'" class="bg-white rounded-xl border border-gray-200 p-6">
+                            <label class="block text-sm font-medium text-gray-700 mb-3">Statements to Include</label>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <label class="flex items-center p-4 rounded-lg border cursor-pointer transition-all" :class="selectedStatements.includes('income_statement') ? 'bg-indigo-100 border-indigo-400' : 'bg-gray-50 border-gray-200 hover:border-indigo-300'">
+                                    <input type="checkbox" value="income_statement" x-model="selectedStatements" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                                    <div class="ml-3"><span class="font-medium text-gray-900">Income Statement</span><p class="text-xs text-gray-500">Revenue, expenses, net income</p></div>
+                                </label>
+                                <label class="flex items-center p-4 rounded-lg border cursor-pointer transition-all" :class="selectedStatements.includes('balance_sheet') ? 'bg-indigo-100 border-indigo-400' : 'bg-gray-50 border-gray-200 hover:border-indigo-300'">
+                                    <input type="checkbox" value="balance_sheet" x-model="selectedStatements" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                                    <div class="ml-3"><span class="font-medium text-gray-900">Balance Sheet</span><p class="text-xs text-gray-500">Assets, liabilities, equity</p></div>
+                                </label>
+                                <label class="flex items-center p-4 rounded-lg border cursor-pointer transition-all" :class="selectedStatements.includes('cash_flow') ? 'bg-indigo-100 border-indigo-400' : 'bg-gray-50 border-gray-200 hover:border-indigo-300'">
+                                    <input type="checkbox" value="cash_flow" x-model="selectedStatements" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                                    <div class="ml-3"><span class="font-medium text-gray-900">Cash Flow</span><p class="text-xs text-gray-500">Operating, investing, financing</p></div>
+                                </label>
+                            </div>
+                            <div class="mt-2 flex space-x-2">
+                                <button @click="selectedStatements = ['income_statement', 'balance_sheet', 'cash_flow']" class="text-sm text-indigo-600 hover:text-indigo-800">Select All</button>
+                                <span class="text-gray-300">|</span>
+                                <button @click="selectedStatements = []" class="text-sm text-indigo-600 hover:text-indigo-800">Clear All</button>
+                            </div>
+                        </div>
+                        
+                        <!-- Export Actions -->
+                        <div class="flex justify-between items-center pt-4 border-t">
+                            <button @click="goToExportStep(2)" class="px-6 py-3 rounded-xl font-medium transition-all bg-gray-100 text-gray-700 hover:bg-gray-200 flex items-center"><i class="fas fa-arrow-left mr-2"></i>Back</button>
+                            <button @click="executeExport()" :disabled="!canExport() || exportLoading"
+                                    :class="canExport() && !exportLoading ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white hover:from-emerald-600 hover:to-teal-700 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5' : 'bg-gray-300 text-gray-500 cursor-not-allowed'"
+                                    class="px-8 py-3 rounded-xl font-medium transition-all flex items-center">
+                                <template x-if="exportLoading"><span class="flex items-center"><svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Generating Excel...</span></template>
+                                <template x-if="!exportLoading"><span><i class="fas fa-file-excel mr-2"></i>Export to Excel</span></template>
+                            </button>
+                        </div>
+                        <div x-show="exportError" class="p-4 bg-red-50 border border-red-200 rounded-lg"><p class="text-red-700 text-sm" x-text="exportError"></p></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Research Assistant Modal -->
+        <div x-show="showResearchModal" 
+             class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+             @click.self="showResearchModal = false"
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100">
+            <div class="bg-white rounded-2xl w-full max-w-4xl h-[80vh] mx-4 shadow-2xl flex flex-col"
+                 @click.stop
+                 x-transition:enter="transition ease-out duration-200"
+                 x-transition:enter-start="opacity-0 transform scale-95"
+                 x-transition:enter-end="opacity-100 transform scale-100">
+                
+                <!-- Modal Header -->
+                <div class="p-6 border-b border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-2xl font-bold text-gray-900">Research Assistant</h2>
+                            <p class="text-sm text-gray-600 mt-1">
+                                Ask questions about <span class="font-semibold text-indigo-600" x-text="ticker"></span> or compare with other companies
+                            </p>
+                        </div>
+                        <button @click="showResearchModal = false" class="text-gray-400 hover:text-gray-600">
+                            <i class="fas fa-times text-xl"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Chat Messages -->
+                <div class="flex-1 overflow-y-auto p-6 space-y-4" x-ref="researchMessages">
+                    <template x-if="researchMessages.length === 0">
+                        <div class="text-center py-12">
+                            <div class="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <i class="fas fa-brain text-2xl text-indigo-600"></i>
+                            </div>
+                            <h3 class="text-lg font-semibold text-gray-900 mb-2">Start Your Research</h3>
+                            <p class="text-gray-600 mb-6">Ask questions about <span class="font-semibold" x-text="ticker"></span> or compare with other companies</p>
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-2xl mx-auto">
+                                <button @click="quickResearchQuery(`What are the key risks for ${ticker}?`)"
+                                        class="bg-white p-4 rounded-lg border border-gray-200 text-left hover:shadow-md transition-all">
+                                    <div class="font-medium text-gray-900 mb-1">Risk Analysis</div>
+                                    <div class="text-sm text-gray-600">Key risks and challenges</div>
+                                </button>
+                                <button @click="quickResearchQuery(`Compare ${ticker} revenue growth with competitors`)"
+                                        class="bg-white p-4 rounded-lg border border-gray-200 text-left hover:shadow-md transition-all">
+                                    <div class="font-medium text-gray-900 mb-1">Competitive Analysis</div>
+                                    <div class="text-sm text-gray-600">Compare with peers</div>
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+                    
+                    <template x-for="message in researchMessages" :key="message.id">
+                        <div>
+                            <template x-if="message.role === 'user'">
+                                <div class="flex justify-end">
+                                    <div class="message-user" x-text="message.content"></div>
+                                </div>
+                            </template>
+                            
+                            <template x-if="message.role === 'assistant'">
+                                <div class="flex justify-start">
+                                    <div class="message-assistant">
+                                        <div x-html="renderMarkdown(message.content)"></div>
+                                        
+                                        <!-- Save Button with Validation -->
+                                        <div class="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100">
+                                            <button @click="saveResearchToScratchpad(message)" 
+                                                    :disabled="!canSaveToScratchpad(message)"
+                                                    :class="{ 'opacity-50 cursor-not-allowed': !canSaveToScratchpad(message) }"
+                                                    class="text-xs text-gray-600 hover:text-indigo-600 flex items-center gap-1 px-2 py-1 rounded hover:bg-gray-50 disabled:hover:bg-transparent disabled:hover:text-gray-600">
+                                                <i class="fas fa-bookmark"></i>
+                                                <span>Save to Scratchpad</span>
+                                            </button>
+                                            <span x-show="!canSaveToScratchpad(message)" class="text-xs text-gray-400">
+                                                (Invalid response)
+                                            </span>
+                                        </div>
+                                        
+                                        <template x-if="message.sources && message.sources.length > 0">
+                                            <div class="mt-4 pt-4 border-t border-gray-200">
+                                                <p class="text-xs text-gray-500 mb-2">Sources:</p>
+                                                <div class="flex flex-wrap">
+                                                    <template x-for="source in message.sources" :key="source.title">
+                                                        <span class="source-chip">
+                                                            <i class="fas fa-file-alt mr-1"></i>
+                                                            <span x-text="source.title"></span>
+                                                        </span>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                    
+                    <!-- Typing Indicator -->
+                    <template x-if="researchTyping">
+                        <div class="flex justify-start">
+                            <div class="message-assistant">
+                                <div class="typing-indicator">
+                                    <div class="typing-dot"></div>
+                                    <div class="typing-dot"></div>
+                                    <div class="typing-dot"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+                
+                <!-- Input Area -->
+                <div class="p-6 border-t border-gray-200">
+                    <div class="flex items-center justify-between mb-2">
+                        <p class="text-xs text-gray-500">
+                            <span x-show="conversationId" class="text-green-600">
+                                <i class="fas fa-check-circle"></i> Conversation active
+                            </span>
+                            <span x-show="!conversationId">New conversation will start</span>
+                        </p>
+                        <button x-show="conversationId" @click="clearConversation()" 
+                                class="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+                            <i class="fas fa-redo"></i>
+                            New Conversation
+                        </button>
+                    </div>
+                    <div class="flex items-end space-x-3">
+                        <textarea x-model="researchInput"
+                                  @keydown.enter.prevent="handleResearchEnter($event)"
+                                  placeholder="Ask about any company... (e.g., 'Compare AAPL and MSFT revenue')"
+                                  rows="2"
+                                  class="flex-1 border-2 border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-indigo-500 resize-none disabled:opacity-50"
+                                  :disabled="researchTyping"></textarea>
+                        <button @click="sendResearchMessage()" 
+                                :disabled="!researchInput.trim() || researchTyping"
+                                class="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3 rounded-xl font-medium hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-2">Press Enter to send, Shift+Enter for new line • Conversation memory enabled</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Scratchpad Side Panel -->
+        <div x-show="showScratchpad" 
+             class="fixed inset-y-0 right-0 w-96 bg-white shadow-2xl z-50 flex flex-col"
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="transform translate-x-full"
+             x-transition:enter-end="transform translate-x-0"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="transform translate-x-0"
+             x-transition:leave-end="transform translate-x-full">
+            
+            <!-- Scratchpad Header -->
+            <div class="p-6 border-b border-gray-200">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-bold text-gray-900">Research Scratchpad</h2>
+                    <button @click="showScratchpad = false" class="text-gray-400 hover:text-gray-600">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <button @click="exportScratchpad()" 
+                        class="w-full bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 flex items-center justify-center gap-2">
+                    <i class="fas fa-download"></i>
+                    Export to Markdown
+                </button>
+            </div>
+            
+            <!-- Scratchpad Items -->
+            <div class="flex-1 overflow-y-auto p-6">
+                <template x-if="scratchpadItems.length === 0">
+                    <div class="text-center py-12 text-gray-400">
+                        <i class="fas fa-bookmark text-4xl mb-3"></i>
+                        <p class="text-sm">No saved items yet</p>
+                        <p class="text-xs mt-1">Save answers from Research Assistant</p>
+                    </div>
+                </template>
+                
+                <template x-for="item in scratchpadItems" :key="item.id">
+                    <div class="bg-gray-50 rounded-lg p-4 mb-3 border border-gray-200">
+                        <div class="prose prose-sm max-w-none" x-html="renderMarkdown(item.content)"></div>
+                        
+                        <template x-if="item.userNotes">
+                            <div class="mt-3 pt-3 border-t border-gray-200">
+                                <p class="text-xs text-gray-500 mb-1">Your notes:</p>
+                                <p class="text-sm text-gray-700" x-text="item.userNotes"></p>
+                            </div>
+                        </template>
+                        
+                        <div class="flex items-center justify-between mt-3 pt-3 border-t border-gray-200">
+                            <span class="text-xs text-gray-400" x-text="formatDate(item.createdAt)"></span>
+                            <button @click="deleteFromScratchpad(item.id)" 
+                                    class="text-xs text-red-600 hover:text-red-700">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+        
+        <!-- Save to Scratchpad Modal -->
+        <div x-show="showSaveModal" 
+             class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+             @click.self="showSaveModal = false"
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100">
+            <div class="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl"
+                 @click.stop
+                 x-transition:enter="transition ease-out duration-200"
+                 x-transition:enter-start="opacity-0 transform scale-95"
+                 x-transition:enter-end="opacity-100 transform scale-100">
+                <h3 class="text-xl font-bold mb-4">Save to Scratchpad</h3>
+                
+                <div class="mb-4">
+                    <label class="block text-sm font-medium mb-2 text-gray-700">Add your notes (optional)</label>
+                    <textarea x-model="saveNotes" 
+                              placeholder="Add context, thoughts, or follow-up questions..."
+                              rows="4"
+                              class="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"></textarea>
+                </div>
+                
+                <div class="flex gap-2">
+                    <button @click="confirmSaveToScratchpad()" 
+                            class="flex-1 bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700">
+                        Save
+                    </button>
+                    <button @click="showSaveModal = false; saveNotes = ''" 
+                            class="flex-1 border border-gray-300 px-4 py-2 rounded-lg font-medium hover:bg-gray-50">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- IC Memo Modal -->
+        <div x-show="showICMemo" 
+             class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+             @click.self="showICMemo = false"
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100">
+            <div class="bg-white rounded-2xl w-full max-w-4xl h-[80vh] mx-4 shadow-2xl flex flex-col"
+                 @click.stop
+                 x-transition:enter="transition ease-out duration-200"
+                 x-transition:enter-start="opacity-0 transform scale-95"
+                 x-transition:enter-end="opacity-100 transform scale-100">
+                
+                <!-- Modal Header -->
+                <div class="p-6 border-b border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-2xl font-bold text-gray-900">IC Memo Generator</h2>
+                            <p class="text-sm text-gray-600 mt-1">
+                                Generate Investment Committee memo for <span class="font-semibold text-indigo-600" x-text="ticker"></span>
+                            </p>
+                        </div>
+                        <button @click="showICMemo = false" class="text-gray-400 hover:text-gray-600">
+                            <i class="fas fa-times text-xl"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- IC Memo Content -->
+                <div class="flex-1 overflow-y-auto p-6">
+                    <template x-if="!icMemoGenerated">
+                        <div class="text-center py-12">
+                            <div class="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                                <i class="fas fa-file-export text-3xl text-green-600"></i>
+                            </div>
+                            <h3 class="text-xl font-semibold text-gray-900 mb-4">Generate IC Memo</h3>
+                            <p class="text-gray-600 mb-8 max-w-md mx-auto">
+                                Create a comprehensive Investment Committee memo using your scratchpad notes and financial analysis
+                            </p>
+                            
+                            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 max-w-md mx-auto text-left">
+                                <h4 class="font-semibold text-blue-900 mb-2">Memo will include:</h4>
+                                <ul class="text-sm text-blue-800 space-y-1">
+                                    <li><i class="fas fa-check mr-2"></i>Executive Summary</li>
+                                    <li><i class="fas fa-check mr-2"></i>Financial Performance Metrics</li>
+                                    <li><i class="fas fa-check mr-2"></i>Qualitative Analysis</li>
+                                    <li><i class="fas fa-check mr-2"></i>Your Research Notes</li>
+                                    <li><i class="fas fa-check mr-2"></i>Investment Recommendation</li>
+                                </ul>
+                            </div>
+                            
+                            <button @click="generateICMemo()" 
+                                    :disabled="icMemoGenerating"
+                                    class="bg-gradient-to-r from-green-500 to-teal-600 text-white px-8 py-3 rounded-xl font-medium hover:shadow-lg transition-all disabled:opacity-50">
+                                <template x-if="icMemoGenerating">
+                                    <span class="flex items-center">
+                                        <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        Generating Memo...
+                                    </span>
+                                </template>
+                                <template x-if="!icMemoGenerating">
+                                    <span><i class="fas fa-magic mr-2"></i>Generate IC Memo</span>
+                                </template>
+                            </button>
+                        </div>
+                    </template>
+                    
+                    <template x-if="icMemoGenerated">
+                        <div>
+                            <div class="prose max-w-none" x-html="renderMarkdown(icMemoContent)"></div>
+                            
+                            <div class="flex gap-3 mt-6 pt-6 border-t border-gray-200">
+                                <button @click="downloadICMemo()" 
+                                        class="flex-1 bg-indigo-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-indigo-700 flex items-center justify-center gap-2">
+                                    <i class="fas fa-download"></i>
+                                    Download as PDF
+                                </button>
+                                <button @click="icMemoGenerated = false; icMemoContent = ''" 
+                                        class="flex-1 border border-gray-300 px-6 py-3 rounded-lg font-medium hover:bg-gray-50">
+                                    Generate New
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/config.js"></script>
+    <script>
+        function comprehensiveAnalysis() {
+            return {
+                ticker: '',
+                tickerInput: 'SHOP',
+                years: 5,
+                loading: false,
+                
+                // Research Tools State
+                showResearchModal: false,
+                showScratchpad: false,
+                showICMemo: false,
+                scratchpadCount: 0,
+                
+                // Research Assistant State
+                researchMessages: [],
+                researchInput: '',
+                researchTyping: false,
+                conversationId: null,
+                notebookId: null,
+                
+                // Scratchpad State
+                scratchpadItems: [],
+                activeScratchpadId: null,
+                showSaveModal: false,
+                selectedMessageForSave: null,
+                saveNotes: '',
+                
+                // IC Memo State
+                icMemoGenerated: false,
+                icMemoGenerating: false,
+                icMemoContent: '',
+                data: null,
+                activeTab: 'quantitative',
+                qualitativeLoading: false,
+                qualitativeData: null,
+                customQuestion: '',
+                customAnswer: '',
+                askingQuestion: false,
+                
+                // Export State - Wizard Style
+                exportStep: 1,
+                exportSelectedYear: null,
+                exportFilingType: null,
+                availablePeriods: { annualPeriods: [], quarterlyPeriods: [], has8KFilings: false },
+                selectedYears: [],
+                selectedQuarterYear: null,
+                selectedQuarters: [],
+                selectedStatements: ['income_statement', 'balance_sheet', 'cash_flow'],
+                includeCalculatedMetrics: true,
+                exportLoading: false,
+                exportError: null,
+                eightKStartDate: null,
+                eightKEndDate: null,
+
+                // Get auth headers for API calls
+                getAuthHeaders() {
+                    const token = localStorage.getItem('fundlens_token') || localStorage.getItem('authToken');
+                    if (!token) {
+                        window.location.href = '/login.html';
+                        return null;
+                    }
+                    return {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    };
+                },
+
+                async init() {
+                    // Check authentication first
+                    const token = localStorage.getItem('fundlens_token') || localStorage.getItem('authToken');
+                    if (!token) {
+                        window.location.href = '/login.html';
+                        return;
+                    }
+                    
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const tickerParam = urlParams.get('ticker');
+                    const yearsParam = urlParams.get('years');
+                    
+                    if (tickerParam) {
+                        this.tickerInput = tickerParam;
+                        if (yearsParam) this.years = parseInt(yearsParam);
+                        await this.loadMetrics();
+                    }
+                    
+                    // Initialize scratchpad
+                    await this.loadScratchpad();
+                    
+                    // Configure marked.js for markdown rendering
+                    if (typeof marked !== 'undefined') {
+                        marked.setOptions({
+                            breaks: true,
+                            gfm: true
+                        });
+                    }
+                },
+
+                async loadMetrics() {
+                    if (!this.tickerInput) return;
+                    
+                    const headers = this.getAuthHeaders();
+                    if (!headers) return;
+                    
+                    this.loading = true;
+                    this.ticker = this.tickerInput.toUpperCase();
+                    
+                    // Update navigation ticker
+                    if (typeof updateNavigationTicker === 'function') {
+                        updateNavigationTicker(this.ticker);
+                    }
+                    
+                    try {
+                        const response = await fetch(`/api/financial-calculator/dashboard/${this.ticker}?years=${this.years}`, { headers });
+                        const result = await response.json();
+                        
+                        if (result.success) {
+                            this.data = result.data;
+                            console.log('Loaded comprehensive metrics:', this.data);
+                        } else {
+                            console.error('Failed to load metrics:', result.error);
+                            this.data = null;
+                            alert('Failed to load metrics: ' + result.error);
+                        }
+                    } catch (error) {
+                        console.error('Failed to load metrics:', error);
+                        this.data = null;
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                async loadQualitative() {
+                    if (!this.ticker) return;
+                    
+                    // If already loaded, don't reload
+                    if (this.qualitativeData && Object.keys(this.qualitativeData.categories || {}).length > 0) return;
+                    
+                    const headers = this.getAuthHeaders();
+                    if (!headers) return;
+                    
+                    this.qualitativeLoading = true;
+                    this.qualitativeData = { ticker: this.ticker, categories: {} };
+                    
+                    // First, try to load all cached data at once (instant)
+                    try {
+                        const cachedResponse = await fetch(`/api/financial-calculator/qualitative/${this.ticker}`, { headers });
+                        const cachedResult = await cachedResponse.json();
+                        
+                        if (cachedResult.success && cachedResult.data?.cached) {
+                            // All data was cached - instant load!
+                            this.qualitativeData = cachedResult.data;
+                            this.qualitativeLoading = false;
+                            console.log('✅ Loaded all qualitative data from cache (instant)');
+                            return;
+                        }
+                    } catch (error) {
+                        console.warn('Cache check failed, loading progressively:', error);
+                    }
+                    
+                    // Fallback: Load categories progressively (most important first)
+                    const categories = [
+                        'companyDescription',
+                        'revenueBreakdown', 
+                        'competitiveDynamics',
+                        'growthDrivers',
+                        'thesis',
+                        'industry',
+                        'management',
+                        'guidance',
+                        'margins',
+                        'businessModel',
+                        'recentDevelopments',
+                        'valuation'
+                    ];
+                    
+                    // Load first 3 categories immediately, then load rest in background
+                    for (let i = 0; i < categories.length; i++) {
+                        const category = categories[i];
+                        try {
+                            const response = await fetch(`/api/financial-calculator/qualitative/${this.ticker}?category=${category}`, { headers });
+                            const result = await response.json();
+                            
+                            if (result.success && result.data?.categories?.[category]) {
+                                this.qualitativeData.categories[category] = result.data.categories[category];
+                                console.log(`Loaded ${category}:`, result.data.categories[category].length, 'questions');
+                            }
+                        } catch (error) {
+                            console.error(`Failed to load ${category}:`, error);
+                        }
+                        
+                        // Stop loading indicator after first 3 categories
+                        if (i === 2) {
+                            this.qualitativeLoading = false;
+                        }
+                    }
+                    
+                    this.qualitativeLoading = false;
+                },
+
+                async askCustomQuestion() {
+                    if (!this.customQuestion || !this.ticker) return;
+                    
+                    const headers = this.getAuthHeaders();
+                    if (!headers) return;
+                    
+                    this.askingQuestion = true;
+                    this.customAnswer = '';
+                    
+                    try {
+                        const response = await fetch('/api/financial-calculator/ask', {
+                            method: 'POST',
+                            headers: headers,
+                            body: JSON.stringify({
+                                ticker: this.ticker,
+                                question: this.customQuestion
+                            })
+                        });
+                        const result = await response.json();
+                        
+                        if (result.success) {
+                            this.customAnswer = result.data.answer;
+                        } else {
+                            this.customAnswer = 'Failed to get answer: ' + result.error;
+                        }
+                    } catch (error) {
+                        this.customAnswer = 'Error: ' + error.message;
+                    } finally {
+                        this.askingQuestion = false;
+                    }
+                },
+
+                // Export Functions
+                async loadAvailablePeriods() {
+                    if (!this.ticker) return;
+                    
+                    const headers = this.getAuthHeaders();
+                    if (!headers) return;
+                    
+                    try {
+                        const response = await fetch(`/api/deals/export/by-ticker/${this.ticker}/available-periods`, { headers });
+                        const result = await response.json();
+                        
+                        this.availablePeriods = result;
+                        
+                        // Reset wizard state
+                        this.exportStep = 1;
+                        this.exportSelectedYear = null;
+                        this.exportFilingType = null;
+                        this.selectedYears = [];
+                        this.selectedQuarters = [];
+                        
+                        // Set default quarter year
+                        if (result.quarterlyPeriods && result.quarterlyPeriods.length > 0) {
+                            this.selectedQuarterYear = result.quarterlyPeriods[0].year;
+                        }
+                    } catch (error) {
+                        console.error('Failed to load available periods:', error);
+                    }
+                },
+
+                // Wizard navigation
+                goToExportStep(step) {
+                    this.exportStep = step;
+                },
+
+                selectExportYear(year) {
+                    this.exportSelectedYear = year;
+                    // Pre-select this year for export
+                    this.selectedYears = [year];
+                    this.selectedQuarterYear = year;
+                },
+
+                selectFilingType(type) {
+                    this.exportFilingType = type;
+                    // Reset quarters when switching filing type
+                    if (type === '10-Q') {
+                        this.selectedQuarters = this.getQuartersForSelectedYear();
+                    }
+                },
+
+                // Helper functions for wizard
+                getAvailableYears() {
+                    const years = new Set();
+                    // Add years from annual periods
+                    if (this.availablePeriods.annualPeriods) {
+                        this.availablePeriods.annualPeriods.forEach(p => {
+                            const match = p.match(/(\d{4})/);
+                            if (match) years.add(match[1]);
+                        });
+                    }
+                    // Add years from quarterly periods
+                    if (this.availablePeriods.quarterlyPeriods) {
+                        this.availablePeriods.quarterlyPeriods.forEach(qp => {
+                            years.add(qp.year);
+                        });
+                    }
+                    return Array.from(years).sort((a, b) => b - a);
+                },
+
+                hasAnnualDataForYear() {
+                    if (!this.exportSelectedYear || !this.availablePeriods.annualPeriods) return false;
+                    return this.availablePeriods.annualPeriods.some(p => p.includes(this.exportSelectedYear));
+                },
+
+                hasQuarterlyDataForYear() {
+                    if (!this.exportSelectedYear || !this.availablePeriods.quarterlyPeriods) return false;
+                    return this.availablePeriods.quarterlyPeriods.some(qp => qp.year === this.exportSelectedYear);
+                },
+
+                getQuarterCountForYear() {
+                    if (!this.exportSelectedYear || !this.availablePeriods.quarterlyPeriods) return 0;
+                    const yearData = this.availablePeriods.quarterlyPeriods.find(qp => qp.year === this.exportSelectedYear);
+                    return yearData ? yearData.quarters.length : 0;
+                },
+
+                getQuartersForSelectedYear() {
+                    if (!this.exportSelectedYear || !this.availablePeriods.quarterlyPeriods) return [];
+                    const yearData = this.availablePeriods.quarterlyPeriods.find(qp => qp.year === this.exportSelectedYear);
+                    return yearData ? yearData.quarters : [];
+                },
+
+                selectAllQuarters() {
+                    this.selectedQuarters = [...this.getQuartersForSelectedYear()];
+                },
+
+                selectAllYears() {
+                    this.selectedYears = [...this.availablePeriods.annualPeriods];
+                },
+
+                getQuartersForYear() {
+                    if (!this.selectedQuarterYear || !this.availablePeriods.quarterlyPeriods) return [];
+                    const yearData = this.availablePeriods.quarterlyPeriods.find(qp => qp.year === this.selectedQuarterYear);
+                    return yearData ? yearData.quarters : [];
+                },
+
+                canExport() {
+                    if (!this.ticker) return false;
+                    if (this.selectedStatements.length === 0) return false;
+                    
+                    if (this.exportFilingType === '10-K') {
+                        return this.selectedYears.length > 0;
+                    } else if (this.exportFilingType === '10-Q') {
+                        return this.exportSelectedYear && this.selectedQuarters.length > 0;
+                    } else if (this.exportFilingType === '8-K') {
+                        return this.eightKStartDate && this.eightKEndDate;
+                    }
+                    return false;
+                },
+
+                async executeExport() {
+                    if (!this.canExport() || !this.ticker) return;
+                    
+                    const headers = this.getAuthHeaders();
+                    if (!headers) return;
+                    
+                    this.exportLoading = true;
+                    this.exportError = null;
+                    
+                    try {
+                        // Build request based on filing type
+                        let requestBody;
+                        let endpoint;
+                        
+                        if (this.exportFilingType === '8-K') {
+                            // 8-K export uses different endpoint
+                            endpoint = `/api/deals/export/by-ticker/${this.ticker}/8k`;
+                            requestBody = {
+                                startDate: this.eightKStartDate,
+                                endDate: this.eightKEndDate
+                            };
+                        } else {
+                            endpoint = `/api/deals/export/by-ticker/${this.ticker}/excel`;
+                            requestBody = {
+                                filingType: this.exportFilingType,
+                                exportMode: this.exportFilingType === '10-K' ? 'annual' : 'quarterly',
+                                years: this.exportFilingType === '10-K' ? this.selectedYears : [this.exportSelectedYear],
+                                quarters: this.exportFilingType === '10-Q' ? this.selectedQuarters : undefined,
+                                statements: this.selectedStatements,
+                                includeCalculatedMetrics: this.includeCalculatedMetrics
+                            };
+                        }
+                        
+                        const response = await fetch(endpoint, {
+                            method: 'POST',
+                            headers: headers,
+                            body: JSON.stringify(requestBody)
+                        });
+                        
+                        if (!response.ok) {
+                            const errorData = await response.json().catch(() => ({}));
+                            throw new Error(errorData.message || `Export failed with status ${response.status}`);
+                        }
+                        
+                        // Get filename from Content-Disposition header
+                        const contentDisposition = response.headers.get('Content-Disposition');
+                        let filename = `${this.ticker}_Financial_Statements.xlsx`;
+                        if (contentDisposition) {
+                            const match = contentDisposition.match(/filename="?([^"]+)"?/);
+                            if (match) filename = match[1];
+                        }
+                        
+                        // Download the file
+                        const blob = await response.blob();
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = filename;
+                        document.body.appendChild(a);
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                        a.remove();
+                        
+                        console.log('Excel file downloaded successfully!');
+                    } catch (error) {
+                        console.error('Export failed:', error);
+                        this.exportError = error.message || 'Failed to generate export. Please try again.';
+                    } finally {
+                        this.exportLoading = false;
+                    }
+                },
+
+                formatCurrency(value) {
+                    if (value === null || value === undefined) return 'N/A';
+                    const absValue = Math.abs(value);
+                    const sign = value < 0 ? '-' : '';
+                    if (absValue >= 1e12) return sign + '$' + (absValue / 1e12).toFixed(2) + 'T';
+                    if (absValue >= 1e9) return sign + '$' + (absValue / 1e9).toFixed(2) + 'B';
+                    if (absValue >= 1e6) return sign + '$' + (absValue / 1e6).toFixed(2) + 'M';
+                    if (absValue >= 1e3) return sign + '$' + (absValue / 1e3).toFixed(2) + 'K';
+                    return sign + '$' + absValue.toFixed(2);
+                },
+
+                formatPercent(value) {
+                    if (value === null || value === undefined) return 'N/A';
+                    const pct = Math.abs(value) < 10 ? value * 100 : value;
+                    const sign = value < 0 ? '-' : '';
+                    return sign + Math.abs(pct).toFixed(2) + '%';
+                },
+
+                formatRatio(value) {
+                    if (value === null || value === undefined) return 'N/A';
+                    return value.toFixed(2) + 'x';
+                },
+
+                formatDays(value) {
+                    if (value === null || value === undefined) return 'N/A';
+                    return value.toFixed(1) + ' days';
+                },
+
+                getYoYGrowth(growthArray, period) {
+                    if (!growthArray || !Array.isArray(growthArray)) return 'N/A';
+                    // YoY growth periods are formatted as "FY2023_to_FY2024"
+                    // This represents growth FROM FY2023 TO FY2024
+                    // So we should display it on the FY2024 row (the "to" year)
+                    const match = growthArray.find(g => {
+                        if (!g.period) return false;
+                        // Match if the period ends with the target period (e.g., "FY2023_to_FY2024" matches "FY2024")
+                        return g.period.endsWith(period) || g.period.includes(`_to_${period}`);
+                    });
+                    if (match) return this.formatPercent(match.value);
+                    return 'N/A';
+                },
+
+                getMarginForPeriod(marginArray, period) {
+                    if (!marginArray || !Array.isArray(marginArray)) return 'N/A';
+                    const match = marginArray.find(m => m.period === period);
+                    if (match) return this.formatPercent(match.value);
+                    return 'N/A';
+                },
+
+                getValueForPeriod(array, period, format) {
+                    if (!array || !Array.isArray(array)) return 'N/A';
+                    const match = array.find(m => m.period === period);
+                    if (!match) return 'N/A';
+                    
+                    switch(format) {
+                        case 'currency': return this.formatCurrency(match.value);
+                        case 'percent': return this.formatPercent(match.value);
+                        case 'ratio': return this.formatRatio(match.value);
+                        case 'days': return this.formatDays(match.value);
+                        default: return match.value;
+                    }
+                },
+                
+                // Research Assistant Functions
+                async quickResearchQuery(query) {
+                    this.researchInput = query;
+                    await this.sendResearchMessage();
+                },
+                
+                async sendResearchMessage() {
+                    if (!this.researchInput.trim() || this.researchTyping) return;
+                    
+                    // Create conversation if needed
+                    if (!this.conversationId) {
+                        this.conversationId = await this.createConversation();
+                        if (!this.conversationId) return; // Auth failed
+                    }
+                    
+                    const userMessage = this.researchInput.trim();
+                    this.researchInput = '';
+                    
+                    // Add user message to UI
+                    this.researchMessages.push({
+                        id: Date.now(),
+                        role: 'user',
+                        content: userMessage,
+                        createdAt: new Date()
+                    });
+                    
+                    this.$nextTick(() => {
+                        this.scrollResearchToBottom();
+                    });
+                    
+                    // Create assistant message placeholder
+                    const assistantMessage = {
+                        id: Date.now() + 1,
+                        role: 'assistant',
+                        content: '',
+                        sources: [],
+                        createdAt: new Date()
+                    };
+                    this.researchMessages.push(assistantMessage);
+                    
+                    this.researchTyping = true;
+                    
+                    try {
+                        const headers = this.getAuthHeaders();
+                        if (!headers) {
+                            window.location.href = '/login.html';
+                            return;
+                        }
+                        
+                        // Send message with conversation context
+                        const response = await fetch(`/api/research/conversations/${this.conversationId}/messages`, {
+                            method: 'POST',
+                            headers: headers,
+                            body: JSON.stringify({
+                                content: userMessage,
+                                context: {
+                                    tickers: [this.ticker]
+                                }
+                            })
+                        });
+                        
+                        if (response.status === 401) {
+                            localStorage.removeItem('fundlens_token');
+                            localStorage.removeItem('authToken');
+                            window.location.href = '/login.html';
+                            return;
+                        }
+                        
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}`);
+                        }
+                        
+                        // Read SSE stream
+                        const reader = response.body.getReader();
+                        const decoder = new TextDecoder();
+                        
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) break;
+                            
+                            const chunk = decoder.decode(value);
+                            const lines = chunk.split('\n');
+                            
+                            for (const line of lines) {
+                                if (line.startsWith('data: ')) {
+                                    try {
+                                        const data = JSON.parse(line.substring(6));
+                                        
+                                        if (data.text) {
+                                            assistantMessage.content += data.text;
+                                            this.$nextTick(() => this.scrollResearchToBottom());
+                                        } else if (data.title) {
+                                            assistantMessage.sources.push(data);
+                                        } else if (data.complete) {
+                                            this.researchTyping = false;
+                                        }
+                                    } catch (e) {
+                                        // Skip invalid JSON
+                                    }
+                                }
+                            }
+                        }
+                        
+                        if (!assistantMessage.content) {
+                            assistantMessage.content = 'No response received. Please try again.';
+                        }
+                        
+                        this.$nextTick(() => {
+                            this.scrollResearchToBottom();
+                        });
+                        
+                    } catch (error) {
+                        console.error('Error sending message:', error);
+                        assistantMessage.content = 'Sorry, I encountered an error. Please try again.';
+                    } finally {
+                        this.researchTyping = false;
+                    }
+                },
+                
+                async createConversation() {
+                    const headers = this.getAuthHeaders();
+                    if (!headers) {
+                        window.location.href = '/login.html';
+                        return null;
+                    }
+                    
+                    try {
+                        const response = await fetch('/api/research/conversations', {
+                            method: 'POST',
+                            headers: headers,
+                            body: JSON.stringify({
+                                title: `${this.ticker} Research ${new Date().toLocaleDateString()}`
+                            })
+                        });
+                        
+                        if (response.status === 401) {
+                            localStorage.removeItem('fundlens_token');
+                            localStorage.removeItem('authToken');
+                            window.location.href = '/login.html';
+                            return null;
+                        }
+                        
+                        if (!response.ok) {
+                            throw new Error(`Failed to create conversation: ${response.status}`);
+                        }
+                        
+                        const data = await response.json();
+                        return data.data.id;
+                    } catch (error) {
+                        console.error('Error creating conversation:', error);
+                        return null;
+                    }
+                },
+                
+                clearConversation() {
+                    this.conversationId = null;
+                    this.researchMessages = [];
+                },
+                
+                canSaveToScratchpad(message) {
+                    if (message.role !== 'assistant') return false;
+                    if (!message.content || message.content.trim().length < 20) return false;
+                    if (message.content.includes('Sorry, I encountered an error')) return false;
+                    if (message.content.includes('No response received')) return false;
+                    return true;
+                },
+                
+                handleResearchEnter(event) {
+                    if (event.shiftKey) {
+                        return; // Allow new line
+                    }
+                    this.sendResearchMessage();
+                },
+                
+                scrollResearchToBottom() {
+                    if (this.$refs.researchMessages) {
+                        this.$refs.researchMessages.scrollTop = this.$refs.researchMessages.scrollHeight;
+                    }
+                },
+                
+                // Scratchpad Functions
+                async loadScratchpad() {
+                    const headers = this.getAuthHeaders();
+                    if (!headers) return;
+                    
+                    try {
+                        const response = await fetch('/api/research/notebooks?limit=1', { headers });
+                        
+                        if (!response.ok) throw new Error('Failed to load scratchpad');
+                        
+                        const data = await response.json();
+                        if (data.data && data.data.length > 0) {
+                            this.activeScratchpadId = data.data[0].id;
+                            await this.loadScratchpadItems();
+                        } else {
+                            await this.createScratchpad();
+                        }
+                    } catch (error) {
+                        console.error('Failed to load scratchpad:', error);
+                    }
+                },
+                
+                async createScratchpad() {
+                    const headers = this.getAuthHeaders();
+                    if (!headers) return;
+                    
+                    try {
+                        const response = await fetch('/api/research/notebooks', {
+                            method: 'POST',
+                            headers: headers,
+                            body: JSON.stringify({
+                                title: `${this.ticker || 'Research'} Scratchpad`,
+                                description: 'Research notes and insights'
+                            })
+                        });
+                        
+                        if (!response.ok) throw new Error('Failed to create scratchpad');
+                        
+                        const data = await response.json();
+                        this.activeScratchpadId = data.data.id;
+                        await this.loadScratchpadItems();
+                    } catch (error) {
+                        console.error('Failed to create scratchpad:', error);
+                    }
+                },
+                
+                async loadScratchpadItems() {
+                    if (!this.activeScratchpadId) return;
+                    
+                    const headers = this.getAuthHeaders();
+                    if (!headers) return;
+                    
+                    try {
+                        const response = await fetch(
+                            `/api/research/notebooks/${this.activeScratchpadId}`,
+                            { headers }
+                        );
+                        
+                        if (!response.ok) throw new Error('Failed to load items');
+                        
+                        const data = await response.json();
+                        this.scratchpadItems = data.data.insights || [];
+                        this.scratchpadCount = this.scratchpadItems.length;
+                    } catch (error) {
+                        console.error('Failed to load scratchpad items:', error);
+                    }
+                },
+                
+                saveResearchToScratchpad(message) {
+                    this.selectedMessageForSave = message;
+                    this.showSaveModal = true;
+                },
+                
+                async confirmSaveToScratchpad() {
+                    if (!this.activeScratchpadId || !this.selectedMessageForSave) return;
+                    
+                    const headers = this.getAuthHeaders();
+                    if (!headers) return;
+                    
+                    try {
+                        const response = await fetch(
+                            `/api/research/notebooks/${this.activeScratchpadId}/insights`,
+                            {
+                                method: 'POST',
+                                headers: headers,
+                                body: JSON.stringify({
+                                    messageId: this.selectedMessageForSave.id,
+                                    content: this.selectedMessageForSave.content,
+                                    userNotes: this.saveNotes,
+                                    tags: []
+                                })
+                            }
+                        );
+                        
+                        if (!response.ok) throw new Error('Failed to save');
+                        
+                        await this.loadScratchpadItems();
+                        this.showSaveModal = false;
+                        this.selectedMessageForSave = null;
+                        this.saveNotes = '';
+                    } catch (error) {
+                        console.error('Failed to save to scratchpad:', error);
+                        alert('Failed to save to scratchpad');
+                    }
+                },
+                
+                async deleteFromScratchpad(insightId) {
+                    if (!confirm('Remove this item from scratchpad?')) return;
+                    
+                    const headers = this.getAuthHeaders();
+                    if (!headers) return;
+                    
+                    try {
+                        const response = await fetch(
+                            `/api/research/notebooks/${this.activeScratchpadId}/insights/${insightId}`,
+                            {
+                                method: 'DELETE',
+                                headers: headers
+                            }
+                        );
+                        
+                        if (!response.ok) throw new Error('Failed to delete');
+                        
+                        await this.loadScratchpadItems();
+                    } catch (error) {
+                        console.error('Failed to delete item:', error);
+                        alert('Failed to delete item');
+                    }
+                },
+                
+                async exportScratchpad() {
+                    if (!this.activeScratchpadId) return;
+                    
+                    const headers = this.getAuthHeaders();
+                    if (!headers) return;
+                    
+                    try {
+                        const response = await fetch(
+                            `/api/research/notebooks/${this.activeScratchpadId}/export?format=markdown`,
+                            { headers }
+                        );
+                        
+                        if (!response.ok) throw new Error('Failed to export');
+                        
+                        const blob = await response.blob();
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `${this.ticker}-research-notes-${new Date().toISOString().split('T')[0]}.md`;
+                        document.body.appendChild(a);
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                        document.body.removeChild(a);
+                    } catch (error) {
+                        console.error('Failed to export:', error);
+                        alert('Failed to export scratchpad');
+                    }
+                },
+                
+                // IC Memo Functions
+                async generateICMemo() {
+                    if (!this.ticker) return;
+                    
+                    this.icMemoGenerating = true;
+                    const headers = this.getAuthHeaders();
+                    if (!headers) return;
+                    
+                    try {
+                        // Generate IC memo using scratchpad notes and financial data
+                        const response = await fetch('/api/deals/document-generation/ic-memo', {
+                            method: 'POST',
+                            headers: headers,
+                            body: JSON.stringify({
+                                ticker: this.ticker,
+                                notebookId: this.activeScratchpadId,
+                                includeFinancials: true,
+                                includeQualitative: true
+                            })
+                        });
+                        
+                        if (!response.ok) throw new Error('Failed to generate memo');
+                        
+                        const data = await response.json();
+                        this.icMemoContent = data.content || data.memo || 'Memo generated successfully';
+                        this.icMemoGenerated = true;
+                    } catch (error) {
+                        console.error('Failed to generate IC memo:', error);
+                        alert('Failed to generate IC memo. This feature may not be fully implemented yet.');
+                        
+                        // Fallback: Generate a basic memo from available data
+                        this.icMemoContent = this.generateBasicMemo();
+                        this.icMemoGenerated = true;
+                    } finally {
+                        this.icMemoGenerating = false;
+                    }
+                },
+                
+                generateBasicMemo() {
+                    // Generate a basic memo structure from available data
+                    let memo = `# Investment Committee Memo: ${this.ticker}\n\n`;
+                    memo += `**Date:** ${new Date().toLocaleDateString()}\n\n`;
+                    memo += `## Executive Summary\n\n`;
+                    memo += `This memo presents an analysis of ${this.ticker} based on comprehensive financial and qualitative research.\n\n`;
+                    
+                    if (this.data) {
+                        memo += `## Financial Highlights\n\n`;
+                        if (this.data.metrics?.revenue?.ttm) {
+                            memo += `- **TTM Revenue:** ${this.formatCurrency(this.data.metrics.revenue.ttm)}\n`;
+                        }
+                        if (this.data.metrics?.profitability?.netIncome?.ttm) {
+                            memo += `- **TTM Net Income:** ${this.formatCurrency(this.data.metrics.profitability.netIncome.ttm)}\n`;
+                        }
+                        if (this.data.metrics?.profitability?.netMargin?.ttm) {
+                            memo += `- **Net Margin:** ${this.formatPercent(this.data.metrics.profitability.netMargin.ttm)}\n`;
+                        }
+                        memo += `\n`;
+                    }
+                    
+                    if (this.scratchpadItems.length > 0) {
+                        memo += `## Research Notes\n\n`;
+                        this.scratchpadItems.forEach((item, idx) => {
+                            memo += `### Note ${idx + 1}\n\n`;
+                            memo += `${item.content}\n\n`;
+                            if (item.userNotes) {
+                                memo += `**Analysis:** ${item.userNotes}\n\n`;
+                            }
+                        });
+                    }
+                    
+                    memo += `## Recommendation\n\n`;
+                    memo += `[To be completed based on detailed analysis]\n\n`;
+                    
+                    return memo;
+                },
+                
+                async downloadICMemo() {
+                    // Download as markdown file
+                    const blob = new Blob([this.icMemoContent], { type: 'text/markdown' });
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${this.ticker}-IC-Memo-${new Date().toISOString().split('T')[0]}.md`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                },
+                
+                // Utility Functions
+                renderMarkdown(content) {
+                    if (typeof marked === 'undefined') {
+                        return content.replace(/\n/g, '<br>');
+                    }
+                    return marked.parse(content);
+                },
+                
+                formatDate(dateString) {
+                    const date = new Date(dateString);
+                    const now = new Date();
+                    const diffMs = now - date;
+                    const diffMins = Math.floor(diffMs / 60000);
+                    const diffHours = Math.floor(diffMs / 3600000);
+                    const diffDays = Math.floor(diffMs / 86400000);
+                    
+                    if (diffMins < 1) return 'Just now';
+                    if (diffMins < 60) return `${diffMins}m ago`;
+                    if (diffHours < 24) return `${diffHours}h ago`;
+                    if (diffDays < 7) return `${diffDays}d ago`;
+                    
+                    return date.toLocaleDateString();
+                }
+            };
+        }
+        
+        // Load Research Navigation Component
+        async function loadResearchNavigation() {
+            try {
+                const response = await fetch('/components/research-navigation.html');
+                const html = await response.text();
+                document.getElementById('research-navigation-container').innerHTML = html;
+                
+                // Initialize navigation after DOM is ready
+                setTimeout(() => {
+                    // Get ticker from Alpine.js component if available
+                    const ticker = window.Alpine && window.Alpine.$data ? 
+                        (window.Alpine.$data(document.querySelector('[x-data]'))?.ticker || '') : '';
+                    initResearchNav('financial-analysis', null, ticker);
+                }, 100);
+            } catch (error) {
+                console.error('Failed to load research navigation:', error);
+            }
+        }
+        
+        // Load navigation on page load
+        loadResearchNavigation();
+    </script>
+</body>
+</html>

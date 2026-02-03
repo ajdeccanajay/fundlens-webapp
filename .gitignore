@@ -1,0 +1,56 @@
+node_modules/
+npm-debug.log
+dist/
+built/
+.eslintcache
+.npmrc
+.DS_Store
+
+# Python virtual environment
+python_parser/venv/
+
+# Data directory
+data/
+
+# Local S3 storage (mock)
+local-s3-storage/
+localstack-data/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Database files
+*.db
+*.db-journal
+prisma/dev.db
+
+# Logs
+*.log
+logs/
+deployment*.log
+e2e-*.log
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Backup files
+*.backup
+*.backup-*
+
+# Test results
+test-results/
+playwright-report/
+
+# Build artifacts
+design-system-backup-*.tar.gz

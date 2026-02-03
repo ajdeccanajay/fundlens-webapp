@@ -1,0 +1,833 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model FinancialMetric {
+  id               String   @id @default(uuid())
+  ticker           String
+  normalizedMetric String   @map("normalized_metric")
+  rawLabel         String   @map("raw_label")
+  value            Decimal  @db.Decimal(20, 2)
+  fiscalPeriod     String   @map("fiscal_period")
+  periodType       String   @map("period_type")
+  filingType       String   @map("filing_type")
+  statementType    String   @map("statement_type")
+  filingDate       DateTime @map("filing_date")
+  statementDate    DateTime @map("statement_date")
+  confidenceScore  Float    @default(1.0) @map("confidence_score")
+  sourcePage       Int?     @map("source_page")
+  xbrlTag          String?  @map("xbrl_tag")
+  dataSourceId     String?  @map("data_source_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  reportingUnit    String?  @default("units") @map("reporting_unit") @db.VarChar(20)
+
+  @@unique([ticker, normalizedMetric, fiscalPeriod, filingType])
+  @@index([ticker, normalizedMetric])
+  @@index([filingDate])
+  @@index([dataSourceId])
+  @@index([ticker, reportingUnit], map: "idx_financial_metrics_reporting_unit")
+  @@map("financial_metrics")
+}
+
+model NarrativeChunk {
+  id           String   @id @default(uuid())
+  ticker       String
+  filingType   String   @map("filing_type")
+  sectionType  String   @map("section_type")
+  chunkIndex   Int      @map("chunk_index")
+  content      String
+  s3Path       String?  @map("s3_path")
+  bedrockKbId  String?  @map("bedrock_kb_id")
+  dataSourceId String?  @map("data_source_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  filingDate   DateTime @map("filing_date") @db.Timestamp(6)
+
+  @@unique([ticker, filingType, filingDate, sectionType, chunkIndex], map: "narrative_chunks_ticker_filing_type_filing_date_section_type_ch")
+  @@index([ticker, filingType, sectionType])
+  @@index([ticker, filingDate])
+  @@index([dataSourceId])
+  @@map("narrative_chunks")
+}
+
+model FilingMetadata {
+  id           String   @id @default(uuid())
+  ticker       String
+  filingType   String   @map("filing_type")
+  filingDate   DateTime @map("filing_date")
+  cik          String
+  accessionNo  String   @map("accession_no")
+  filingUrl    String   @map("filing_url")
+  processed    Boolean  @default(false)
+  metricsCount Int      @default(0) @map("metrics_count")
+  chunksCount  Int      @default(0) @map("chunks_count")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@unique([ticker, filingType, filingDate])
+  @@index([ticker])
+  @@index([processed])
+  @@map("filing_metadata")
+}
+
+model MetricMapping {
+  id                 String   @id @default(uuid())
+  normalizedMetric   String   @unique @map("normalized_metric")
+  displayName        String   @map("display_name")
+  statementType      String   @map("statement_type")
+  synonyms           String[]
+  xbrlTags           String[] @map("xbrl_tags")
+  calculationFormula String?  @map("calculation_formula")
+  description        String?
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@index([statementType])
+  @@map("metric_mappings")
+}
+
+model Document {
+  id              String          @id @default(uuid())
+  ticker          String?
+  documentType    String          @map("document_type")
+  fileType        String          @map("file_type")
+  title           String
+  s3Bucket        String          @map("s3_bucket")
+  s3Key           String          @map("s3_key")
+  fileSize        BigInt          @map("file_size")
+  uploadDate      DateTime        @default(now()) @map("upload_date")
+  sourceUrl       String?         @map("source_url")
+  sourceType      String          @default("USER_UPLOAD") @map("source_type")
+  metadata        Json?
+  processed       Boolean         @default(false)
+  processingError String?         @map("processing_error")
+  createdBy       String?         @map("created_by")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  tenantId        String          @map("tenant_id")
+  chunks          DocumentChunk[]
+  citations       Citation[]
+  tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_documents_tenant")
+
+  @@index([ticker])
+  @@index([documentType])
+  @@index([processed])
+  @@index([tenantId], map: "idx_documents_tenant_id")
+  @@index([tenantId, documentType], map: "idx_documents_tenant_type")
+  @@index([tenantId, sourceType], map: "idx_documents_tenant_source")
+  @@index([tenantId, ticker], map: "idx_documents_tenant_ticker")
+  @@map("documents")
+}
+
+model DocumentChunk {
+  id         String                        @id @default(uuid())
+  documentId String                        @map("document_id")
+  tenantId   String                        @map("tenant_id")
+  ticker     String?
+  chunkIndex Int                           @map("chunk_index")
+  content    String                        @db.Text
+  embedding  Unsupported("vector(1536)")?
+  pageNumber Int?                          @map("page_number")
+  tokenCount Int                           @map("token_count")
+  metadata   Json?
+  createdAt  DateTime                      @default(now()) @map("created_at")
+  document   Document                      @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  citations  Citation[]
+
+  @@index([documentId])
+  @@index([tenantId, ticker], map: "idx_chunks_tenant_ticker")
+  @@map("document_chunks")
+}
+
+model Tenant {
+  id            String             @id @default(uuid())
+  name          String
+  slug          String             @unique
+  tier          String             @default("free")
+  status        String             @default("active")
+  settings      Json               @default("{}")
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+  dataSources   DataSource[]
+  deals         Deal[]
+  documents     Document[]
+  subscriptions Subscription[]
+  users         TenantUser[]
+  uploads       UploadedDocument[]
+  usageLogs     UsageLog[]
+
+  @@map("tenants")
+}
+
+model TenantUser {
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  userId      String   @map("user_id")
+  role        String   @default("viewer")
+  permissions Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([userId])
+  @@map("tenant_users")
+}
+
+model DataSource {
+  id            String             @id @default(uuid())
+  type          String
+  sourceId      String             @map("source_id")
+  visibility    String             @default("public")
+  ownerTenantId String?            @map("owner_tenant_id")
+  s3Path        String             @map("s3_path")
+  metadata      Json               @default("{}")
+  createdAt     DateTime           @default(now()) @map("created_at")
+  ownerTenant   Tenant?            @relation(fields: [ownerTenantId], references: [id])
+  accessGrants  TenantDataAccess[]
+
+  @@unique([type, sourceId], map: "type_sourceId")
+  @@index([type, visibility])
+  @@index([ownerTenantId])
+  @@map("data_sources")
+}
+
+model TenantDataAccess {
+  id           String     @id @default(uuid())
+  tenantId     String     @map("tenant_id")
+  dataSourceId String     @map("data_source_id")
+  accessType   String     @default("read") @map("access_type")
+  grantedAt    DateTime   @default(now()) @map("granted_at")
+  expiresAt    DateTime?  @map("expires_at")
+  dataSource   DataSource @relation(fields: [dataSourceId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, dataSourceId])
+  @@index([tenantId, dataSourceId])
+  @@map("tenant_data_access")
+}
+
+model UploadedDocument {
+  id               String    @id @default(uuid())
+  tenantId         String    @map("tenant_id")
+  originalFilename String    @map("original_filename")
+  fileType         String    @map("file_type")
+  fileSize         BigInt    @map("file_size")
+  s3Path           String    @map("s3_path")
+  status           String    @default("pending")
+  processedAt      DateTime? @map("processed_at")
+  extractedText    String?   @map("extracted_text")
+  extractedMetrics Json?     @map("extracted_metrics")
+  tags             String[]
+  description      String?
+  metadata         Json      @default("{}")
+  uploadedBy       String    @map("uploaded_by")
+  uploadedAt       DateTime  @default(now()) @map("uploaded_at")
+  dataSourceId     String?   @map("data_source_id")
+  tenant           Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("uploaded_documents")
+}
+
+model NewsArticle {
+  id           String   @id @default(uuid())
+  articleId    String   @unique @map("article_id")
+  source       String
+  title        String
+  content      String
+  url          String?
+  tickers      String[]
+  topics       String[]
+  sentiment    String?
+  publishedAt  DateTime @map("published_at")
+  visibility   String   @default("public")
+  s3Path       String   @map("s3_path")
+  dataSourceId String?  @map("data_source_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([tickers])
+  @@index([publishedAt])
+  @@index([source, visibility])
+  @@map("news_articles")
+}
+
+model Subscription {
+  id               String    @id @default(uuid())
+  tenantId         String    @map("tenant_id")
+  subscriptionType String    @map("subscription_type")
+  provider         String
+  status           String    @default("active")
+  startedAt        DateTime  @map("started_at")
+  expiresAt        DateTime? @map("expires_at")
+  accessRules      Json      @default("{}") @map("access_rules")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  tenant           Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@map("subscriptions")
+}
+
+model UsageLog {
+  id                  String   @id @default(uuid())
+  tenantId            String   @map("tenant_id")
+  queryType           String   @map("query_type")
+  queryText           String?  @map("query_text")
+  dataSourcesAccessed String[] @map("data_sources_accessed")
+  metricsRetrieved    Int      @default(0) @map("metrics_retrieved")
+  chunksRetrieved     Int      @default(0) @map("chunks_retrieved")
+  cost                Decimal  @db.Decimal(10, 6)
+  inputTokens         Int      @default(0) @map("input_tokens")
+  outputTokens        Int      @default(0) @map("output_tokens")
+  modelUsed           String?  @map("model_used")
+  latencyMs           Int?     @map("latency_ms")
+  userId              String?  @map("user_id")
+  timestamp           DateTime @default(now())
+  tenant              Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, timestamp])
+  @@index([timestamp])
+  @@map("usage_logs")
+}
+
+model S3SyncState {
+  id             String    @id @default(uuid())
+  ticker         String
+  filingType     String    @map("filing_type")
+  lastSyncAt     DateTime  @map("last_sync_at")
+  lastFilingDate DateTime? @map("last_filing_date")
+  filesSynced    Int       @default(0) @map("files_synced")
+  status         String    @default("success")
+  errorMessage   String?   @map("error_message")
+  metadata       Json      @default("{}")
+  updatedAt      DateTime  @default(now()) @map("updated_at")
+
+  @@unique([ticker, filingType], map: "ticker_filingType")
+  @@index([ticker])
+  @@index([updatedAt])
+  @@map("s3_sync_state")
+}
+
+model Deal {
+  id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                String                @db.VarChar(255)
+  description         String?
+  dealType            String                @map("deal_type") @db.VarChar(20)
+  ticker              String?               @db.VarChar(10)
+  companyName         String?               @map("company_name") @db.VarChar(255)
+  reportType          String?               @map("report_type") @db.VarChar(20)
+  timePeriods         Int?                  @default(3) @map("time_periods")
+  status              String                @default("draft") @db.VarChar(20)
+  createdAt           DateTime?             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime?             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  created_by          String?               @db.VarChar(255)
+  metadata            Json?                 @default("{}")
+  years               Int?                  @default(3)
+  processingMessage   String?               @map("processing_message")
+  newsData            Json?                 @map("news_data")
+  tenantId            String                @map("tenant_id")
+  analysisSessions    AnalysisSession[]
+  tenant              Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_deals_tenant")
+  generated_documents generated_documents[]
+  scratchPads         ScratchPad[]
+
+  @@index([status], map: "idx_deals_status")
+  @@index([tenantId], map: "idx_deals_tenant_id")
+  @@index([tenantId, status], map: "idx_deals_tenant_status")
+  @@index([ticker], map: "idx_deals_ticker")
+  @@index([ticker, status], map: "idx_deals_ticker_status")
+  @@map("deals")
+}
+
+model AnalysisSession {
+  id           String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  dealId       String        @map("deal_id") @db.Uuid
+  systemPrompt String?       @default("You are a financial analyst assistant specializing in SEC filings analysis, financial metrics calculation, and investment research. Provide accurate, well-sourced analysis with proper citations.") @map("system_prompt")
+  sessionName  String?       @map("session_name") @db.VarChar(255)
+  createdAt    DateTime?     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime?     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  isActive     Boolean?      @default(true) @map("is_active")
+  deal         Deal          @relation(fields: [dealId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  chatMessages ChatMessage[]
+
+  @@index([dealId, isActive], map: "idx_analysis_sessions_active")
+  @@index([dealId], map: "idx_analysis_sessions_deal_id")
+  @@map("analysis_sessions")
+}
+
+model ChatMessage {
+  id         String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sessionId  String          @map("session_id") @db.Uuid
+  role       String          @db.VarChar(20)
+  content    String
+  sources    Json?           @default("[]")
+  metadata   Json?           @default("{}")
+  createdAt  DateTime?       @default(now()) @map("created_at") @db.Timestamptz(6)
+  tokensUsed Int?            @default(0) @map("tokens_used")
+  session    AnalysisSession @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([sessionId], map: "idx_chat_messages_session_id")
+  @@map("chat_messages")
+}
+
+model ScratchPad {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  dealId          String    @unique @map("deal_id") @db.Uuid
+  title           String?   @default("Investment Analysis") @db.VarChar(255)
+  content         String?   @default("")
+  content_type    String?   @default("markdown") @db.VarChar(20)
+  autoSavedAt     DateTime? @default(now()) @map("auto_saved_at") @db.Timestamptz(6)
+  manuallySavedAt DateTime? @map("manually_saved_at") @db.Timestamptz(6)
+  version         Int?      @default(1)
+  deal            Deal      @relation(fields: [dealId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([dealId], map: "idx_scratch_pads_deal_id")
+  @@map("scratch_pads")
+}
+
+model CalculatedMetric {
+  id                Int      @id @default(autoincrement())
+  ticker            String   @db.VarChar(10)
+  metricName        String   @map("metric_name") @db.VarChar(100)
+  value             Decimal  @db.Decimal(20, 4)
+  period            String   @db.VarChar(20)
+  periodType        String   @map("period_type") @db.VarChar(20)
+  calculationMethod String   @map("calculation_method") @db.VarChar(100)
+  sourceMetrics     Json     @map("source_metrics")
+  confidenceScore   Decimal  @default(1.0) @map("confidence_score") @db.Decimal(3, 2)
+  calculationDate   DateTime @default(now()) @map("calculation_date") @db.Timestamp(6)
+  validationStatus  String   @default("calculated") @map("validation_status") @db.VarChar(20)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updated_at        DateTime @default(now()) @db.Timestamp(6)
+
+  @@unique([ticker, metricName, period])
+  @@index([metricName], map: "idx_calculated_metrics_metric_name")
+  @@index([periodType], map: "idx_calculated_metrics_period_type")
+  @@index([ticker], map: "idx_calculated_metrics_ticker")
+  @@map("calculated_metrics")
+}
+
+model QualitativeCache {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticker         String    @db.VarChar(20)
+  category       String    @db.VarChar(100)
+  question       String
+  answer         String
+  sources        Json?     @default("[]")
+  confidence     String?   @default("medium") @db.VarChar(20)
+  narrativeCount Int?      @default(0) @map("narrative_count")
+  generatedAt    DateTime? @default(now()) @map("generated_at") @db.Timestamp(6)
+  expiresAt      DateTime  @map("expires_at") @db.Timestamp(6)
+  createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt      DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  @@unique([ticker, category, question])
+  @@index([expiresAt], map: "idx_qualitative_cache_expires")
+  @@index([ticker], map: "idx_qualitative_cache_ticker")
+  @@index([ticker, category], map: "idx_qualitative_cache_ticker_category")
+  @@map("qualitative_cache")
+}
+
+model KBSyncStatus {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticker         String    @unique @db.VarChar(20)
+  chunksInS3     Int       @default(0) @map("chunks_in_s3")
+  chunksInRds    Int       @default(0) @map("chunks_in_rds")
+  lastS3UploadAt DateTime? @map("last_s3_upload_at") @db.Timestamptz(6)
+  lastKbSyncAt   DateTime? @map("last_kb_sync_at") @db.Timestamptz(6)
+  kbSyncJobId    String?   @map("kb_sync_job_id") @db.VarChar(100)
+  kbSyncStatus   String?   @default("pending") @map("kb_sync_status") @db.VarChar(50)
+  needsKbSync    Boolean?  @default(true) @map("needs_kb_sync")
+  createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([needsKbSync], map: "idx_kb_sync_status_needs_sync")
+  @@index([ticker], map: "idx_kb_sync_status_ticker")
+  @@map("kb_sync_status")
+}
+
+model KBBatchSync {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobId            String    @map("job_id") @db.VarChar(100)
+  tickers          String[]
+  status           String?   @default("in_progress") @db.VarChar(50)
+  documentsScanned Int?      @default(0) @map("documents_scanned")
+  documentsIndexed Int?      @default(0) @map("documents_indexed")
+  documentsFailed  Int?      @default(0) @map("documents_failed")
+  startedAt        DateTime? @default(now()) @map("started_at") @db.Timestamptz(6)
+  completedAt      DateTime? @map("completed_at") @db.Timestamptz(6)
+  errorMessage     String?   @map("error_message")
+  createdAt        DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([jobId], map: "idx_kb_batch_sync_job_id")
+  @@index([status], map: "idx_kb_batch_sync_status")
+  @@map("kb_batch_sync")
+}
+
+model generated_documents {
+  id            String   @id @db.VarChar(50)
+  deal_id       String   @db.Uuid
+  document_type String   @db.VarChar(50)
+  content       String
+  metadata      Json     @default("{}")
+  status        String   @default("completed") @db.VarChar(20)
+  file_path     String?  @db.VarChar(500)
+  file_size     Int?
+  created_at    DateTime @default(now()) @db.Timestamp(6)
+  updated_at    DateTime @default(now()) @db.Timestamp(6)
+  deals         Deal     @relation(fields: [deal_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([created_at], map: "idx_generated_documents_created_at")
+  @@index([deal_id], map: "idx_generated_documents_deal_id")
+  @@index([document_type], map: "idx_generated_documents_type")
+}
+
+
+// ============ Parsing Review Tables (Human-in-the-Loop) ============
+// Requirements: 8.4, 8.6, 12.2
+
+// Unmapped XBRL Tags - Queue for tags that couldn't be mapped
+model UnmappedXbrlTag {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  xbrlTag          String    @unique @map("xbrl_tag") @db.VarChar(255)
+  tickers          String[]
+  filingTypes      String[]  @map("filing_types")
+  statementType    String    @map("statement_type") @db.VarChar(50)
+  occurrenceCount  Int       @default(1) @map("occurrence_count")
+  firstSeen        DateTime  @default(now()) @map("first_seen") @db.Timestamptz(6)
+  lastSeen         DateTime  @default(now()) @map("last_seen") @db.Timestamptz(6)
+  status           String    @default("pending") @db.VarChar(20)
+  suggestedMapping String?   @map("suggested_mapping") @db.VarChar(255)
+  mappedBy         String?   @map("mapped_by") @db.VarChar(255)
+  mappedAt         DateTime? @map("mapped_at") @db.Timestamptz(6)
+  notes            String?
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([status], map: "idx_unmapped_tags_status")
+  @@index([occurrenceCount(sort: Desc)], map: "idx_unmapped_tags_occurrence")
+  @@index([statementType], map: "idx_unmapped_tags_statement_type")
+  @@map("unmapped_xbrl_tags")
+}
+
+// XBRL Tag Mappings - Manually added mappings with version tracking
+model XbrlTagMapping {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  xbrlTag          String   @map("xbrl_tag") @db.VarChar(255)
+  normalizedMetric String   @map("normalized_metric") @db.VarChar(255)
+  displayName      String   @map("display_name") @db.VarChar(255)
+  statementType    String   @map("statement_type") @db.VarChar(50)
+  source           String   @default("manual") @db.VarChar(50)
+  createdBy        String?  @map("created_by") @db.VarChar(255)
+  version          String   @default("1.0.0") @db.VarChar(20)
+  isActive         Boolean  @default(true) @map("is_active")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([xbrlTag, version])
+  @@index([xbrlTag], map: "idx_tag_mappings_xbrl_tag")
+  @@index([normalizedMetric], map: "idx_tag_mappings_normalized")
+  @@index([isActive], map: "idx_tag_mappings_active")
+  @@map("xbrl_tag_mappings")
+}
+
+// Validation Failures - Queue for validation check failures
+model ValidationFailure {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticker        String    @db.VarChar(20)
+  filingType    String    @map("filing_type") @db.VarChar(10)
+  fiscalPeriod  String    @map("fiscal_period") @db.VarChar(20)
+  checkName     String    @map("check_name") @db.VarChar(255)
+  checkType     String    @map("check_type") @db.VarChar(50)
+  expectedValue Decimal   @map("expected_value") @db.Decimal(20, 2)
+  actualValue   Decimal   @map("actual_value") @db.Decimal(20, 2)
+  differencePct Float     @map("difference_pct")
+  status        String    @default("pending") @db.VarChar(20)
+  resolution    String?
+  resolvedBy    String?   @map("resolved_by") @db.VarChar(255)
+  resolvedAt    DateTime? @map("resolved_at") @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([status], map: "idx_validation_failures_status")
+  @@index([ticker], map: "idx_validation_failures_ticker")
+  @@index([checkType], map: "idx_validation_failures_check_type")
+  @@index([differencePct(sort: Desc)], map: "idx_validation_failures_difference")
+  @@map("validation_failures")
+}
+
+// Reprocessing Queue - Filings that need re-processing after mapping updates
+model ReprocessingQueue {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticker       String    @db.VarChar(20)
+  filingType   String    @map("filing_type") @db.VarChar(10)
+  fiscalPeriod String?   @map("fiscal_period") @db.VarChar(20)
+  reason       String
+  status       String    @default("pending") @db.VarChar(20)
+  errorMessage String?   @map("error_message")
+  attempts     Int       @default(0)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  startedAt    DateTime? @map("started_at") @db.Timestamptz(6)
+  completedAt  DateTime? @map("completed_at") @db.Timestamptz(6)
+
+  @@unique([ticker, filingType, fiscalPeriod, status])
+  @@index([status], map: "idx_reprocessing_queue_status")
+  @@index([ticker], map: "idx_reprocessing_queue_ticker")
+  @@map("reprocessing_queue")
+}
+
+// Audit Log - General audit log for compliance tracking
+model AuditLog {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventType String   @map("event_type") @db.VarChar(100)
+  details   Json     @default("{}")
+  timestamp DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([eventType], map: "idx_audit_log_event_type")
+  @@index([timestamp(sort: Desc)], map: "idx_audit_log_timestamp")
+  @@map("audit_log")
+}
+
+// ============================================================
+// RESEARCH ASSISTANT MODELS
+// ============================================================
+
+model Conversation {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  title          String    @db.VarChar(255)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt      DateTime  @default(now()) @map("updated_at") @db.Timestamp(6)
+  lastMessageAt  DateTime? @map("last_message_at") @db.Timestamp(6)
+  isPinned       Boolean   @default(false) @map("is_pinned")
+  isArchived     Boolean   @default(false) @map("is_archived")
+  messageCount   Int       @default(0) @map("message_count")
+  
+  messages       Message[]
+
+  @@index([tenantId, updatedAt(sort: Desc)], map: "idx_tenant_conversations")
+  @@index([userId, updatedAt(sort: Desc)], map: "idx_user_conversations")
+  @@index([tenantId, isArchived, updatedAt(sort: Desc)], map: "idx_conversation_archived")
+  @@index([tenantId, isPinned, updatedAt(sort: Desc)], map: "idx_conversation_pinned")
+  @@map("research_conversations")
+}
+
+model Message {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId String       @map("conversation_id") @db.Uuid
+  role           String       @db.VarChar(20)
+  content        String       @db.Text
+  ticker         String?      @db.VarChar(20)
+  sources        Json         @default("[]")
+  metadata       Json         @default("{}")
+  tokensUsed     Int          @default(0) @map("tokens_used")
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamp(6)
+  
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  insights       Insight[]
+  citations      Citation[]
+
+  @@index([conversationId, createdAt(sort: Asc)], map: "idx_conversation_messages")
+  @@index([createdAt(sort: Desc)], map: "idx_message_created")
+  @@map("research_messages")
+}
+
+model Notebook {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  title        String    @db.VarChar(255)
+  description  String?   @db.Text
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt    DateTime  @default(now()) @map("updated_at") @db.Timestamp(6)
+  isArchived   Boolean   @default(false) @map("is_archived")
+  insightCount Int       @default(0) @map("insight_count")
+  
+  insights     Insight[]
+  icMemos      IcMemo[]
+
+  @@index([tenantId, updatedAt(sort: Desc)], map: "idx_tenant_notebooks")
+  @@index([userId, updatedAt(sort: Desc)], map: "idx_user_notebooks")
+  @@index([tenantId, isArchived, updatedAt(sort: Desc)], map: "idx_notebook_archived")
+  @@map("research_notebooks")
+}
+
+model Insight {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  notebookId   String    @map("notebook_id") @db.Uuid
+  messageId    String?   @map("message_id") @db.Uuid
+  content      String    @db.Text
+  selectedText String?   @map("selected_text") @db.Text
+  userNotes    String?   @map("user_notes") @db.Text
+  tags         String[]  @default([])
+  companies    String[]  @default([])
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt    DateTime  @default(now()) @map("updated_at") @db.Timestamp(6)
+  position     Int       @default(0)
+  
+  notebook     Notebook  @relation(fields: [notebookId], references: [id], onDelete: Cascade)
+  message      Message?  @relation(fields: [messageId], references: [id], onDelete: SetNull)
+
+  @@index([notebookId, position(sort: Asc)], map: "idx_notebook_insights")
+  @@index([messageId], map: "idx_insight_message")
+  @@map("research_insights")
+}
+
+model IcMemo {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  notebookId   String?   @map("notebook_id") @db.Uuid
+  title        String    @db.VarChar(255)
+  content      String    @db.Text
+  templateType String?   @map("template_type") @db.VarChar(50)
+  status       String    @default("draft") @db.VarChar(50)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt    DateTime  @default(now()) @map("updated_at") @db.Timestamp(6)
+  
+  notebook     Notebook? @relation(fields: [notebookId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, updatedAt(sort: Desc)], map: "idx_tenant_memos")
+  @@index([userId, updatedAt(sort: Desc)], map: "idx_user_memos")
+  @@index([tenantId, status, updatedAt(sort: Desc)], map: "idx_memo_status")
+  @@map("ic_memos")
+}
+
+model UserPreference {
+  userId      String   @id @map("user_id") @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  preferences Json     @default("{}")
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamp(6)
+
+  @@index([tenantId], map: "idx_user_prefs_tenant")
+  @@map("user_preferences")
+}
+
+model ConversationShare {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId String    @map("conversation_id") @db.Uuid
+  shareToken     String    @unique @db.VarChar(255)
+  createdBy      String    @map("created_by") @db.Uuid
+  permissions    String    @default("read") @db.VarChar(50)
+  expiresAt      DateTime? @map("expires_at") @db.Timestamp(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+
+  @@index([shareToken], map: "idx_share_token")
+  @@index([conversationId], map: "idx_share_conversation")
+  @@index([expiresAt], map: "idx_share_expires")
+  @@map("conversation_shares")
+}
+
+model ConversationTemplate {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  name            String   @db.VarChar(255)
+  description     String?  @db.Text
+  category        String?  @db.VarChar(100)
+  queryPatterns   Json     @default("[]") @map("query_patterns")
+  exampleMessages Json     @default("[]") @map("example_messages")
+  createdBy       String   @map("created_by") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  isPublic        Boolean  @default(false) @map("is_public")
+
+  @@index([tenantId, category], map: "idx_tenant_templates")
+  @@index([isPublic, category], map: "idx_public_templates")
+  @@map("conversation_templates")
+}
+
+model Citation {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String        @map("tenant_id") @db.Uuid
+  messageId      String        @map("message_id") @db.Uuid
+  documentId     String        @map("document_id")
+  chunkId        String        @map("chunk_id")
+  quote          String        @db.Text
+  pageNumber     Int?          @map("page_number")
+  relevanceScore Float?        @map("relevance_score")
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamp(6)
+  
+  message        Message       @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  document       Document      @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  chunk          DocumentChunk @relation(fields: [chunkId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, messageId], map: "idx_citations_tenant_message")
+  @@index([documentId], map: "idx_citations_document")
+  @@index([chunkId], map: "idx_citations_chunk")
+  @@map("citations")
+}
+
+// ============================================================
+// WORKSPACE ENHANCEMENT MODELS
+// Week 1-3: Footnote Linking, MD&A Intelligence, Metric Hierarchy
+// ============================================================
+
+model FootnoteReference {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  dealId          String   @map("deal_id") @db.Uuid
+  metricId        String   @map("metric_id") @db.Uuid
+  ticker          String   @db.VarChar(20)
+  fiscalPeriod    String   @map("fiscal_period") @db.VarChar(50)
+  footnoteNumber  String   @map("footnote_number") @db.VarChar(10)
+  sectionTitle    String   @map("section_title") @db.VarChar(500)
+  footnoteText    String   @map("footnote_text") @db.Text
+  contextType     String   @map("context_type") @db.VarChar(50)
+  extractedData   Json?    @map("extracted_data")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([dealId, metricId, footnoteNumber])
+  @@index([dealId], map: "idx_footnote_references_deal")
+  @@index([metricId], map: "idx_footnote_references_metric")
+  @@index([ticker, fiscalPeriod], map: "idx_footnote_references_ticker_period")
+  @@map("footnote_references")
+}
+
+model MdaInsight {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  dealId            String   @map("deal_id") @db.Uuid
+  ticker            String   @db.VarChar(20)
+  fiscalPeriod      String   @map("fiscal_period") @db.VarChar(50)
+  trends            Json     @default("[]")
+  risks             Json     @default("[]")
+  guidance          String?  @db.Text
+  guidanceSentiment String?  @map("guidance_sentiment") @db.VarChar(20)
+  extractionMethod  String   @default("pattern_based") @map("extraction_method") @db.VarChar(50)
+  confidenceScore   Decimal? @map("confidence_score") @db.Decimal(5, 2)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([dealId, fiscalPeriod])
+  @@index([dealId], map: "idx_mda_insights_deal")
+  @@index([ticker], map: "idx_mda_insights_ticker")
+  @@index([ticker, fiscalPeriod], map: "idx_mda_insights_ticker_period")
+  @@map("mda_insights")
+}
+
+model MetricHierarchy {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  dealId          String   @map("deal_id") @db.Uuid
+  ticker          String   @db.VarChar(20)
+  fiscalPeriod    String   @map("fiscal_period") @db.VarChar(50)
+  metricId        String   @map("metric_id") @db.Uuid
+  metricName      String   @map("metric_name") @db.VarChar(255)
+  parentId        String?  @map("parent_id") @db.Uuid
+  level           Int      @default(0)
+  statementType   String   @map("statement_type") @db.VarChar(50)
+  calculationPath String[] @map("calculation_path")
+  formula         String?  @db.VarChar(500)
+  isKeyDriver     Boolean  @default(false) @map("is_key_driver")
+  contribution    Decimal? @db.Decimal(10, 4)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([dealId, metricId, fiscalPeriod])
+  @@index([dealId], map: "idx_metric_hierarchy_deal")
+  @@index([dealId, parentId], map: "idx_metric_hierarchy_parent")
+  @@index([ticker, fiscalPeriod], map: "idx_metric_hierarchy_ticker_period")
+  @@index([dealId, statementType], map: "idx_metric_hierarchy_statement")
+  @@map("metric_hierarchy")
+}

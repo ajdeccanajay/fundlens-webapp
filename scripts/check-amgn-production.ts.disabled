@@ -1,0 +1,221 @@
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
+
+async function checkAMGNProgress() {
+  console.log('🔍 Checking AMGN Progress in Production');
+  console.log('==========================================\n');
+
+  try {
+    const ticker = 'AMGN';
+    
+    // 1. Check SEC Filings
+    console.log('1. SEC Filings');
+    console.log('---------------');
+    
+    const filings = await prisma.secFiling.findMany({
+      where: { ticker },
+      orderBy: { filingDate: 'desc' },
+      take: 5
+    });
+    
+    console.log(`Found ${filings.length} recent filings for ${ticker}`);
+    
+    if (filings.length > 0) {
+      console.log('\nMost Recent Filings:');
+      filings.forEach((filing, idx) => {
+        console.log(`  ${idx + 1}. ${filing.formType} - ${filing.filingDate.toISOString().split('T')[0]} (FY${filing.fiscalYear})`);
+        console.log(`     Accession: ${filing.accessionNumber}`);
+        console.log(`     Status: ${filing.processingStatus || 'N/A'}`);
+      });
+      
+      // Get total count
+      const totalFilings = await prisma.secFiling.count({ where: { ticker } });
+      console.log(`\nTotal filings: ${totalFilings}`);
+    } else {
+      console.log('❌ No filings found for AMGN');
+    }
+    
+    // 2. Check Financial Metrics
+    console.log('\n2. Financial Metrics');
+    console.log('--------------------');
+    
+    const totalMetrics = await prisma.financialMetric.count({ where: { ticker } });
+    console.log(`Total metrics: ${totalMetrics}`);
+    
+    if (totalMetrics > 0) {
+      // Get metrics by year
+      const metricsByYear = await prisma.$queryRaw<Array<{
+        fiscal_year: number;
+        fiscal_period: string;
+        metric_count: bigint;
+      }>>`
+        SELECT fiscal_year, fiscal_period, COUNT(*)::int as metric_count
+        FROM financial_metrics
+        WHERE ticker = ${ticker}
+        GROUP BY fiscal_year, fiscal_period
+        ORDER BY fiscal_year DESC, fiscal_period DESC
+        LIMIT 10
+      `;
+      
+      console.log('\nMetrics by Period:');
+      for (const row of metricsByYear) {
+        console.log(`  ${row.fiscal_year}-${row.fiscal_period}: ${row.metric_count} metrics`);
+      }
+      
+      // Get sample key metrics
+      const keyMetrics = await prisma.financialMetric.findMany({
+        where: {
+          ticker,
+          metricName: { in: ['Revenue', 'Net Income', 'Total Assets'] }
+        },
+        orderBy: [
+          { fiscalYear: 'desc' },
+          { fiscalPeriod: 'desc' }
+        ],
+        take: 9
+      });
+      
+      if (keyMetrics.length > 0) {
+        console.log('\nKey Metrics (Recent):');
+        const grouped: Record<string, any[]> = {};
+        keyMetrics.forEach(m => {
+          const key = `${m.fiscalYear}-${m.fiscalPeriod}`;
+          if (!grouped[key]) grouped[key] = [];
+          grouped[key].push(m);
+        });
+        
+        Object.keys(grouped).slice(0, 3).forEach(key => {
+          console.log(`  ${key}:`);
+          grouped[key].forEach(m => {
+            const value = m.value ? `$${(m.value / 1000000).toFixed(0)}M` : 'N/A';
+            console.log(`    - ${m.metricName}: ${value}`);
+          });
+        });
+      }
+    } else {
+      console.log('⚠️  No financial metrics found');
+    }
+    
+    // 3. Check Narrative Chunks
+    console.log('\n3. Narrative Chunks (RAG Data)');
+    console.log('-------------------------------');
+    
+    const totalChunks = await prisma.narrativeChunk.count({ where: { ticker } });
+    console.log(`Total chunks: ${totalChunks}`);
+    
+    if (totalChunks > 0) {
+      const recentChunks = await prisma.narrativeChunk.findMany({
+        where: { ticker },
+        orderBy: { filingDate: 'desc' },
+        take: 5,
+        select: {
+          sectionTitle: true,
+          filingDate: true,
+          chunkId: true,
+          content: true
+        }
+      });
+      
+      console.log('\nRecent Chunks:');
+      recentChunks.forEach((chunk, idx) => {
+        console.log(`  ${idx + 1}. ${chunk.sectionTitle || 'Untitled'}`);
+        console.log(`     Filing: ${chunk.filingDate?.toISOString().split('T')[0] || 'N/A'}`);
+        console.log(`     Length: ${chunk.content?.length || 0} chars`);
+      });
+    } else {
+      console.log('⚠️  No narrative chunks found');
+    }
+    
+    // 4. Check Deals
+    console.log('\n4. Deals Using AMGN');
+    console.log('--------------------');
+    
+    const deals = await prisma.deal.findMany({
+      where: { ticker },
+      select: {
+        id: true,
+        name: true,
+        createdAt: true,
+        status: true
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 5
+    });
+    
+    console.log(`Found ${deals.length} deals for ${ticker}`);
+    
+    if (deals.length > 0) {
+      deals.forEach((deal, idx) => {
+        console.log(`  ${idx + 1}. ${deal.name}`);
+        console.log(`     Created: ${deal.createdAt.toISOString().split('T')[0]}`);
+        console.log(`     Status: ${deal.status || 'N/A'}`);
+      });
+    }
+    
+    // 5. Data Quality Check
+    console.log('\n5. Data Quality');
+    console.log('----------------');
+    
+    const twoYearsAgo = new Date();
+    twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+    
+    const recentFilings = await prisma.secFiling.count({
+      where: {
+        ticker,
+        filingDate: { gte: twoYearsAgo }
+      }
+    });
+    
+    const recentMetrics = await prisma.financialMetric.count({
+      where: {
+        ticker,
+        fiscalYear: { gte: twoYearsAgo.getFullYear() - 2 }
+      }
+    });
+    
+    console.log(`Recent data (last 2 years):`);
+    console.log(`  - Filings: ${recentFilings}`);
+    console.log(`  - Metrics: ${recentMetrics}`);
+    
+    // 6. Summary
+    console.log('\n==========================================');
+    console.log('Summary');
+    console.log('==========================================\n');
+    
+    const hasFilings = filings.length > 0;
+    const hasMetrics = totalMetrics > 0;
+    const hasChunks = totalChunks > 0;
+    const hasRecentData = recentFilings > 0 && recentMetrics > 0;
+    
+    console.log(`${hasFilings ? '✅' : '❌'} SEC Filings: ${filings.length} recent (${await prisma.secFiling.count({ where: { ticker } })} total)`);
+    console.log(`${hasMetrics ? '✅' : '❌'} Financial Metrics: ${totalMetrics} total`);
+    console.log(`${hasChunks ? '✅' : '❌'} Narrative Chunks: ${totalChunks} total`);
+    console.log(`${hasRecentData ? '✅' : '⚠️'} Recent Data: ${recentFilings} filings, ${recentMetrics} metrics`);
+    console.log(`   Deals: ${deals.length}`);
+    
+    if (hasFilings && hasMetrics && hasChunks && hasRecentData) {
+      console.log('\n✅ AMGN data is complete and ready for use!');
+    } else if (hasFilings && hasMetrics) {
+      console.log('\n⚠️  AMGN data is mostly complete, but some components may be missing.');
+    } else {
+      console.log('\n❌ AMGN data is incomplete. Pipeline may need to be run.');
+    }
+    
+  } catch (error) {
+    console.error('Error checking AMGN progress:', error);
+    throw error;
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+checkAMGNProgress()
+  .then(() => {
+    console.log('\n✓ Check complete');
+    process.exit(0);
+  })
+  .catch((error) => {
+    console.error('\n✗ Check failed:', error.message);
+    process.exit(1);
+  });

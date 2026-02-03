@@ -1,0 +1,352 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'FundLens Monitoring, Alerting, and Dashboard Stack'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues:
+      - production
+      - staging
+    Description: Environment name
+
+  ECSClusterStackName:
+    Type: String
+    Default: fundlens-ecs-production
+    Description: Name of the ECS Cluster CloudFormation stack
+
+  ECSServiceStackName:
+    Type: String
+    Default: fundlens-service-production
+    Description: Name of the ECS Service CloudFormation stack
+
+  ALBStackName:
+    Type: String
+    Default: fundlens-alb-production
+    Description: Name of the ALB CloudFormation stack
+
+  AlertEmail:
+    Type: String
+    Description: Email address for alert notifications
+
+Resources:
+  # ===========================================================================
+  # SNS Topic for Alerts
+  # ===========================================================================
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub 'fundlens-${Environment}-alerts'
+      DisplayName: FundLens Production Alerts
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  AlertEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref AlertTopic
+      Protocol: email
+      Endpoint: !Ref AlertEmail
+
+  # ===========================================================================
+  # ALB Access Logs Bucket
+  # ===========================================================================
+  ALBLogsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'fundlens-${Environment}-alb-logs'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldLogs
+            Status: Enabled
+            ExpirationInDays: 90
+      Tags:
+        - Key: Name
+          Value: !Sub 'fundlens-${Environment}-alb-logs'
+        - Key: Environment
+          Value: !Ref Environment
+
+  ALBLogsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ALBLogsBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowALBLogs
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::127311923021:root'  # us-east-1 ELB account
+            Action: s3:PutObject
+            Resource: !Sub '${ALBLogsBucket.Arn}/*'
+
+  # ===========================================================================
+  # CloudWatch Alarms
+  # ===========================================================================
+  
+  # Error Rate Alarm (>5% for 5 minutes)
+  ErrorRateAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'fundlens-${Environment}-error-rate-high'
+      AlarmDescription: Error rate exceeds 5% for 5 minutes
+      MetricName: HTTPCode_Target_5XX_Count
+      Namespace: AWS/ApplicationELB
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 5
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: LoadBalancer
+          Value:
+            Fn::ImportValue: !Sub '${ALBStackName}-LoadBalancerArn'
+      AlarmActions:
+        - !Ref AlertTopic
+      OKActions:
+        - !Ref AlertTopic
+      TreatMissingData: notBreaching
+
+  # Latency Alarm (p99 > 3 seconds)
+  LatencyAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'fundlens-${Environment}-latency-high'
+      AlarmDescription: P99 latency exceeds 3 seconds
+      MetricName: TargetResponseTime
+      Namespace: AWS/ApplicationELB
+      ExtendedStatistic: p99
+      Period: 60
+      EvaluationPeriods: 5
+      Threshold: 3
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: LoadBalancer
+          Value:
+            Fn::ImportValue: !Sub '${ALBStackName}-LoadBalancerArn'
+      AlarmActions:
+        - !Ref AlertTopic
+      OKActions:
+        - !Ref AlertTopic
+      TreatMissingData: notBreaching
+
+  # Unhealthy Hosts Alarm
+  UnhealthyHostsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'fundlens-${Environment}-unhealthy-hosts'
+      AlarmDescription: Unhealthy hosts detected
+      MetricName: UnHealthyHostCount
+      Namespace: AWS/ApplicationELB
+      Statistic: Average
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: TargetGroup
+          Value:
+            Fn::ImportValue: !Sub '${ALBStackName}-TargetGroupArn'
+        - Name: LoadBalancer
+          Value:
+            Fn::ImportValue: !Sub '${ALBStackName}-LoadBalancerArn'
+      AlarmActions:
+        - !Ref AlertTopic
+      OKActions:
+        - !Ref AlertTopic
+      TreatMissingData: notBreaching
+
+  # Memory Utilization Alarm (>85%)
+  MemoryAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'fundlens-${Environment}-memory-high'
+      AlarmDescription: Memory utilization exceeds 85%
+      MetricName: MemoryUtilization
+      Namespace: AWS/ECS
+      Statistic: Average
+      Period: 60
+      EvaluationPeriods: 5
+      Threshold: 85
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: ClusterName
+          Value:
+            Fn::ImportValue: !Sub '${ECSClusterStackName}-ClusterName'
+        - Name: ServiceName
+          Value:
+            Fn::ImportValue: !Sub '${ECSServiceStackName}-ServiceName'
+      AlarmActions:
+        - !Ref AlertTopic
+      OKActions:
+        - !Ref AlertTopic
+      TreatMissingData: notBreaching
+
+  # ===========================================================================
+  # CloudWatch Dashboard
+  # ===========================================================================
+  Dashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub 'FundLens-${Environment}'
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "title": "Request Count",
+                "metrics": [
+                  ["AWS/ApplicationELB", "RequestCount", "LoadBalancer", "${ALBStackName}-LoadBalancerArn", {"stat": "Sum", "period": 60}]
+                ],
+                "view": "timeSeries",
+                "region": "${AWS::Region}"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "title": "Error Rate (5XX)",
+                "metrics": [
+                  ["AWS/ApplicationELB", "HTTPCode_Target_5XX_Count", "LoadBalancer", "${ALBStackName}-LoadBalancerArn", {"stat": "Sum", "period": 60}],
+                  [".", "HTTPCode_Target_4XX_Count", ".", ".", {"stat": "Sum", "period": 60}]
+                ],
+                "view": "timeSeries",
+                "region": "${AWS::Region}"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 6,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "title": "Response Time (Latency)",
+                "metrics": [
+                  ["AWS/ApplicationELB", "TargetResponseTime", "LoadBalancer", "${ALBStackName}-LoadBalancerArn", {"stat": "p50", "period": 60, "label": "p50"}],
+                  ["...", {"stat": "p90", "period": 60, "label": "p90"}],
+                  ["...", {"stat": "p99", "period": 60, "label": "p99"}]
+                ],
+                "view": "timeSeries",
+                "region": "${AWS::Region}"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12,
+              "y": 6,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "title": "Healthy/Unhealthy Hosts",
+                "metrics": [
+                  ["AWS/ApplicationELB", "HealthyHostCount", "TargetGroup", "${ALBStackName}-TargetGroupArn", "LoadBalancer", "${ALBStackName}-LoadBalancerArn", {"stat": "Average", "period": 60}],
+                  [".", "UnHealthyHostCount", ".", ".", ".", ".", {"stat": "Average", "period": 60}]
+                ],
+                "view": "timeSeries",
+                "region": "${AWS::Region}"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 12,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "title": "ECS CPU Utilization",
+                "metrics": [
+                  ["AWS/ECS", "CPUUtilization", "ClusterName", "${ECSClusterStackName}-ClusterName", "ServiceName", "${ECSServiceStackName}-ServiceName", {"stat": "Average", "period": 60}]
+                ],
+                "view": "timeSeries",
+                "region": "${AWS::Region}",
+                "annotations": {
+                  "horizontal": [
+                    {"value": 70, "label": "Scale Out Threshold"},
+                    {"value": 30, "label": "Scale In Threshold"}
+                  ]
+                }
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12,
+              "y": 12,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "title": "ECS Memory Utilization",
+                "metrics": [
+                  ["AWS/ECS", "MemoryUtilization", "ClusterName", "${ECSClusterStackName}-ClusterName", "ServiceName", "${ECSServiceStackName}-ServiceName", {"stat": "Average", "period": 60}]
+                ],
+                "view": "timeSeries",
+                "region": "${AWS::Region}",
+                "annotations": {
+                  "horizontal": [
+                    {"value": 85, "label": "Alert Threshold"}
+                  ]
+                }
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 18,
+              "width": 24,
+              "height": 6,
+              "properties": {
+                "title": "ECS Task Count",
+                "metrics": [
+                  ["ECS/ContainerInsights", "RunningTaskCount", "ClusterName", "${ECSClusterStackName}-ClusterName", "ServiceName", "${ECSServiceStackName}-ServiceName", {"stat": "Average", "period": 60}],
+                  [".", "DesiredTaskCount", ".", ".", ".", ".", {"stat": "Average", "period": 60}]
+                ],
+                "view": "timeSeries",
+                "region": "${AWS::Region}",
+                "annotations": {
+                  "horizontal": [
+                    {"value": 2, "label": "Min Tasks"},
+                    {"value": 10, "label": "Max Tasks"}
+                  ]
+                }
+              }
+            }
+          ]
+        }
+
+Outputs:
+  AlertTopicArn:
+    Description: SNS Alert Topic ARN
+    Value: !Ref AlertTopic
+    Export:
+      Name: !Sub '${AWS::StackName}-AlertTopicArn'
+
+  ALBLogsBucketName:
+    Description: ALB Logs Bucket Name
+    Value: !Ref ALBLogsBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-ALBLogsBucketName'
+
+  DashboardName:
+    Description: CloudWatch Dashboard Name
+    Value: !Ref Dashboard
+    Export:
+      Name: !Sub '${AWS::StackName}-DashboardName'

@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSE Chat Test</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            margin-top: 0;
+            color: #333;
+        }
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        button {
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .messages {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            min-height: 200px;
+            max-height: 400px;
+            overflow-y: auto;
+            background: #fafafa;
+        }
+        .message {
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .message.user {
+            background: #e3f2fd;
+            text-align: right;
+        }
+        .message.assistant {
+            background: #f5f5f5;
+        }
+        .message.error {
+            background: #ffebee;
+            color: #c62828;
+        }
+        .log {
+            margin-top: 20px;
+            padding: 15px;
+            background: #263238;
+            color: #aed581;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .log-entry {
+            margin-bottom: 5px;
+            word-break: break-all;
+        }
+        .typing {
+            color: #666;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 SSE Chat Test</h1>
+        
+        <div class="input-group">
+            <input type="text" id="conversationId" placeholder="Conversation ID (leave empty to create new)" />
+            <button onclick="createConversation()">Create New</button>
+        </div>
+        
+        <div class="input-group">
+            <input type="text" id="messageInput" placeholder="Type your message..." />
+            <button onclick="sendMessage()" id="sendBtn">Send</button>
+        </div>
+        
+        <div class="messages" id="messages"></div>
+        
+        <h3>Debug Log</h3>
+        <div class="log" id="log"></div>
+    </div>
+
+    <script>
+        let conversationId = null;
+        
+        function log(message, data = null) {
+            const logDiv = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            if (data) {
+                entry.textContent += ` ${JSON.stringify(data)}`;
+            }
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message, data);
+        }
+        
+        function addMessage(role, content) {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}`;
+            messageDiv.textContent = content;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+        
+        function getAuthHeaders() {
+            const token = localStorage.getItem('fundlens_token') || localStorage.getItem('authToken');
+            if (!token) {
+                log('❌ No auth token found');
+                alert('Please login first at /login.html');
+                return null;
+            }
+            
+            log('✅ Found auth token');
+            return {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'x-tenant-id': '00000000-0000-0000-0000-000000000000'
+            };
+        }
+        
+        async function createConversation() {
+            log('📝 Creating new conversation...');
+            
+            const headers = getAuthHeaders();
+            if (!headers) return;
+            
+            try {
+                const response = await fetch('/api/research/conversations', {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify({
+                        title: 'SSE Test Conversation'
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+                }
+                
+                const result = await response.json();
+                conversationId = result.data.id;
+                document.getElementById('conversationId').value = conversationId;
+                log('✅ Created conversation', { id: conversationId });
+                addMessage('system', `Conversation created: ${conversationId}`);
+            } catch (error) {
+                log('❌ Error creating conversation', error.message);
+                addMessage('error', `Error: ${error.message}`);
+            }
+        }
+        
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            
+            if (!message) {
+                log('⚠️ Empty message');
+                return;
+            }
+            
+            if (!conversationId) {
+                conversationId = document.getElementById('conversationId').value.trim();
+                if (!conversationId) {
+                    log('⚠️ No conversation ID');
+                    alert('Please create a conversation first or enter a conversation ID');
+                    return;
+                }
+            }
+            
+            log('📤 Sending message', { conversationId, message });
+            addMessage('user', message);
+            input.value = '';
+            
+            const sendBtn = document.getElementById('sendBtn');
+            sendBtn.disabled = true;
+            
+            const assistantDiv = document.createElement('div');
+            assistantDiv.className = 'message assistant typing';
+            assistantDiv.textContent = 'Thinking...';
+            document.getElementById('messages').appendChild(assistantDiv);
+            
+            try {
+                const headers = getAuthHeaders();
+                if (!headers) {
+                    sendBtn.disabled = false;
+                    return;
+                }
+                
+                log('🔌 Opening SSE connection...');
+                
+                const response = await fetch(`/api/research/conversations/${conversationId}/messages`, {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify({
+                        content: message,
+                        context: {
+                            tickers: ['AAPL']
+                        }
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+                }
+                
+                log('✅ SSE connection opened');
+                
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                let currentEvent = null;
+                let responseText = '';
+                
+                assistantDiv.textContent = '';
+                assistantDiv.classList.remove('typing');
+                
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) {
+                        log('✅ Stream complete');
+                        break;
+                    }
+                    
+                    buffer += decoder.decode(value, { stream: true });
+                    log('📦 Received chunk', { bufferLength: buffer.length });
+                    
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+                    
+                    for (const line of lines) {
+                        log('📄 Processing line', { line });
+                        
+                        if (line.startsWith('event: ')) {
+                            currentEvent = line.substring(7).trim();
+                            log('🏷️ Event type', { currentEvent });
+                        } else if (line.startsWith('data: ')) {
+                            try {
+                                const jsonStr = line.substring(6).trim();
+                                if (!jsonStr) continue;
+                                
+                                const data = JSON.parse(jsonStr);
+                                log('📊 Parsed data', { event: currentEvent, data });
+                                
+                                if (currentEvent === 'token' && data.text) {
+                                    responseText += data.text;
+                                    assistantDiv.textContent = responseText;
+                                    log('✍️ Added token', { text: data.text });
+                                } else if (currentEvent === 'source' && data.title) {
+                                    log('📚 Source', data);
+                                } else if (currentEvent === 'done') {
+                                    log('✅ Done event received');
+                                } else if (currentEvent === 'error') {
+                                    log('❌ Error event', data);
+                                    assistantDiv.className = 'message error';
+                                    assistantDiv.textContent = `Error: ${data.message}`;
+                                }
+                                
+                                currentEvent = null;
+                            } catch (e) {
+                                log('⚠️ Failed to parse JSON', { line, error: e.message });
+                            }
+                        } else if (line.trim() === '') {
+                            log('⏸️ Empty line (event boundary)');
+                            currentEvent = null;
+                        } else {
+                            log('⚠️ Unknown line format', { line });
+                        }
+                    }
+                }
+                
+                if (!responseText) {
+                    assistantDiv.className = 'message error';
+                    assistantDiv.textContent = 'No response received';
+                    log('❌ No response text accumulated');
+                }
+                
+            } catch (error) {
+                log('❌ Error', error.message);
+                assistantDiv.className = 'message error';
+                assistantDiv.textContent = `Error: ${error.message}`;
+            } finally {
+                sendBtn.disabled = false;
+            }
+        }
+        
+        // Allow Enter key to send
+        document.getElementById('messageInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+        
+        log('🚀 SSE Test page loaded');
+        log('💡 Tip: Open browser DevTools Network tab to see raw SSE data');
+    </script>
+</body>
+</html>

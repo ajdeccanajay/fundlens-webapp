@@ -1,0 +1,333 @@
+<!-- 
+  Enterprise Research Navigation Component
+  
+  Provides unified navigation across:
+  - Deal Analysis
+  - Research Assistant (Cross-Company Chat)
+  - Scratchpad (Saved Insights)
+  - IC Memo Export
+  
+  Usage: Include this file and call initResearchNav(currentPage, dealId)
+-->
+
+<style>
+  .research-nav {
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    border-bottom: 3px solid #3b82f6;
+  }
+  
+  .research-nav-item {
+    position: relative;
+    padding: 0.75rem 1.5rem;
+    color: #cbd5e1;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    border-radius: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  
+  .research-nav-item:hover {
+    background: rgba(59, 130, 246, 0.1);
+    color: #60a5fa;
+  }
+  
+  .research-nav-item.active {
+    background: rgba(59, 130, 246, 0.2);
+    color: #ffffff;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+  }
+  
+  .research-nav-item.active::after {
+    content: '';
+    position: absolute;
+    bottom: -3px;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: #3b82f6;
+  }
+  
+  .research-nav-badge {
+    background: #3b82f6;
+    color: white;
+    font-size: 0.75rem;
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    font-weight: 600;
+  }
+  
+  .research-nav-info {
+    background: rgba(59, 130, 246, 0.1);
+    border-left: 3px solid #3b82f6;
+    padding: 0.75rem 1rem;
+    margin: 0.5rem 0;
+    border-radius: 0.375rem;
+  }
+  
+  .breadcrumb-separator {
+    color: #64748b;
+    margin: 0 0.5rem;
+  }
+</style>
+
+<nav class="research-nav shadow-lg">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <!-- Breadcrumbs -->
+    <div class="flex items-center py-2 text-sm border-b border-gray-700">
+      <a href="/app/deals/index.html" class="text-gray-400 hover:text-blue-400 transition">
+        <i class="fas fa-home mr-1"></i>
+        Deals
+      </a>
+      <span class="breadcrumb-separator">/</span>
+      <span id="research-breadcrumb-deal" class="text-gray-300"></span>
+      <span id="research-breadcrumb-section" class="breadcrumb-separator"></span>
+      <span id="research-breadcrumb-current" class="text-white font-medium"></span>
+    </div>
+    
+    <!-- Main Navigation -->
+    <div class="flex items-center justify-between py-3">
+      <div class="flex items-center space-x-2">
+        <!-- Financial Analysis -->
+        <a href="/comprehensive-financial-analysis.html" id="nav-financial-analysis" class="research-nav-item" data-page="financial-analysis">
+          <i class="fas fa-chart-line"></i>
+          <span>Financial Analysis</span>
+        </a>
+        
+        <!-- Research Assistant -->
+        <a href="/app/research/index.html" id="nav-research" class="research-nav-item" data-page="research">
+          <i class="fas fa-brain"></i>
+          <span>Research Assistant</span>
+          <span class="text-xs text-gray-400 hidden sm:inline">(Cross-Company)</span>
+        </a>
+        
+        <!-- Scratchpad -->
+        <button id="nav-scratchpad" class="research-nav-item" data-page="scratchpad">
+          <i class="fas fa-bookmark"></i>
+          <span>Scratchpad</span>
+          <span id="scratchpad-count-badge" class="research-nav-badge hidden">0</span>
+        </button>
+        
+        <!-- IC Memo Export -->
+        <button id="nav-ic-memo" class="research-nav-item" data-page="ic-memo">
+          <i class="fas fa-file-export"></i>
+          <span class="hidden sm:inline">IC Memo</span>
+          <span class="sm:hidden">Memo</span>
+        </button>
+      </div>
+      
+      <!-- Help/Info Button -->
+      <button id="research-nav-help" class="research-nav-item" onclick="toggleResearchHelp()">
+        <i class="fas fa-question-circle"></i>
+        <span class="hidden md:inline">Help</span>
+      </button>
+    </div>
+    
+    <!-- Contextual Help Panel -->
+    <div id="research-help-panel" class="hidden pb-4">
+      <div class="research-nav-info">
+        <div class="flex items-start">
+          <i class="fas fa-info-circle text-blue-400 mt-1 mr-3"></i>
+          <div class="flex-1">
+            <h4 class="text-white font-semibold mb-2">Research Workflow</h4>
+            <ul class="text-gray-300 text-sm space-y-1">
+              <li><strong>Financial Analysis:</strong> View comprehensive metrics, ratios, and trends for a specific company</li>
+              <li><strong>Research Assistant:</strong> Chat across ALL companies in your database - ask comparative questions, analyze trends</li>
+              <li><strong>Scratchpad:</strong> Save favorite answers and insights from your research for quick reference</li>
+              <li><strong>IC Memo:</strong> Export your research and analysis into a formatted Investment Committee memo</li>
+            </ul>
+            <p class="text-blue-300 text-xs mt-3">
+              <i class="fas fa-lightbulb mr-1"></i>
+              <strong>Tip:</strong> The Research Assistant can query across multiple companies simultaneously. 
+              Example: "Compare AAPL, MSFT, and GOOGL revenue growth over the last 3 years"
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<script>
+  // Research Navigation State
+  const researchNav = {
+    currentPage: null,
+    dealId: null,
+    dealTicker: null,
+    scratchpadCount: 0,
+  };
+  
+  /**
+   * Initialize Research Navigation
+   * @param {string} currentPage - Current page identifier (deal-analysis, research, scratchpad, ic-memo)
+   * @param {string} dealId - Optional deal ID for context
+   * @param {string} dealTicker - Optional deal ticker for breadcrumbs
+   */
+  function initResearchNav(currentPage, dealId = null, dealTicker = null) {
+    researchNav.currentPage = currentPage;
+    researchNav.dealId = dealId;
+    researchNav.dealTicker = dealTicker;
+    
+    // Update active state
+    document.querySelectorAll('.research-nav-item').forEach(item => {
+      item.classList.remove('active');
+      if (item.dataset.page === currentPage) {
+        item.classList.add('active');
+      }
+    });
+    
+    // Update breadcrumbs
+    updateBreadcrumbs(currentPage, dealTicker);
+    
+    // Update deal analysis link if dealId provided
+    if (dealId) {
+      const dealAnalysisLink = document.getElementById('nav-deal-analysis');
+      if (dealAnalysisLink) {
+        dealAnalysisLink.href = `/deal-analysis.html?id=${dealId}`;
+      }
+    }
+    
+    // Load scratchpad count
+    loadScratchpadCount();
+    
+    // Set up event listeners
+    setupNavEventListeners();
+  }
+  
+  function updateBreadcrumbs(currentPage, dealTicker) {
+    const dealBreadcrumb = document.getElementById('research-breadcrumb-deal');
+    const sectionSeparator = document.getElementById('research-breadcrumb-section');
+    const currentBreadcrumb = document.getElementById('research-breadcrumb-current');
+    
+    if (dealTicker) {
+      dealBreadcrumb.textContent = dealTicker;
+      dealBreadcrumb.classList.remove('hidden');
+      sectionSeparator.textContent = '/';
+      sectionSeparator.classList.remove('hidden');
+    } else {
+      dealBreadcrumb.classList.add('hidden');
+      sectionSeparator.classList.add('hidden');
+    }
+    
+    const pageNames = {
+      'financial-analysis': 'Financial Analysis',
+      'research': 'Research Assistant',
+      'scratchpad': 'Scratchpad',
+      'ic-memo': 'IC Memo Export'
+    };
+    
+    currentBreadcrumb.textContent = pageNames[currentPage] || currentPage;
+  }
+  
+  // Make updateNavigationTicker globally available
+  window.updateNavigationTicker = function(ticker) {
+    const dealBreadcrumb = document.getElementById('research-breadcrumb-deal');
+    if (dealBreadcrumb) {
+      dealBreadcrumb.textContent = ticker;
+      dealBreadcrumb.classList.remove('hidden');
+      const separator = document.getElementById('research-breadcrumb-section');
+      if (separator) {
+        separator.textContent = '/';
+        separator.classList.remove('hidden');
+      }
+    }
+  };
+  
+  async function loadScratchpadCount() {
+    try {
+      const token = localStorage.getItem('authToken') || localStorage.getItem('fundlens_token');
+      if (!token) return;
+      
+      const response = await fetch(`${window.API_BASE_URL || ''}/research/notebooks?limit=1`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (!response.ok) return;
+      
+      const data = await response.json();
+      if (data.data && data.data.length > 0) {
+        const notebookId = data.data[0].id;
+        
+        // Get notebook details with insights
+        const detailResponse = await fetch(
+          `${window.API_BASE_URL || ''}/research/notebooks/${notebookId}`,
+          { headers: { 'Authorization': `Bearer ${token}` } }
+        );
+        
+        if (detailResponse.ok) {
+          const detailData = await detailResponse.json();
+          const count = detailData.data.insights?.length || 0;
+          researchNav.scratchpadCount = count;
+          
+          const badge = document.getElementById('scratchpad-count-badge');
+          if (badge && count > 0) {
+            badge.textContent = count;
+            badge.classList.remove('hidden');
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load scratchpad count:', error);
+    }
+  }
+  
+  function setupNavEventListeners() {
+    // Scratchpad button
+    const scratchpadBtn = document.getElementById('nav-scratchpad');
+    if (scratchpadBtn) {
+      scratchpadBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        openScratchpadPanel();
+      });
+    }
+    
+    // IC Memo button
+    const icMemoBtn = document.getElementById('nav-ic-memo');
+    if (icMemoBtn) {
+      icMemoBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        openICMemoExport();
+      });
+    }
+  }
+  
+  function toggleResearchHelp() {
+    const helpPanel = document.getElementById('research-help-panel');
+    if (helpPanel) {
+      helpPanel.classList.toggle('hidden');
+    }
+  }
+  
+  function openScratchpadPanel() {
+    // If on research page with Alpine.js, trigger scratchpad panel
+    if (window.Alpine && window.Alpine.store) {
+      // Try to find Alpine component and toggle scratchpad
+      const event = new CustomEvent('toggle-scratchpad');
+      window.dispatchEvent(event);
+    } else {
+      // Navigate to research page with scratchpad open
+      window.location.href = '/app/research/index.html?openScratchpad=true';
+    }
+  }
+  
+  function openICMemoExport() {
+    // Show IC Memo export modal
+    if (typeof window.showICMemoModal !== 'undefined') {
+      window.showICMemoModal();
+    } else {
+      // For now, show coming soon message
+      alert('IC Memo Export\n\nExport your research and scratchpad items into a formatted Investment Committee memo.\n\nComing soon!');
+    }
+  }
+  
+  // Auto-open scratchpad if URL parameter present
+  document.addEventListener('DOMContentLoaded', () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('openScratchpad') === 'true') {
+      setTimeout(() => {
+        openScratchpadPanel();
+      }, 500);
+    }
+  });
+</script>

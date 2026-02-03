@@ -1,0 +1,19 @@
+{
+  "name": "bedrock-kb-sync-lambda",
+  "version": "1.0.0",
+  "description": "Lambda function to auto-sync S3 uploads to Bedrock Knowledge Base",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "package": "npm run build && cd dist && zip -r ../lambda.zip .",
+    "deploy": "npm run package && aws lambda update-function-code --function-name bedrock-kb-sync --zip-file fileb://lambda.zip"
+  },
+  "dependencies": {
+    "@aws-sdk/client-bedrock-agent": "^3.400.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.119",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}

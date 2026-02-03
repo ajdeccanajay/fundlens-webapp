@@ -1,0 +1,406 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Enterprise-Grade Bedrock KB Sync - S3 triggers Lambda with DLQ, retry, and monitoring'
+
+Parameters:
+  BedrockKBId:
+    Type: String
+    Default: 'NB5XNMHBQT'
+    Description: Bedrock Knowledge Base ID
+  
+  BedrockDataSourceId:
+    Type: String
+    Default: 'OQMSFOE5SL'
+    Description: Bedrock Data Source ID
+  
+  S3BucketName:
+    Type: String
+    Default: 'fundlens-bedrock-chunks'
+    Description: S3 bucket containing chunks for Bedrock KB
+  
+  DebounceSeconds:
+    Type: Number
+    Default: 30
+    Description: Seconds to wait before triggering ingestion (debounce batch uploads)
+  
+  AlertEmail:
+    Type: String
+    Default: ''
+    Description: Email address for failure alerts (optional)
+
+Resources:
+  # Dead Letter Queue for failed Lambda invocations
+  BedrockKBSyncDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: bedrock-kb-sync-dlq
+      MessageRetentionPeriod: 1209600  # 14 days
+      Tags:
+        - Key: Project
+          Value: FundLens
+        - Key: Component
+          Value: BedrockKBSync
+  # IAM Role for Lambda
+  BedrockKBSyncLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: bedrock-kb-sync-lambda-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: BedrockKBSyncPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # Bedrock Agent permissions
+              - Effect: Allow
+                Action:
+                  - bedrock:StartIngestionJob
+                  - bedrock:GetIngestionJob
+                  - bedrock:ListIngestionJobs
+                Resource:
+                  - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/${BedrockKBId}'
+              # S3 read permissions (for event details)
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                Resource:
+                  - !Sub 'arn:aws:s3:::${S3BucketName}/*'
+              # SQS permissions for DLQ
+              - Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                Resource:
+                  - !GetAtt BedrockKBSyncDLQ.Arn
+              # CloudWatch Logs
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+
+  # Lambda Function
+  BedrockKBSyncLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: bedrock-kb-sync
+      Description: Enterprise-grade auto-sync S3 uploads to Bedrock Knowledge Base
+      Runtime: nodejs18.x
+      Handler: index.handler
+      Role: !GetAtt BedrockKBSyncLambdaRole.Arn
+      Timeout: 900  # 15 minutes max for waiting on ingestion
+      MemorySize: 512  # Increased for better performance
+      ReservedConcurrentExecutions: 5  # Limit concurrent executions to prevent throttling
+      DeadLetterConfig:
+        TargetArn: !GetAtt BedrockKBSyncDLQ.Arn
+      Environment:
+        Variables:
+          BEDROCK_KB_ID: !Ref BedrockKBId
+          BEDROCK_DATA_SOURCE_ID: !Ref BedrockDataSourceId
+          DEBOUNCE_SECONDS: !Ref DebounceSeconds
+          WAIT_FOR_COMPLETION: 'true'  # Enterprise mode: wait for completion
+      Code:
+        ZipFile: |
+          // Placeholder - deploy actual code via CI/CD
+          // See infrastructure/lambda/bedrock-kb-sync/index.ts for full implementation
+          exports.handler = async (event) => {
+            console.log('Event:', JSON.stringify(event));
+            return { statusCode: 200 };
+          };
+      Tags:
+        - Key: Project
+          Value: FundLens
+        - Key: Component
+          Value: BedrockKBSync
+        - Key: Environment
+          Value: Production
+
+  # Lambda Permission for S3
+  S3InvokeLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref BedrockKBSyncLambda
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceArn: !Sub 'arn:aws:s3:::${S3BucketName}'
+      SourceAccount: !Ref AWS::AccountId
+
+  # S3 Bucket Notification Configuration
+  # Note: This requires the bucket to already exist
+  # If creating a new bucket, add the NotificationConfiguration directly
+  S3BucketNotificationCustomResource:
+    Type: Custom::S3BucketNotification
+    DependsOn: S3InvokeLambdaPermission
+    Properties:
+      ServiceToken: !GetAtt S3NotificationConfigLambda.Arn
+      BucketName: !Ref S3BucketName
+      LambdaArn: !GetAtt BedrockKBSyncLambda.Arn
+
+  # Helper Lambda to configure S3 notifications on existing bucket
+  S3NotificationConfigLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: S3NotificationConfig
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutBucketNotification
+                  - s3:GetBucketNotification
+                Resource: !Sub 'arn:aws:s3:::${S3BucketName}'
+
+  S3NotificationConfigLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: s3-notification-config
+      Runtime: python3.11
+      Handler: index.handler
+      Role: !GetAtt S3NotificationConfigLambdaRole.Arn
+      Timeout: 60
+      Code:
+        ZipFile: |
+          import boto3
+          import cfnresponse
+          
+          def handler(event, context):
+              try:
+                  bucket = event['ResourceProperties']['BucketName']
+                  lambda_arn = event['ResourceProperties']['LambdaArn']
+                  
+                  if event['RequestType'] in ['Create', 'Update']:
+                      s3 = boto3.client('s3')
+                      s3.put_bucket_notification_configuration(
+                          Bucket=bucket,
+                          NotificationConfiguration={
+                              'LambdaFunctionConfigurations': [{
+                                  'LambdaFunctionArn': lambda_arn,
+                                  'Events': ['s3:ObjectCreated:*'],
+                                  'Filter': {
+                                      'Key': {
+                                          'FilterRules': [
+                                              {'Name': 'prefix', 'Value': 'chunks/'},
+                                              {'Name': 'suffix', 'Value': '.txt'}
+                                          ]
+                                      }
+                                  }
+                              }]
+                          }
+                      )
+                  
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+              except Exception as e:
+                  print(f'Error: {e}')
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {'Error': str(e)})
+
+  # CloudWatch Log Group
+  BedrockKBSyncLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${BedrockKBSyncLambda}'
+      RetentionInDays: 14
+
+  # CloudWatch Alarm for failures
+  BedrockKBSyncErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: bedrock-kb-sync-errors
+      AlarmDescription: Alert when Bedrock KB sync Lambda has errors
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref BedrockKBSyncLambda
+      AlarmActions:
+        - !If [HasAlertEmail, !Ref AlertTopic, !Ref 'AWS::NoValue']
+
+  # CloudWatch Alarm for DLQ messages (critical failures)
+  BedrockKBSyncDLQAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: bedrock-kb-sync-dlq-messages
+      AlarmDescription: CRITICAL - Messages in DLQ indicate KB sync failures that need investigation
+      MetricName: ApproximateNumberOfMessagesVisible
+      Namespace: AWS/SQS
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt BedrockKBSyncDLQ.QueueName
+      AlarmActions:
+        - !If [HasAlertEmail, !Ref AlertTopic, !Ref 'AWS::NoValue']
+
+  # CloudWatch Alarm for throttling
+  BedrockKBSyncThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: bedrock-kb-sync-throttles
+      AlarmDescription: Alert when Lambda is being throttled
+      MetricName: Throttles
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref BedrockKBSyncLambda
+      AlarmActions:
+        - !If [HasAlertEmail, !Ref AlertTopic, !Ref 'AWS::NoValue']
+
+  # SNS Topic for alerts (optional)
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Condition: HasAlertEmail
+    Properties:
+      TopicName: bedrock-kb-sync-alerts
+      DisplayName: Bedrock KB Sync Alerts
+
+  AlertSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasAlertEmail
+    Properties:
+      TopicArn: !Ref AlertTopic
+      Protocol: email
+      Endpoint: !Ref AlertEmail
+
+  # CloudWatch Dashboard for monitoring
+  BedrockKBSyncDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: BedrockKBSync-Monitoring
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "title": "Lambda Invocations & Errors",
+                "metrics": [
+                  ["AWS/Lambda", "Invocations", "FunctionName", "${BedrockKBSyncLambda}"],
+                  [".", "Errors", ".", "."],
+                  [".", "Throttles", ".", "."]
+                ],
+                "period": 300,
+                "stat": "Sum",
+                "region": "${AWS::Region}"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "title": "Lambda Duration",
+                "metrics": [
+                  ["AWS/Lambda", "Duration", "FunctionName", "${BedrockKBSyncLambda}", {"stat": "Average"}],
+                  ["...", {"stat": "Maximum"}],
+                  ["...", {"stat": "p99"}]
+                ],
+                "period": 300,
+                "region": "${AWS::Region}"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 6,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "title": "DLQ Messages",
+                "metrics": [
+                  ["AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", "bedrock-kb-sync-dlq"],
+                  [".", "NumberOfMessagesSent", ".", "."]
+                ],
+                "period": 300,
+                "stat": "Sum",
+                "region": "${AWS::Region}"
+              }
+            },
+            {
+              "type": "log",
+              "x": 12,
+              "y": 6,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "title": "Recent Errors",
+                "query": "SOURCE '/aws/lambda/${BedrockKBSyncLambda}' | fields @timestamp, @message | filter level = 'ERROR' | sort @timestamp desc | limit 20",
+                "region": "${AWS::Region}"
+              }
+            }
+          ]
+        }
+
+Conditions:
+  HasAlertEmail: !Not [!Equals [!Ref AlertEmail, '']]
+
+Outputs:
+  LambdaFunctionArn:
+    Description: ARN of the Bedrock KB Sync Lambda function
+    Value: !GetAtt BedrockKBSyncLambda.Arn
+    Export:
+      Name: BedrockKBSyncLambdaArn
+
+  LambdaRoleArn:
+    Description: ARN of the Lambda execution role
+    Value: !GetAtt BedrockKBSyncLambdaRole.Arn
+
+  LogGroupName:
+    Description: CloudWatch Log Group for Lambda
+    Value: !Ref BedrockKBSyncLogGroup
+
+  DLQUrl:
+    Description: URL of the Dead Letter Queue for failed invocations
+    Value: !Ref BedrockKBSyncDLQ
+    Export:
+      Name: BedrockKBSyncDLQUrl
+
+  DLQArn:
+    Description: ARN of the Dead Letter Queue
+    Value: !GetAtt BedrockKBSyncDLQ.Arn
+    Export:
+      Name: BedrockKBSyncDLQArn
+
+  DashboardUrl:
+    Description: URL to the CloudWatch Dashboard
+    Value: !Sub 'https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=BedrockKBSync-Monitoring'
+
+  AlertTopicArn:
+    Description: ARN of the SNS Alert Topic (if configured)
+    Condition: HasAlertEmail
+    Value: !Ref AlertTopic

@@ -1,0 +1,52 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'FundLens ACM Certificate Stack'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues:
+      - production
+      - staging
+    Description: Environment name
+
+  DomainName:
+    Type: String
+    Default: app.fundlens.ai
+    Description: Primary domain name for the application
+
+  HostedZoneId:
+    Type: String
+    Description: Route53 Hosted Zone ID for fundlens.ai
+
+Resources:
+  # ===========================================================================
+  # ACM Certificate (must be in us-east-1 for CloudFront)
+  # ===========================================================================
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref DomainName
+      SubjectAlternativeNames:
+        - '*.fundlens.ai'
+        - 'fundlens.ai'
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Ref DomainName
+          HostedZoneId: !Ref HostedZoneId
+        - DomainName: '*.fundlens.ai'
+          HostedZoneId: !Ref HostedZoneId
+        - DomainName: 'fundlens.ai'
+          HostedZoneId: !Ref HostedZoneId
+      Tags:
+        - Key: Name
+          Value: !Sub 'fundlens-${Environment}-cert'
+        - Key: Environment
+          Value: !Ref Environment
+
+Outputs:
+  CertificateArn:
+    Description: ACM Certificate ARN
+    Value: !Ref Certificate
+    Export:
+      Name: !Sub '${AWS::StackName}-CertificateArn'

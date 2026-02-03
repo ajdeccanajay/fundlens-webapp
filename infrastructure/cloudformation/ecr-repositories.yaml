@@ -1,0 +1,172 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'FundLens ECR Repositories Stack - Container Registry'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues:
+      - production
+      - staging
+    Description: Environment name
+
+  MaxImageCount:
+    Type: Number
+    Default: 10
+    Description: Maximum number of images to retain per repository
+
+Resources:
+  # ===========================================================================
+  # Backend ECR Repository
+  # ===========================================================================
+  BackendRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub 'fundlens-backend'
+      ImageTagMutability: MUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      EncryptionConfiguration:
+        EncryptionType: AES256
+      LifecyclePolicy:
+        LifecyclePolicyText: !Sub |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep last ${MaxImageCount} production images",
+                "selection": {
+                  "tagStatus": "tagged",
+                  "tagPrefixList": ["prod-"],
+                  "countType": "imageCountMoreThan",
+                  "countNumber": ${MaxImageCount}
+                },
+                "action": {
+                  "type": "expire"
+                }
+              },
+              {
+                "rulePriority": 2,
+                "description": "Keep last 5 staging images",
+                "selection": {
+                  "tagStatus": "tagged",
+                  "tagPrefixList": ["staging-"],
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 5
+                },
+                "action": {
+                  "type": "expire"
+                }
+              },
+              {
+                "rulePriority": 3,
+                "description": "Remove untagged images after 7 days",
+                "selection": {
+                  "tagStatus": "untagged",
+                  "countType": "sinceImagePushed",
+                  "countUnit": "days",
+                  "countNumber": 7
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+      Tags:
+        - Key: Name
+          Value: fundlens-backend
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Service
+          Value: backend
+
+  # ===========================================================================
+  # Python Parser ECR Repository
+  # ===========================================================================
+  PythonParserRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub 'fundlens-python-parser'
+      ImageTagMutability: MUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      EncryptionConfiguration:
+        EncryptionType: AES256
+      LifecyclePolicy:
+        LifecyclePolicyText: !Sub |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep last ${MaxImageCount} production images",
+                "selection": {
+                  "tagStatus": "tagged",
+                  "tagPrefixList": ["prod-"],
+                  "countType": "imageCountMoreThan",
+                  "countNumber": ${MaxImageCount}
+                },
+                "action": {
+                  "type": "expire"
+                }
+              },
+              {
+                "rulePriority": 2,
+                "description": "Keep last 5 staging images",
+                "selection": {
+                  "tagStatus": "tagged",
+                  "tagPrefixList": ["staging-"],
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 5
+                },
+                "action": {
+                  "type": "expire"
+                }
+              },
+              {
+                "rulePriority": 3,
+                "description": "Remove untagged images after 7 days",
+                "selection": {
+                  "tagStatus": "untagged",
+                  "countType": "sinceImagePushed",
+                  "countUnit": "days",
+                  "countNumber": 7
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+      Tags:
+        - Key: Name
+          Value: fundlens-python-parser
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Service
+          Value: python-parser
+
+Outputs:
+  BackendRepositoryUri:
+    Description: Backend ECR Repository URI
+    Value: !GetAtt BackendRepository.RepositoryUri
+    Export:
+      Name: !Sub '${AWS::StackName}-BackendRepositoryUri'
+
+  BackendRepositoryArn:
+    Description: Backend ECR Repository ARN
+    Value: !GetAtt BackendRepository.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-BackendRepositoryArn'
+
+  PythonParserRepositoryUri:
+    Description: Python Parser ECR Repository URI
+    Value: !GetAtt PythonParserRepository.RepositoryUri
+    Export:
+      Name: !Sub '${AWS::StackName}-PythonParserRepositoryUri'
+
+  PythonParserRepositoryArn:
+    Description: Python Parser ECR Repository ARN
+    Value: !GetAtt PythonParserRepository.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-PythonParserRepositoryArn'

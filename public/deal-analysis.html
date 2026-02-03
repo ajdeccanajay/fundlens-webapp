@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Deal Analysis - FundLens</title>
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  
+  <!-- Design System -->
+  <link rel="stylesheet" href="/css/design-system.css">
+  <script src="/js/theme-toggle.js"></script>
+  
+  <!-- Keep Tailwind for gradual migration -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    /* Force design system fonts */
+    * { font-family: var(--font-sans) !important; }
+    code, pre, .font-mono { font-family: var(--font-mono) !important; }
+    
+    .step-completed { background-color: #10b981; }
+    .step-running { background-color: #3b82f6; animation: pulse 2s infinite; }
+    .step-failed { background-color: #ef4444; }
+    .step-pending { background-color: #6b7280; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    .news-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+  <div class="max-w-7xl mx-auto px-4 py-6">
+    <!-- Deal Header -->
+    <div id="deal-header" class="bg-white rounded-lg shadow-sm p-6 mb-6">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 id="deal-name" class="text-2xl font-bold text-gray-800">Loading...</h2>
+          <p id="deal-ticker" class="text-lg text-blue-600 font-semibold mt-1"></p>
+        </div>
+        <div class="flex items-center space-x-4">
+          <span id="deal-status" class="px-4 py-2 rounded-full text-sm font-medium"></span>
+          <button id="analyze-btn" onclick="startAnalysis()" 
+                  class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition hidden">
+            <i class="fas fa-play mr-2"></i>Start Analysis
+          </button>
+          <a id="view-results-btn" href="#" 
+             class="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition hidden">
+            <i class="fas fa-chart-bar mr-2"></i>View Results
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Content Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <!-- Pipeline Progress -->
+      <div class="bg-white rounded-lg shadow-sm p-6">
+        <h3 class="text-lg font-semibold text-gray-800 mb-4">
+          <i class="fas fa-tasks text-blue-600 mr-2"></i>Analysis Pipeline
+        </h3>
+        
+        <div id="pipeline-steps" class="space-y-4">
+          <!-- Steps will be populated dynamically -->
+        </div>
+
+        <div id="pipeline-message" class="mt-4 p-4 bg-gray-50 rounded-lg hidden">
+          <p id="current-message" class="text-gray-600"></p>
+        </div>
+      </div>
+
+      <!-- News Feed -->
+      <div class="bg-white rounded-lg shadow-sm p-6">
+        <h3 class="text-lg font-semibold text-gray-800 mb-4">
+          <i class="fas fa-newspaper text-blue-600 mr-2"></i>Latest News
+          <span id="news-count" class="text-sm font-normal text-gray-500 ml-2"></span>
+        </h3>
+        
+        <div id="news-container" class="space-y-3 max-h-[600px] overflow-y-auto">
+          <div class="text-center py-8 text-gray-500">
+            <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
+            <p>Loading news...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let dealId = null;
+    let pollInterval = null;
+    let shouldAutoStart = false; // Flag for auto-starting pipeline
+
+    // Get deal ID and autostart flag from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    dealId = urlParams.get('id');
+    shouldAutoStart = urlParams.get('autostart') === 'true';
+
+    // Clean URL by removing autostart parameter (prevent re-triggering on refresh)
+    if (shouldAutoStart) {
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete('autostart');
+      window.history.replaceState({}, document.title, cleanUrl.toString());
+    }
+
+    if (!dealId) {
+      alert('No deal ID provided');
+      window.location.href = '/app/deals/index.html';
+    }
+
+    // Get auth token
+    function getAuthHeaders() {
+      const token = localStorage.getItem('fundlens_token');
+      if (!token) {
+        window.location.href = '/login.html';
+        return null;
+      }
+      return {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+    }
+
+    // Initialize page
+    document.addEventListener('DOMContentLoaded', () => {
+      // Check authentication first
+      const token = localStorage.getItem('fundlens_token');
+      if (!token) {
+        window.location.href = '/login.html';
+        return;
+      }
+      loadDealDetails();
+    });
+
+    async function loadDealDetails() {
+      try {
+        const headers = getAuthHeaders();
+        if (!headers) return;
+        
+        const response = await fetch(`/api/deals/${dealId}`, { headers });
+        const result = await response.json();
+
+        // Handle HTTP errors (404, 401, etc.)
+        if (!response.ok) {
+          throw new Error(result.message || `HTTP ${response.status}`);
+        }
+
+        if (!result.success) {
+          throw new Error(result.message || result.error || 'Unknown error');
+        }
+
+        const deal = result.data;
+        updateDealHeader(deal);
+        
+        // AUTO-START LOGIC: If autostart flag is set AND deal is in draft status, start pipeline immediately
+        if (shouldAutoStart && deal.status === 'draft') {
+          console.log('Auto-starting pipeline for newly created deal');
+          shouldAutoStart = false; // Prevent re-triggering
+          await startAnalysis();
+          return; // startAnalysis() will handle the rest
+        }
+        
+        // Render page state based purely on deal status from database
+        // No auto-triggering - user must explicitly click "Start Analysis"
+        if (deal.status === 'processing') {
+          // Deal is currently processing - show progress and poll for updates
+          startPolling();
+        } else if (deal.status === 'ready') {
+          // Deal is complete - show completed state with "View Results" button
+          showCompletedState(deal);
+        } else if (deal.status === 'draft') {
+          // Deal is in draft state - show "Start Analysis" button
+          showReadyToAnalyze(deal);
+        } else if (deal.status === 'error') {
+          // Deal failed - show error state with "Try Again" button
+          showPipelineError();
+          document.getElementById('analyze-btn').classList.remove('hidden');
+          document.getElementById('analyze-btn').disabled = false;
+          document.getElementById('analyze-btn').innerHTML = '<i class="fas fa-redo mr-2"></i>Try Again';
+        } else {
+          // Unknown status - default to ready to analyze
+          showReadyToAnalyze(deal);
+        }
+
+        // Load news if available
+        if (deal.newsData && deal.newsData.length > 0) {
+          renderNews(deal.newsData);
+        } else if (deal.ticker) {
+          loadNews(deal.ticker);
+        }
+
+      } catch (error) {
+        console.error('Failed to load deal:', error);
+        alert('Failed to load deal details: ' + error.message);
+        window.location.href = '/app/deals/index.html';
+      }
+    }
+
+    function updateDealHeader(deal) {
+      document.getElementById('deal-name').textContent = deal.name;
+      document.getElementById('deal-ticker').textContent = deal.ticker || 'No ticker';
+      
+      // Update navigation breadcrumb
+      updateNavigationTicker(deal.ticker || deal.name);
+      
+      const statusEl = document.getElementById('deal-status');
+      const statusColors = {
+        'draft': 'bg-gray-100 text-gray-800',
+        'processing': 'bg-blue-100 text-blue-800',
+        'ready': 'bg-green-100 text-green-800',
+        'error': 'bg-red-100 text-red-800',
+      };
+      statusEl.className = `px-4 py-2 rounded-full text-sm font-medium ${statusColors[deal.status] || statusColors.draft}`;
+      statusEl.textContent = deal.status.charAt(0).toUpperCase() + deal.status.slice(1);
+    }
+
+    function showReadyToAnalyze(deal) {
+      document.getElementById('analyze-btn').classList.remove('hidden');
+      document.getElementById('view-results-btn').classList.add('hidden');
+      renderPipelineSteps([
+        { id: 'A', name: 'Download SEC Filings', status: 'pending', message: 'Ready to start' },
+        { id: 'B', name: 'Parse & Store Metrics', status: 'pending', message: 'Waiting...' },
+        { id: 'C', name: 'Chunk & Store Narratives', status: 'pending', message: 'Waiting...' },
+        { id: 'D', name: 'Sync to Bedrock KB', status: 'pending', message: 'Waiting...' },
+        { id: 'E', name: 'Verify RAG Flow', status: 'pending', message: 'Waiting...' },
+      ]);
+    }
+
+    function showCompletedState(deal) {
+      document.getElementById('analyze-btn').classList.add('hidden');
+      const viewBtn = document.getElementById('view-results-btn');
+      viewBtn.classList.remove('hidden');
+      viewBtn.href = `/app/deals/workspace.html?ticker=${deal.ticker}`;
+      
+      renderPipelineSteps([
+        { id: 'A', name: 'Download SEC Filings', status: 'completed', message: 'Complete' },
+        { id: 'B', name: 'Parse & Store Metrics', status: 'completed', message: 'Complete' },
+        { id: 'C', name: 'Chunk & Store Narratives', status: 'completed', message: 'Complete' },
+        { id: 'D', name: 'Sync to Bedrock KB', status: 'completed', message: 'Complete' },
+        { id: 'E', name: 'Verify RAG Flow', status: 'completed', message: 'Complete' },
+      ]);
+    }
+
+    async function startAnalysis() {
+      try {
+        const headers = getAuthHeaders();
+        if (!headers) return;
+        
+        document.getElementById('analyze-btn').disabled = true;
+        document.getElementById('analyze-btn').innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Starting...';
+
+        const response = await fetch(`/api/deals/${dealId}/analyze`, {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify({ years: 5 }),
+        });
+
+        const result = await response.json();
+
+        if (!result.success) {
+          throw new Error(result.message || result.error || 'Failed to start analysis');
+        }
+
+        // Check if pipeline failed immediately (system not ready)
+        if (result.data?.overallStatus === 'failed') {
+          showServiceUnavailable();
+          document.getElementById('analyze-btn').disabled = false;
+          document.getElementById('analyze-btn').innerHTML = '<i class="fas fa-redo mr-2"></i>Try Again';
+          return;
+        }
+
+        document.getElementById('analyze-btn').classList.add('hidden');
+        startPolling();
+
+      } catch (error) {
+        console.error('Failed to start analysis:', error);
+        showServiceUnavailable();
+        document.getElementById('analyze-btn').disabled = false;
+        document.getElementById('analyze-btn').innerHTML = '<i class="fas fa-redo mr-2"></i>Try Again';
+      }
+    }
+
+    function showServiceUnavailable() {
+      const container = document.getElementById('pipeline-steps');
+      
+      container.innerHTML = `
+        <div class="bg-amber-50 border border-amber-200 rounded-lg p-6 text-center">
+          <div class="flex justify-center mb-4">
+            <i class="fas fa-clock text-amber-500 text-4xl"></i>
+          </div>
+          <h4 class="font-semibold text-amber-800 text-lg mb-2">Service Temporarily Unavailable</h4>
+          <p class="text-amber-700 mb-4">
+            Our analysis service is currently unavailable. Please try again in a few moments.
+          </p>
+          <p class="text-sm text-gray-500">
+            If this issue persists, please contact support.
+          </p>
+        </div>
+      `;
+      
+      // Show message area
+      const messageEl = document.getElementById('pipeline-message');
+      const currentMsgEl = document.getElementById('current-message');
+      messageEl.classList.remove('hidden');
+      currentMsgEl.textContent = 'Click "Try Again" to retry the analysis.';
+    }
+
+    function showPipelineError() {
+      const container = document.getElementById('pipeline-steps');
+      
+      container.innerHTML = `
+        <div class="bg-amber-50 border border-amber-200 rounded-lg p-6 text-center">
+          <div class="flex justify-center mb-4">
+            <i class="fas fa-exclamation-circle text-amber-500 text-4xl"></i>
+          </div>
+          <h4 class="font-semibold text-amber-800 text-lg mb-2">Analysis Interrupted</h4>
+          <p class="text-amber-700 mb-4">
+            We encountered an issue while processing your analysis. Please try again.
+          </p>
+          <p class="text-sm text-gray-500">
+            Your data is safe. Click "Try Again" to resume.
+          </p>
+        </div>
+      `;
+      
+      // Update deal status display
+      const statusEl = document.getElementById('deal-status');
+      statusEl.className = 'px-4 py-2 rounded-full text-sm font-medium bg-amber-100 text-amber-800';
+      statusEl.textContent = 'Interrupted';
+    }
+
+    function startPolling() {
+      pollPipelineStatus();
+      pollInterval = setInterval(pollPipelineStatus, 3000);
+    }
+
+    async function pollPipelineStatus() {
+      try {
+        const headers = getAuthHeaders();
+        if (!headers) {
+          clearInterval(pollInterval);
+          return;
+        }
+        
+        const response = await fetch(`/api/deals/${dealId}/pipeline-status`, { headers });
+        const result = await response.json();
+
+        if (!result.success) {
+          throw new Error(result.message);
+        }
+
+        const { pipeline, deal } = result.data;
+        
+        // Update deal header
+        updateDealHeader(deal);
+
+        // Update pipeline steps
+        if (pipeline && pipeline.steps) {
+          renderPipelineSteps(pipeline.steps);
+          
+          // Show current message (user-friendly version)
+          const messageEl = document.getElementById('pipeline-message');
+          const currentMsgEl = document.getElementById('current-message');
+          messageEl.classList.remove('hidden');
+          currentMsgEl.textContent = getUserFriendlyMessage(deal.processingMessage) || 'Processing...';
+        }
+
+        // Update news if available
+        if (pipeline && pipeline.newsArticles) {
+          renderNews(pipeline.newsArticles);
+        } else if (deal.newsData) {
+          renderNews(deal.newsData);
+        }
+
+        // Check if completed or failed
+        if (deal.status === 'ready') {
+          clearInterval(pollInterval);
+          showCompletedState(deal);
+        } else if (deal.status === 'error') {
+          clearInterval(pollInterval);
+          showPipelineError();
+          document.getElementById('analyze-btn').classList.remove('hidden');
+          document.getElementById('analyze-btn').disabled = false;
+          document.getElementById('analyze-btn').innerHTML = '<i class="fas fa-redo mr-2"></i>Try Again';
+        }
+
+      } catch (error) {
+        console.error('Failed to poll status:', error);
+        // Don't stop polling on transient errors
+      }
+    }
+
+    function getUserFriendlyMessage(technicalMessage) {
+      if (!technicalMessage) return 'Processing your request...';
+      
+      // Map technical messages to user-friendly ones
+      const msg = technicalMessage.toLowerCase();
+      
+      if (msg.includes('preflight') || msg.includes('cannot start')) {
+        return 'Preparing analysis service...';
+      }
+      if (msg.includes('downloading') || msg.includes('sec filing')) {
+        return 'Downloading financial documents...';
+      }
+      if (msg.includes('parsing') || msg.includes('metrics')) {
+        return 'Analyzing financial data...';
+      }
+      if (msg.includes('chunk') || msg.includes('narrative')) {
+        return 'Processing document content...';
+      }
+      if (msg.includes('sync') || msg.includes('bedrock') || msg.includes('kb')) {
+        return 'Indexing for search...';
+      }
+      if (msg.includes('verify') || msg.includes('rag')) {
+        return 'Finalizing analysis...';
+      }
+      if (msg.includes('complete') || msg.includes('ready')) {
+        return 'Analysis complete!';
+      }
+      if (msg.includes('failed') || msg.includes('error')) {
+        return 'Processing interrupted. Please try again.';
+      }
+      
+      return 'Processing...';
+    }
+
+    function renderPipelineSteps(steps) {
+      const container = document.getElementById('pipeline-steps');
+      
+      // Map step names to user-friendly versions
+      const friendlyStepNames = {
+        'Download SEC Filings': 'Downloading Documents',
+        'Parse & Store Metrics': 'Analyzing Financials',
+        'Chunk & Store Narratives': 'Processing Content',
+        'Sync to Bedrock KB': 'Indexing Data',
+        'Verify RAG Flow': 'Finalizing'
+      };
+      
+      container.innerHTML = steps.map(step => {
+        const friendlyName = friendlyStepNames[step.name] || step.name;
+        const friendlyMessage = getUserFriendlyStepMessage(step);
+        
+        return `
+        <div class="flex items-center space-x-4">
+          <div class="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white font-bold step-${step.status}">
+            ${step.status === 'completed' ? '<i class="fas fa-check"></i>' : 
+              step.status === 'running' ? '<i class="fas fa-spinner fa-spin"></i>' :
+              step.status === 'failed' ? '<i class="fas fa-times"></i>' : step.id}
+          </div>
+          <div class="flex-1">
+            <div class="flex items-center justify-between">
+              <span class="font-medium text-gray-800">${friendlyName}</span>
+              <span class="text-sm ${step.status === 'completed' ? 'text-green-600' : 
+                                    step.status === 'running' ? 'text-blue-600' :
+                                    step.status === 'failed' ? 'text-amber-600' : 'text-gray-500'}">
+                ${friendlyMessage}
+              </span>
+            </div>
+            ${step.status === 'running' ? `
+              <div class="mt-1 h-1 bg-gray-200 rounded-full overflow-hidden">
+                <div class="h-full bg-blue-600 rounded-full animate-pulse" style="width: 60%"></div>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      `}).join('');
+    }
+
+    function getUserFriendlyStepMessage(step) {
+      if (step.status === 'completed') return 'Done';
+      if (step.status === 'pending') return 'Waiting';
+      if (step.status === 'failed') return 'Will retry';
+      
+      // Running status - simplify technical messages
+      const msg = (step.message || '').toLowerCase();
+      
+      if (msg.includes('downloading') || msg.includes('checking')) return 'In progress...';
+      if (msg.includes('calculating') || msg.includes('parsing')) return 'Analyzing...';
+      if (msg.includes('uploading') || msg.includes('sync')) return 'Syncing...';
+      if (msg.includes('testing') || msg.includes('verify')) return 'Verifying...';
+      
+      return 'Processing...';
+    }
+
+    async function loadNews(ticker) {
+      try {
+        const headers = getAuthHeaders();
+        if (!headers) return;
+        
+        const response = await fetch(`/api/market-data/news/${ticker}?limit=50`, { headers });
+        const result = await response.json();
+
+        if (result.success && result.data) {
+          renderNews(result.data);
+        }
+      } catch (error) {
+        console.error('Failed to load news:', error);
+      }
+    }
+
+    function renderNews(articles) {
+      const container = document.getElementById('news-container');
+      document.getElementById('news-count').textContent = `(${articles.length} articles)`;
+
+      if (!articles || articles.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-8 text-gray-500">
+            <i class="fas fa-newspaper text-2xl mb-2"></i>
+            <p>No news articles available</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = articles.slice(0, 50).map(article => `
+        <a href="${article.url}" target="_blank" 
+           class="block p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition news-card">
+          <div class="flex items-start space-x-3">
+            ${article.image ? `
+              <img src="${article.image}" alt="" class="w-16 h-16 object-cover rounded flex-shrink-0">
+            ` : `
+              <div class="w-16 h-16 bg-gray-200 rounded flex items-center justify-center flex-shrink-0">
+                <i class="fas fa-newspaper text-gray-400"></i>
+              </div>
+            `}
+            <div class="flex-1 min-w-0">
+              <h4 class="font-medium text-gray-800 text-sm line-clamp-2">${article.title}</h4>
+              <p class="text-xs text-gray-500 mt-1">
+                ${article.source || 'News'} • ${formatDate(article.publishedAt || article.datetime)}
+              </p>
+              ${article.sentiment ? `
+                <span class="inline-block mt-1 px-2 py-0.5 text-xs rounded ${
+                  article.sentiment === 'positive' ? 'bg-green-100 text-green-700' :
+                  article.sentiment === 'negative' ? 'bg-red-100 text-red-700' :
+                  'bg-gray-100 text-gray-700'
+                }">
+                  ${article.sentiment}
+                </span>
+              ` : ''}
+            </div>
+          </div>
+        </a>
+      `).join('');
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '';
+      const date = new Date(dateStr);
+      const now = new Date();
+      const diffMs = now - date;
+      const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+      
+      if (diffHours < 1) return 'Just now';
+      if (diffHours < 24) return `${diffHours}h ago`;
+      if (diffHours < 48) return 'Yesterday';
+      return date.toLocaleDateString();
+    }
+    
+    // Update navigation with ticker after deal loads
+    function updateNavigationTicker(ticker) {
+      // Navigation removed - function kept for compatibility
+    }
+    
+  </script>
+</body>
+</html>

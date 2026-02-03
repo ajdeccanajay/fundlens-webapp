@@ -1,0 +1,31 @@
+{
+  "ticker": "PG",
+  "companyName": "The Procter & Gamble Company",
+  "filingType": "10-K",
+  "fiscalYear": "2024",
+  "statementType": "income_statement",
+  "source": "SEC EDGAR - pg-20240630.htm",
+  "expectedLineItems": [
+    { "displayName": "NET SALES", "isHeader": true },
+    { "displayName": "Net sales", "normalizedMetric": "revenue" },
+    { "displayName": "COSTS AND EXPENSES", "isHeader": true },
+    { "displayName": "Cost of products sold", "normalizedMetric": "cost_of_products_sold", "indent": 1 },
+    { "displayName": "Selling, general and administrative expense", "normalizedMetric": "selling_general_administrative", "indent": 1 },
+    { "displayName": "Total costs and expenses", "normalizedMetric": "operating_expenses" },
+    { "displayName": "Operating income", "normalizedMetric": "operating_income" },
+    { "displayName": "Interest expense", "normalizedMetric": "interest_expense", "indent": 1 },
+    { "displayName": "Interest income", "normalizedMetric": "interest_income", "indent": 1 },
+    { "displayName": "Other non-operating income (expense), net", "normalizedMetric": "other_non_operating_income", "indent": 1 },
+    { "displayName": "Total non-operating income (expense)", "normalizedMetric": "total_non_operating" },
+    { "displayName": "Earnings before income taxes", "normalizedMetric": "income_before_taxes" },
+    { "displayName": "Income taxes", "normalizedMetric": "income_tax_expense" },
+    { "displayName": "Net earnings", "normalizedMetric": "net_income" },
+    { "displayName": "Less: Net earnings attributable to noncontrolling interests", "normalizedMetric": "net_income_noncontrolling", "indent": 1 },
+    { "displayName": "Net earnings attributable to Procter & Gamble", "normalizedMetric": "net_income_attributable" },
+    { "displayName": "EARNINGS PER SHARE", "isHeader": true },
+    { "displayName": "Basic net earnings per common share", "normalizedMetric": "earnings_per_share_basic" },
+    { "displayName": "Diluted net earnings per common share", "normalizedMetric": "earnings_per_share_diluted" },
+    { "displayName": "Dividends per common share", "normalizedMetric": "dividends_per_share" }
+  ],
+  "notes": "Based on The Procter & Gamble Company 10-K for fiscal year ended June 30, 2024. Consolidated Statements of Earnings structure."
+}

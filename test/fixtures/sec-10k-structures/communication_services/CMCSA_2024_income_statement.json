@@ -1,0 +1,32 @@
+{
+  "ticker": "CMCSA",
+  "companyName": "Comcast Corporation",
+  "filingType": "10-K",
+  "fiscalYear": "2024",
+  "statementType": "income_statement",
+  "source": "SEC EDGAR - Page 61",
+  "expectedLineItems": [
+    { "displayName": "REVENUE", "isHeader": true },
+    { "displayName": "Revenue", "normalizedMetric": "revenue" },
+    { "displayName": "COSTS AND EXPENSES", "isHeader": true },
+    { "displayName": "Programming and production", "normalizedMetric": "programming_and_production", "indent": 1 },
+    { "displayName": "Marketing and promotion", "normalizedMetric": "marketing_and_promotion", "indent": 1 },
+    { "displayName": "Other operating and administrative", "normalizedMetric": "other_operating_and_administrative", "indent": 1 },
+    { "displayName": "Depreciation", "normalizedMetric": "depreciation", "indent": 1 },
+    { "displayName": "Amortization", "normalizedMetric": "amortization", "indent": 1 },
+    { "displayName": "Goodwill and long-lived asset impairments", "normalizedMetric": "goodwill_and_long_lived_asset_impairments", "indent": 1 },
+    { "displayName": "Total costs and expenses", "normalizedMetric": "operating_expenses" },
+    { "displayName": "Operating income", "normalizedMetric": "operating_income" },
+    { "displayName": "Interest expense", "normalizedMetric": "interest_expense", "indent": 1 },
+    { "displayName": "Investment and other income (loss), net", "normalizedMetric": "other_income_expense", "indent": 1 },
+    { "displayName": "Income before income taxes", "normalizedMetric": "income_before_taxes" },
+    { "displayName": "Income tax expense", "normalizedMetric": "income_tax_expense" },
+    { "displayName": "Net income", "normalizedMetric": "net_income" },
+    { "displayName": "Less: Net income (loss) attributable to noncontrolling interests", "normalizedMetric": "noncontrolling_interest", "indent": 1 },
+    { "displayName": "Net income attributable to Comcast Corporation", "normalizedMetric": "net_income_attributable" },
+    { "displayName": "PER SHARE DATA", "isHeader": true },
+    { "displayName": "Basic earnings per common share", "normalizedMetric": "earnings_per_share_basic" },
+    { "displayName": "Diluted earnings per common share", "normalizedMetric": "earnings_per_share_diluted" }
+  ],
+  "notes": "Based on Comcast Corporation 10-K for fiscal year 2024. Consolidated Statement of Income structure from page 61."
+}

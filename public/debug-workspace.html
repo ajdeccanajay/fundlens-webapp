@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Workspace</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1e1e1e; color: #d4d4d4; }
+        .log { padding: 10px; margin: 5px 0; border-left: 3px solid #007acc; background: #252526; }
+        .error { border-left-color: #f48771; }
+        .success { border-left-color: #89d185; }
+        .warning { border-left-color: #dcdcaa; }
+        button { padding: 10px 20px; margin: 10px 5px 10px 0; background: #007acc; color: white; border: none; cursor: pointer; }
+        button:hover { background: #005a9e; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Workspace Debugger</h1>
+    
+    <div>
+        <button onclick="clearStorage()">Clear LocalStorage</button>
+        <button onclick="checkToken()">Check Token</button>
+        <button onclick="testAPI()">Test API</button>
+        <button onclick="openWorkspace()">Open Workspace</button>
+    </div>
+    
+    <div id="logs"></div>
+    
+    <script>
+        function log(message, type = 'log') {
+            const div = document.createElement('div');
+            div.className = `log ${type}`;
+            div.textContent = new Date().toLocaleTimeString() + ' - ' + message;
+            document.getElementById('logs').appendChild(div);
+            console.log(message);
+        }
+        
+        function clearStorage() {
+            localStorage.clear();
+            log('✅ LocalStorage cleared', 'success');
+            log('Refresh the workspace page to generate new token', 'warning');
+        }
+        
+        function checkToken() {
+            const token = localStorage.getItem('fundlens_token');
+            if (!token) {
+                log('❌ No token found in localStorage', 'error');
+                return;
+            }
+            
+            log('✅ Token found: ' + token.substring(0, 50) + '...', 'success');
+            
+            try {
+                const parts = token.split('.');
+                if (parts.length !== 3) {
+                    log('❌ Invalid token format (should have 3 parts)', 'error');
+                    return;
+                }
+                
+                // Decode payload
+                const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+                const payload = JSON.parse(atob(base64));
+                
+                log('✅ Token decoded successfully', 'success');
+                log('Tenant ID: ' + payload['custom:tenant_id'], 'log');
+                log('User ID: ' + payload.sub, 'log');
+                log('Email: ' + payload.email, 'log');
+                log('Role: ' + payload['custom:tenant_role'], 'log');
+                
+                if (payload['custom:tenant_id'] !== '00000000-0000-0000-0000-000000000000') {
+                    log('⚠️  Warning: Tenant ID is not the default UUID', 'warning');
+                }
+            } catch (e) {
+                log('❌ Failed to decode token: ' + e.message, 'error');
+            }
+        }
+        
+        async function testAPI() {
+            const token = localStorage.getItem('fundlens_token');
+            if (!token) {
+                log('❌ No token found. Clear storage and refresh workspace first.', 'error');
+                return;
+            }
+            
+            log('🧪 Testing notebooks API...', 'log');
+            
+            try {
+                const response = await fetch('http://localhost:3000/api/research/notebooks', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    log('✅ API call successful!', 'success');
+                    log('Response: ' + JSON.stringify(data), 'log');
+                } else {
+                    log('❌ API call failed: ' + response.status + ' ' + response.statusText, 'error');
+                    const text = await response.text();
+                    log('Error: ' + text, 'error');
+                }
+            } catch (e) {
+                log('❌ Network error: ' + e.message, 'error');
+            }
+        }
+        
+        function openWorkspace() {
+            window.open('http://localhost:3000/app/deals/workspace.html?ticker=AAPL', '_blank');
+            log('✅ Opening workspace in new tab...', 'success');
+            log('Check browser console for logs', 'warning');
+        }
+        
+        // Auto-check on load
+        window.onload = () => {
+            log('🚀 Debugger loaded', 'success');
+            log('Current URL: ' + window.location.href, 'log');
+            checkToken();
+        };
+    </script>
+</body>
+</html>

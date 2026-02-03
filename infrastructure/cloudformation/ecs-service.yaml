@@ -1,0 +1,210 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'FundLens ECS Service with Auto-Scaling'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues:
+      - production
+      - staging
+    Description: Environment name
+
+  VpcStackName:
+    Type: String
+    Default: fundlens-vpc-production
+    Description: Name of the VPC CloudFormation stack
+
+  SecurityGroupsStackName:
+    Type: String
+    Default: fundlens-sg-production
+    Description: Name of the Security Groups CloudFormation stack
+
+  ECSClusterStackName:
+    Type: String
+    Default: fundlens-ecs-production
+    Description: Name of the ECS Cluster CloudFormation stack
+
+  ALBStackName:
+    Type: String
+    Default: fundlens-alb-production
+    Description: Name of the ALB CloudFormation stack
+
+  DesiredCount:
+    Type: Number
+    Default: 2
+    MinValue: 2
+    MaxValue: 10
+    Description: Desired number of ECS tasks
+
+  MinCapacity:
+    Type: Number
+    Default: 2
+    Description: Minimum number of ECS tasks
+
+  MaxCapacity:
+    Type: Number
+    Default: 10
+    Description: Maximum number of ECS tasks
+
+  ScaleOutCPUThreshold:
+    Type: Number
+    Default: 70
+    Description: CPU percentage to trigger scale out
+
+  ScaleInCPUThreshold:
+    Type: Number
+    Default: 30
+    Description: CPU percentage to trigger scale in
+
+Resources:
+  # ===========================================================================
+  # ECS Service
+  # ===========================================================================
+  ECSService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: !Sub 'fundlens-${Environment}-service'
+      Cluster:
+        Fn::ImportValue: !Sub '${ECSClusterStackName}-ClusterArn'
+      TaskDefinition:
+        Fn::ImportValue: !Sub '${ECSClusterStackName}-TaskDefinitionArn'
+      DesiredCount: !Ref DesiredCount
+      LaunchType: FARGATE
+      PlatformVersion: LATEST
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+            - Fn::ImportValue: !Sub '${SecurityGroupsStackName}-ECSSecurityGroupId'
+          Subnets:
+            - Fn::ImportValue: !Sub '${VpcStackName}-PrivateSubnet1Id'
+            - Fn::ImportValue: !Sub '${VpcStackName}-PrivateSubnet2Id'
+      LoadBalancers:
+        - ContainerName: backend
+          ContainerPort: 3000
+          TargetGroupArn:
+            Fn::ImportValue: !Sub '${ALBStackName}-TargetGroupArn'
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 100
+        MaximumPercent: 200
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+      HealthCheckGracePeriodSeconds: 120
+      EnableECSManagedTags: true
+      PropagateTags: SERVICE
+      Tags:
+        - Key: Name
+          Value: !Sub 'fundlens-${Environment}-service'
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ===========================================================================
+  # Auto Scaling Target
+  # ===========================================================================
+  ServiceScalingTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      MaxCapacity: !Ref MaxCapacity
+      MinCapacity: !Ref MinCapacity
+      ResourceId: !Sub
+        - 'service/${ClusterName}/${ServiceName}'
+        - ClusterName:
+            Fn::ImportValue: !Sub '${ECSClusterStackName}-ClusterName'
+          ServiceName: !GetAtt ECSService.Name
+      RoleARN: !Sub 'arn:aws:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService'
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+
+  # ===========================================================================
+  # Scale Out Policy (CPU > 70% for 3 minutes)
+  # ===========================================================================
+  ScaleOutPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub 'fundlens-${Environment}-scale-out'
+      PolicyType: StepScaling
+      ScalingTargetId: !Ref ServiceScalingTarget
+      StepScalingPolicyConfiguration:
+        AdjustmentType: ChangeInCapacity
+        Cooldown: 180
+        MetricAggregationType: Average
+        StepAdjustments:
+          - MetricIntervalLowerBound: 0
+            MetricIntervalUpperBound: 20
+            ScalingAdjustment: 1
+          - MetricIntervalLowerBound: 20
+            ScalingAdjustment: 2
+
+  ScaleOutAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'fundlens-${Environment}-cpu-high'
+      AlarmDescription: Scale out when CPU exceeds threshold
+      MetricName: CPUUtilization
+      Namespace: AWS/ECS
+      Statistic: Average
+      Period: 60
+      EvaluationPeriods: 3
+      Threshold: !Ref ScaleOutCPUThreshold
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: ClusterName
+          Value:
+            Fn::ImportValue: !Sub '${ECSClusterStackName}-ClusterName'
+        - Name: ServiceName
+          Value: !GetAtt ECSService.Name
+      AlarmActions:
+        - !Ref ScaleOutPolicy
+
+  # ===========================================================================
+  # Scale In Policy (CPU < 30% for 10 minutes)
+  # ===========================================================================
+  ScaleInPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub 'fundlens-${Environment}-scale-in'
+      PolicyType: StepScaling
+      ScalingTargetId: !Ref ServiceScalingTarget
+      StepScalingPolicyConfiguration:
+        AdjustmentType: ChangeInCapacity
+        Cooldown: 300
+        MetricAggregationType: Average
+        StepAdjustments:
+          - MetricIntervalUpperBound: 0
+            ScalingAdjustment: -1
+
+  ScaleInAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'fundlens-${Environment}-cpu-low'
+      AlarmDescription: Scale in when CPU drops below threshold
+      MetricName: CPUUtilization
+      Namespace: AWS/ECS
+      Statistic: Average
+      Period: 60
+      EvaluationPeriods: 10
+      Threshold: !Ref ScaleInCPUThreshold
+      ComparisonOperator: LessThanThreshold
+      Dimensions:
+        - Name: ClusterName
+          Value:
+            Fn::ImportValue: !Sub '${ECSClusterStackName}-ClusterName'
+        - Name: ServiceName
+          Value: !GetAtt ECSService.Name
+      AlarmActions:
+        - !Ref ScaleInPolicy
+
+Outputs:
+  ServiceArn:
+    Description: ECS Service ARN
+    Value: !Ref ECSService
+    Export:
+      Name: !Sub '${AWS::StackName}-ServiceArn'
+
+  ServiceName:
+    Description: ECS Service Name
+    Value: !GetAtt ECSService.Name
+    Export:
+      Name: !Sub '${AWS::StackName}-ServiceName'

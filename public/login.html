@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FundLens - Sign In</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- Design System -->
+    <link rel="stylesheet" href="/css/design-system.css">
+    <script src="/js/theme-toggle.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: var(--font-sans) !important;
+        }
+
+        body {
+            font-family: var(--font-sans) !important;
+            background: linear-gradient(135deg, var(--color-navy-950) 0%, var(--color-navy-900) 50%, var(--color-navy-700) 100%) !important;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .login-container {
+            width: 100%;
+            max-width: 440px;
+        }
+
+        .login-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 48px 40px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        .logo-section {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .logo-icon {
+            width: 72px;
+            height: 72px;
+            background: var(--gradient-hero) !important;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            box-shadow: 0 10px 40px rgba(30, 90, 122, 0.4);
+        }
+
+        .logo-icon svg {
+            width: 36px;
+            height: 36px;
+            color: white;
+        }
+
+        .logo-text {
+            font-size: 28px;
+            font-weight: 700;
+            color: white !important;
+            margin-bottom: 8px;
+        }
+
+        .logo-subtitle {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        .form-label {
+            display: block;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 14px 16px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            color: white;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--color-teal-500) !important;
+            background: rgba(255, 255, 255, 0.08);
+            box-shadow: 0 0 0 4px rgba(30, 90, 122, 0.15);
+        }
+
+        .form-input::placeholder {
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        .password-wrapper {
+            position: relative;
+        }
+
+        .password-toggle {
+            position: absolute;
+            right: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.5);
+            cursor: pointer;
+            padding: 4px;
+        }
+
+        .password-toggle:hover {
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .form-options {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 28px;
+        }
+
+        .remember-me {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .remember-me input {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--color-teal-500);
+        }
+
+        .forgot-password {
+            color: var(--color-teal-400);
+            font-size: 14px;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .forgot-password:hover {
+            color: var(--color-teal-300);
+            text-decoration: underline;
+        }
+
+        .btn-signin {
+            width: 100%;
+            padding: 16px;
+            background: var(--gradient-button) !important;
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-signin:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 40px rgba(30, 90, 122, 0.4);
+        }
+
+        .btn-signin:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
+        .btn-signin .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 12px;
+            padding: 14px 16px;
+            margin-bottom: 24px;
+            display: none;
+        }
+
+        .error-message.show {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .error-message svg {
+            width: 20px;
+            height: 20px;
+            color: #ef4444;
+            flex-shrink: 0;
+        }
+
+        .error-message span {
+            color: #fca5a5;
+            font-size: 14px;
+        }
+
+        .divider {
+            display: flex;
+            align-items: center;
+            margin: 28px 0;
+        }
+
+        .divider-line {
+            flex: 1;
+            height: 1px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .divider-text {
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 12px;
+            padding: 0 16px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .help-text {
+            text-align: center;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .help-text a {
+            color: var(--color-teal-400);
+            text-decoration: none;
+        }
+
+        .help-text a:hover {
+            text-decoration: underline;
+        }
+
+        /* Forgot Password Modal */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal-card {
+            background: var(--color-navy-800) !important;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 32px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .modal-title {
+            color: white;
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.5);
+            cursor: pointer;
+            padding: 4px;
+        }
+
+        .modal-close:hover {
+            color: white;
+        }
+
+        .modal-body p {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 14px;
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+
+        .success-message {
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            border-radius: 12px;
+            padding: 14px 16px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .success-message.show {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .success-message svg {
+            width: 20px;
+            height: 20px;
+            color: #22c55e;
+            flex-shrink: 0;
+        }
+
+        .success-message span {
+            color: #86efac;
+            font-size: 14px;
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            margin-top: 32px;
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 12px;
+        }
+
+        .footer a {
+            color: rgba(255, 255, 255, 0.5);
+            text-decoration: none;
+        }
+
+        .footer a:hover {
+            color: rgba(255, 255, 255, 0.7);
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-card">
+            <div class="logo-section">
+                <div class="logo-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                </div>
+                <h1 class="logo-text">FundLens</h1>
+                <p class="logo-subtitle">Financial Intelligence Platform</p>
+            </div>
+
+            <div id="errorMessage" class="error-message">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span id="errorText">Invalid email or password</span>
+            </div>
+
+            <form id="loginForm" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label class="form-label" for="email">Email Address</label>
+                    <input 
+                        type="email" 
+                        id="email" 
+                        class="form-input" 
+                        placeholder="you@company.com"
+                        required
+                        autocomplete="email"
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="password">Password</label>
+                    <div class="password-wrapper">
+                        <input 
+                            type="password" 
+                            id="password" 
+                            class="form-input" 
+                            placeholder="Enter your password"
+                            required
+                            autocomplete="current-password"
+                        >
+                        <button type="button" class="password-toggle" onclick="togglePassword()">
+                            <svg id="eyeIcon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="form-options">
+                    <label class="remember-me">
+                        <input type="checkbox" id="rememberMe">
+                        <span>Remember me</span>
+                    </label>
+                    <a href="#" class="forgot-password" onclick="showForgotPassword(event)">Forgot password?</a>
+                </div>
+
+                <button type="submit" id="submitBtn" class="btn-signin">
+                    <span id="btnText">Sign In</span>
+                    <div id="btnSpinner" class="spinner" style="display: none;"></div>
+                </button>
+            </form>
+
+            <div class="divider">
+                <div class="divider-line"></div>
+                <span class="divider-text">Enterprise Access</span>
+                <div class="divider-line"></div>
+            </div>
+
+            <p class="help-text">
+                This is an enterprise application. User accounts are created by your organization's administrator.
+                <br><br>
+                Need help? Contact <a href="mailto:support@fundlens.ai">support@fundlens.ai</a>
+            </p>
+        </div>
+
+        <div class="footer">
+            <p>&copy; 2024 FundLens AI. All rights reserved.</p>
+            <p style="margin-top: 8px;">
+                <a href="#">Privacy Policy</a> · <a href="#">Terms of Service</a>
+            </p>
+        </div>
+    </div>
+
+    <!-- Forgot Password Modal -->
+    <div id="forgotPasswordModal" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2 class="modal-title" id="resetModalTitle">Reset Password</h2>
+                <button class="modal-close" onclick="closeForgotPassword()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="resetSuccess" class="success-message">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span id="resetSuccessText">Password reset successfully! You can now sign in.</span>
+                </div>
+                <div id="resetError" class="error-message">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span id="resetErrorText">Something went wrong</span>
+                </div>
+                
+                <!-- Step 1: Request Code -->
+                <div id="resetStep1">
+                    <p>Enter your email address and we'll send you a verification code to reset your password.</p>
+                    <form id="forgotPasswordForm" onsubmit="handleForgotPassword(event)">
+                        <div class="form-group">
+                            <label class="form-label" for="resetEmail">Email Address</label>
+                            <input 
+                                type="email" 
+                                id="resetEmail" 
+                                class="form-input" 
+                                placeholder="you@company.com"
+                                required
+                            >
+                        </div>
+                        <button type="submit" id="resetBtn" class="btn-signin">
+                            <span id="resetBtnText">Send Verification Code</span>
+                            <div id="resetBtnSpinner" class="spinner" style="display: none;"></div>
+                        </button>
+                    </form>
+                </div>
+                
+                <!-- Step 2: Enter Code and New Password -->
+                <div id="resetStep2" style="display: none;">
+                    <p>Enter the verification code sent to your email and choose a new password.</p>
+                    <form id="confirmPasswordForm" onsubmit="handleConfirmPassword(event)">
+                        <div class="form-group">
+                            <label class="form-label" for="verificationCode">Verification Code</label>
+                            <input 
+                                type="text" 
+                                id="verificationCode" 
+                                class="form-input" 
+                                placeholder="Enter 6-digit code"
+                                required
+                                maxlength="6"
+                                pattern="[0-9]{6}"
+                            >
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="newPassword">New Password</label>
+                            <input 
+                                type="password" 
+                                id="newPassword" 
+                                class="form-input" 
+                                placeholder="Min 12 chars, uppercase, lowercase, number, symbol"
+                                required
+                                minlength="12"
+                            >
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="confirmPassword">Confirm Password</label>
+                            <input 
+                                type="password" 
+                                id="confirmPassword" 
+                                class="form-input" 
+                                placeholder="Confirm your new password"
+                                required
+                            >
+                        </div>
+                        <button type="submit" id="confirmBtn" class="btn-signin">
+                            <span id="confirmBtnText">Reset Password</span>
+                            <div id="confirmBtnSpinner" class="spinner" style="display: none;"></div>
+                        </button>
+                        <button type="button" onclick="backToStep1()" style="width: 100%; margin-top: 12px; padding: 12px; background: transparent; border: 1px solid rgba(255,255,255,0.2); border-radius: 12px; color: rgba(255,255,255,0.7); cursor: pointer;">
+                            Back to Email
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Store email for password reset flow
+        let resetEmailForConfirm = '';
+
+        // Check if already logged in
+        document.addEventListener('DOMContentLoaded', () => {
+            const token = localStorage.getItem('fundlens_token');
+            if (token) {
+                // Verify token is still valid
+                verifyToken(token);
+            }
+        });
+
+        async function verifyToken(token) {
+            try {
+                const response = await fetch('/api/auth/me', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    // Token is valid, redirect to dashboard
+                    window.location.href = '/app/deals/index.html';
+                } else {
+                    // Token is invalid, clear it
+                    localStorage.removeItem('fundlens_token');
+                    localStorage.removeItem('fundlens_refresh_token');
+                    localStorage.removeItem('fundlens_user');
+                }
+            } catch (error) {
+                console.error('Token verification failed:', error);
+            }
+        }
+
+        async function handleLogin(event) {
+            event.preventDefault();
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const rememberMe = document.getElementById('rememberMe').checked;
+            
+            // Show loading state
+            setLoading(true);
+            hideError();
+
+            try {
+                console.log('Attempting login for:', email);
+                const response = await fetch('/api/auth/signin', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                console.log('Login response status:', response.status);
+                const data = await response.json();
+                console.log('Login response data:', data);
+
+                if (response.ok && data.success) {
+                    console.log('Login successful, storing tokens...');
+                    
+                    // Store tokens - use idToken for API calls (contains custom claims)
+                    localStorage.setItem('fundlens_token', data.tokens.idToken);
+                    localStorage.setItem('fundlens_access_token', data.tokens.accessToken);
+                    localStorage.setItem('fundlens_refresh_token', data.tokens.refreshToken);
+                    localStorage.setItem('fundlens_email', email);
+
+                    // Decode token to get tenant info
+                    const tokenPayload = parseJwt(data.tokens.idToken);
+                    console.log('Token payload:', tokenPayload);
+                    
+                    if (tokenPayload) {
+                        const isPlatformAdmin = tokenPayload['custom:tenant_id'] === '00000000-0000-0000-0000-000000000000' && 
+                                               tokenPayload['custom:tenant_role'] === 'admin';
+                        const userInfo = {
+                            email: email,
+                            tenantId: tokenPayload['custom:tenant_id'] || '',
+                            tenantSlug: tokenPayload['custom:tenant_slug'] || '',
+                            tenantName: tokenPayload['custom:tenant_slug'] || 'FundLens',
+                            role: tokenPayload['custom:tenant_role'] || 'analyst',
+                            isPlatformAdmin: isPlatformAdmin
+                        };
+                        console.log('User info:', userInfo);
+                        localStorage.setItem('fundlens_user', JSON.stringify(userInfo));
+                    }
+
+                    // Redirect to deal dashboard
+                    console.log('Redirecting to dashboard...');
+                    window.location.href = '/app/deals/index.html';
+                } else if (data.message && data.message.includes('Password change required')) {
+                    // User needs to reset password - show the reset flow
+                    showError('Your password needs to be reset. Please use "Forgot password?" to set a new password.');
+                    document.getElementById('resetEmail').value = email;
+                } else {
+                    console.log('Login failed:', data.message);
+                    showError(data.message || 'Invalid email or password');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                showError('Unable to connect to server. Please try again.');
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        function parseJwt(token) {
+            try {
+                const base64Url = token.split('.')[1];
+                const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+                const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+                    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+                }).join(''));
+                return JSON.parse(jsonPayload);
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function setLoading(loading) {
+            const btn = document.getElementById('submitBtn');
+            const btnText = document.getElementById('btnText');
+            const btnSpinner = document.getElementById('btnSpinner');
+            
+            btn.disabled = loading;
+            btnText.textContent = loading ? 'Signing in...' : 'Sign In';
+            btnSpinner.style.display = loading ? 'block' : 'none';
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            const errorText = document.getElementById('errorText');
+            errorText.textContent = message;
+            errorDiv.classList.add('show');
+        }
+
+        function hideError() {
+            document.getElementById('errorMessage').classList.remove('show');
+        }
+
+        function togglePassword() {
+            const passwordInput = document.getElementById('password');
+            const eyeIcon = document.getElementById('eyeIcon');
+            
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                eyeIcon.innerHTML = `
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                `;
+            } else {
+                passwordInput.type = 'password';
+                eyeIcon.innerHTML = `
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                `;
+            }
+        }
+
+        function showForgotPassword(event) {
+            event.preventDefault();
+            // Reset to step 1
+            document.getElementById('resetStep1').style.display = 'block';
+            document.getElementById('resetStep2').style.display = 'none';
+            document.getElementById('resetModalTitle').textContent = 'Reset Password';
+            document.getElementById('forgotPasswordModal').classList.add('show');
+            document.getElementById('resetSuccess').classList.remove('show');
+            document.getElementById('resetError').classList.remove('show');
+            document.getElementById('forgotPasswordForm').reset();
+            resetEmailForConfirm = '';
+        }
+
+        function closeForgotPassword() {
+            document.getElementById('forgotPasswordModal').classList.remove('show');
+            // Reset state
+            document.getElementById('resetStep1').style.display = 'block';
+            document.getElementById('resetStep2').style.display = 'none';
+            document.getElementById('resetSuccess').classList.remove('show');
+            document.getElementById('resetError').classList.remove('show');
+            resetEmailForConfirm = '';
+        }
+
+        async function handleForgotPassword(event) {
+            event.preventDefault();
+            
+            const email = document.getElementById('resetEmail').value;
+            const btn = document.getElementById('resetBtn');
+            const btnText = document.getElementById('resetBtnText');
+            const btnSpinner = document.getElementById('resetBtnSpinner');
+            
+            btn.disabled = true;
+            btnText.textContent = 'Sending...';
+            btnSpinner.style.display = 'block';
+            
+            document.getElementById('resetSuccess').classList.remove('show');
+            document.getElementById('resetError').classList.remove('show');
+
+            try {
+                const response = await fetch('/api/auth/forgot-password', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Store email for step 2
+                    resetEmailForConfirm = email;
+                    
+                    // Show success message briefly, then transition to step 2
+                    document.getElementById('resetSuccessText').textContent = 'Verification code sent! Check your email.';
+                    document.getElementById('resetSuccess').classList.add('show');
+                    
+                    // Transition to step 2 after a short delay
+                    setTimeout(() => {
+                        document.getElementById('resetStep1').style.display = 'none';
+                        document.getElementById('resetStep2').style.display = 'block';
+                        document.getElementById('resetModalTitle').textContent = 'Enter Verification Code';
+                        document.getElementById('resetSuccess').classList.remove('show');
+                    }, 1500);
+                } else {
+                    document.getElementById('resetErrorText').textContent = data.message || 'Failed to send verification code';
+                    document.getElementById('resetError').classList.add('show');
+                }
+            } catch (error) {
+                document.getElementById('resetErrorText').textContent = 'Unable to connect to server';
+                document.getElementById('resetError').classList.add('show');
+            } finally {
+                btn.disabled = false;
+                btnText.textContent = 'Send Verification Code';
+                btnSpinner.style.display = 'none';
+            }
+        }
+
+        async function handleConfirmPassword(event) {
+            event.preventDefault();
+            
+            const code = document.getElementById('verificationCode').value;
+            const newPassword = document.getElementById('newPassword').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            
+            const btn = document.getElementById('confirmBtn');
+            const btnText = document.getElementById('confirmBtnText');
+            const btnSpinner = document.getElementById('confirmBtnSpinner');
+            
+            document.getElementById('resetSuccess').classList.remove('show');
+            document.getElementById('resetError').classList.remove('show');
+            
+            // Validate passwords match
+            if (newPassword !== confirmPassword) {
+                document.getElementById('resetErrorText').textContent = 'Passwords do not match';
+                document.getElementById('resetError').classList.add('show');
+                return;
+            }
+            
+            // Validate password strength
+            if (newPassword.length < 12) {
+                document.getElementById('resetErrorText').textContent = 'Password must be at least 12 characters';
+                document.getElementById('resetError').classList.add('show');
+                return;
+            }
+            
+            if (!/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || 
+                !/[0-9]/.test(newPassword) || !/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(newPassword)) {
+                document.getElementById('resetErrorText').textContent = 'Password must include uppercase, lowercase, number, and special character';
+                document.getElementById('resetError').classList.add('show');
+                return;
+            }
+            
+            btn.disabled = true;
+            btnText.textContent = 'Resetting...';
+            btnSpinner.style.display = 'block';
+
+            try {
+                const response = await fetch('/api/auth/confirm-password', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        email: resetEmailForConfirm,
+                        code: code,
+                        newPassword: newPassword
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    document.getElementById('resetSuccessText').textContent = 'Password reset successfully! You can now sign in.';
+                    document.getElementById('resetSuccess').classList.add('show');
+                    document.getElementById('confirmPasswordForm').reset();
+                    
+                    // Close modal after success and redirect to login
+                    setTimeout(() => {
+                        closeForgotPassword();
+                        // Pre-fill email on login form
+                        document.getElementById('email').value = resetEmailForConfirm;
+                        document.getElementById('password').focus();
+                    }, 2000);
+                } else {
+                    document.getElementById('resetErrorText').textContent = data.message || 'Failed to reset password';
+                    document.getElementById('resetError').classList.add('show');
+                }
+            } catch (error) {
+                document.getElementById('resetErrorText').textContent = 'Unable to connect to server';
+                document.getElementById('resetError').classList.add('show');
+            } finally {
+                btn.disabled = false;
+                btnText.textContent = 'Reset Password';
+                btnSpinner.style.display = 'none';
+            }
+        }
+
+        function backToStep1() {
+            document.getElementById('resetStep1').style.display = 'block';
+            document.getElementById('resetStep2').style.display = 'none';
+            document.getElementById('resetModalTitle').textContent = 'Reset Password';
+            document.getElementById('resetSuccess').classList.remove('show');
+            document.getElementById('resetError').classList.remove('show');
+            document.getElementById('confirmPasswordForm').reset();
+            // Keep the email in the form
+            document.getElementById('resetEmail').value = resetEmailForConfirm;
+        }
+
+        // Close modal on escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeForgotPassword();
+            }
+        });
+
+        // Close modal on overlay click
+        document.getElementById('forgotPasswordModal').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) {
+                closeForgotPassword();
+            }
+        });
+    </script>
+</body>
+</html>

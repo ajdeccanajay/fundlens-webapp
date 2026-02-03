@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FundLens AI - Financial Intelligence Platform</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0f0f23 0%, #1a1a3e 50%, #2d1b69 100%);
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .container {
+            text-align: center;
+            max-width: 800px;
+            padding: 40px;
+        }
+
+        .logo {
+            font-size: 4rem;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 3rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            font-size: 1.3rem;
+            color: rgba(255, 255, 255, 0.8);
+            margin-bottom: 50px;
+        }
+
+        .interfaces {
+            display: flex;
+            justify-content: center;
+            gap: 24px;
+            margin-bottom: 50px;
+        }
+
+        .interface-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            padding: 40px 30px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .interface-card:hover {
+            transform: translateY(-5px);
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .interface-card .icon {
+            font-size: 3rem;
+            margin-bottom: 20px;
+        }
+
+        .interface-card h3 {
+            font-size: 1.5rem;
+            margin-bottom: 15px;
+            color: #667eea;
+        }
+
+        .interface-card p {
+            color: rgba(255, 255, 255, 0.8);
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+
+        .interface-card .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 10px;
+            font-weight: 600;
+            text-decoration: none;
+            display: inline-block;
+            transition: transform 0.2s;
+        }
+
+        .interface-card .btn:hover {
+            transform: scale(1.05);
+        }
+
+        .status {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 20px;
+            border-radius: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .status h4 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            font-size: 0.9rem;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-online {
+            color: #4ade80;
+        }
+
+        .status-offline {
+            color: #f87171;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2rem;
+            }
+            
+            .interfaces {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">🔍</div>
+        <h1>FundLens AI</h1>
+        <p class="subtitle">Financial Intelligence Platform - Choose Your Interface</p>
+
+        <div class="interfaces">
+            <div class="interface-card" onclick="window.location.href='login.html'">
+                <div class="icon">🔐</div>
+                <h3>Financial Analyst Portal</h3>
+                <p>Sign in to access your organization's deal dashboard, create analyses, and collaborate with your team on financial research.</p>
+                <a href="login.html" class="btn">Sign In</a>
+            </div>
+        </div>
+
+        <div class="status">
+            <h4>System Status</h4>
+            <div class="status-grid">
+                <div class="status-item">
+                    <span id="backend-status" class="status-offline">●</span>
+                    <span>Backend API</span>
+                </div>
+                <div class="status-item">
+                    <span id="python-status" class="status-offline">●</span>
+                    <span>Python Parser</span>
+                </div>
+                <div class="status-item">
+                    <span id="database-status" class="status-offline">●</span>
+                    <span>Database</span>
+                </div>
+                <div class="status-item">
+                    <span id="bedrock-status" class="status-offline">●</span>
+                    <span>AWS Bedrock</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Check system status
+        async function checkStatus() {
+            // Check Backend API
+            try {
+                const response = await fetch('http://localhost:3000/api/rag/test-queries');
+                document.getElementById('backend-status').className = response.ok ? 'status-online' : 'status-offline';
+            } catch {
+                document.getElementById('backend-status').className = 'status-offline';
+            }
+
+            // Check Python Parser
+            try {
+                const response = await fetch('http://localhost:8000/health');
+                document.getElementById('python-status').className = response.ok ? 'status-online' : 'status-offline';
+            } catch {
+                document.getElementById('python-status').className = 'status-offline';
+            }
+
+            // Check Database (via backend)
+            try {
+                const response = await fetch('http://localhost:3000/api/rag/test-structured', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tickers: ['AAPL'], metrics: ['revenue'] })
+                });
+                document.getElementById('database-status').className = response.ok ? 'status-online' : 'status-offline';
+            } catch {
+                document.getElementById('database-status').className = 'status-offline';
+            }
+
+            // Check Bedrock (via backend)
+            try {
+                const response = await fetch('http://localhost:3000/api/rag/chunks/stats');
+                document.getElementById('bedrock-status').className = response.ok ? 'status-online' : 'status-offline';
+            } catch {
+                document.getElementById('bedrock-status').className = 'status-offline';
+            }
+        }
+
+        // Check status on load
+        checkStatus();
+        
+        // Refresh status every 30 seconds
+        setInterval(checkStatus, 30000);
+    </script>
+</body>
+</html>

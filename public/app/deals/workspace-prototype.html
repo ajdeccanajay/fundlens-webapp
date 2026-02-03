@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FundLens - Deal Workspace (Prototype)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        [x-cloak] { display: none !important; }
+        
+        /* Sidebar Styles */
+        .sidebar {
+            width: 240px;
+            transition: width 0.2s ease;
+        }
+        
+        .sidebar.collapsed {
+            width: 64px;
+        }
+        
+        .nav-item {
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        
+        .nav-item:hover {
+            background: #f3f4f6;
+        }
+        
+        .nav-item.active {
+            background: #eff6ff;
+            color: #6366f1;
+            border-left: 3px solid #6366f1;
+        }
+        
+        .nav-item.active i {
+            color: #6366f1;
+        }
+        
+        /* Content Area */
+        .content-area {
+            transition: margin-left 0.2s ease;
+        }
+        
+        /* Badge */
+        .badge {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: #ef4444;
+            color: white;
+            font-size: 0.65rem;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-weight: 600;
+        }
+        
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.3s ease-out;
+        }
+        
+        /* Card Hover */
+        .card-hover {
+            transition: all 0.2s ease;
+        }
+        
+        .card-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* Message Styles */
+        .message-user {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 18px;
+            padding: 12px 18px;
+            max-width: 80%;
+            margin-left: auto;
+        }
+        
+        .message-assistant {
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 18px;
+            padding: 16px 20px;
+            max-width: 85%;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div x-data="workspacePrototype()" x-init="init()" x-cloak>
+        <!-- Top Bar -->
+        <div class="bg-white border-b border-gray-200 h-16 flex items-center px-6 justify-between">
+            <div class="flex items-center space-x-4">
+                <div class="w-10 h-10 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-chart-line text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold text-gray-900" x-text="currentDeal.ticker + ' - ' + currentDeal.name"></h1>
+                    <p class="text-xs text-gray-500" x-text="'$' + currentDeal.marketCap + ' Market Cap'"></p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-3">
+                <button class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+                    <i class="fas fa-download mr-2"></i>Export
+                </button>
+                <button class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+                    <i class="fas fa-cog"></i>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Main Layout -->
+        <div class="flex h-[calc(100vh-64px)]">
+            <!-- Sidebar -->
+            <div class="sidebar bg-white border-r border-gray-200 flex flex-col">
+                <!-- Navigation Items -->
+                <nav class="flex-1 p-3 space-y-1">
+                    <div @click="switchView('analysis')" 
+                         :class="{'active': currentView === 'analysis'}"
+                         class="nav-item flex items-center px-3 py-3 rounded-lg relative">
+                        <i class="fas fa-chart-bar w-5 text-gray-400"></i>
+                        <span class="ml-3 text-sm font-medium">Analysis</span>
+                    </div>
+                    
+                    <div @click="switchView('research')" 
+                         :class="{'active': currentView === 'research'}"
+                         class="nav-item flex items-center px-3 py-3 rounded-lg relative">
+                        <i class="fas fa-brain w-5 text-gray-400"></i>
+                        <span class="ml-3 text-sm font-medium">Research</span>
+                    </div>
+                    
+                    <div @click="switchView('scratchpad')" 
+                         :class="{'active': currentView === 'scratchpad'}"
+                         class="nav-item flex items-center px-3 py-3 rounded-lg relative">
+                        <i class="fas fa-bookmark w-5 text-gray-400"></i>
+                        <span class="ml-3 text-sm font-medium">Scratchpad</span>
+                        <span x-show="scratchpadCount > 0" class="badge" x-text="scratchpadCount"></span>
+                    </div>
+                    
+                    <div @click="switchView('ic-memo')" 
+                         :class="{'active': currentView === 'ic-memo'}"
+                         class="nav-item flex items-center px-3 py-3 rounded-lg relative">
+                        <i class="fas fa-file-alt w-5 text-gray-400"></i>
+                        <span class="ml-3 text-sm font-medium">IC Memo</span>
+                    </div>
+                </nav>
+                
+                <!-- Keyboard Shortcuts Hint -->
+                <div class="p-4 border-t border-gray-200">
+                    <p class="text-xs text-gray-400 mb-2">Keyboard Shortcuts</p>
+                    <div class="space-y-1 text-xs text-gray-500">
+                        <div>⌘1 - Analysis</div>
+                        <div>⌘2 - Research</div>
+                        <div>⌘3 - Scratchpad</div>
+                        <div>⌘4 - IC Memo</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Content Area -->
+            <div class="flex-1 overflow-auto">
+                <!-- Analysis View -->
+                <div x-show="currentView === 'analysis'" class="fade-in p-8">
+                    <div class="max-w-7xl mx-auto">
+                        <!-- Tabs -->
+                        <div class="flex space-x-2 mb-6">
+                            <button @click="analysisTab = 'quantitative'" 
+                                    :class="analysisTab === 'quantitative' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700'"
+                                    class="px-4 py-2 rounded-lg font-medium text-sm">
+                                Quantitative
+                            </button>
+                            <button @click="analysisTab = 'qualitative'" 
+                                    :class="analysisTab === 'qualitative' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700'"
+                                    class="px-4 py-2 rounded-lg font-medium text-sm">
+                                Qualitative
+                            </button>
+                            <button @click="analysisTab = 'export'" 
+                                    :class="analysisTab === 'export' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700'"
+                                    class="px-4 py-2 rounded-lg font-medium text-sm">
+                                Export
+                            </button>
+                        </div>
+                        
+                        <!-- Quantitative Content -->
+                        <div x-show="analysisTab === 'quantitative'" class="space-y-6">
+                            <div class="bg-white rounded-xl p-6 border border-gray-200">
+                                <h2 class="text-xl font-bold mb-4">Financial Performance</h2>
+                                <div class="grid grid-cols-4 gap-4">
+                                    <div class="bg-green-50 rounded-lg p-4">
+                                        <p class="text-sm text-gray-600">Revenue</p>
+                                        <p class="text-2xl font-bold text-green-700">$394.3B</p>
+                                        <p class="text-xs text-green-600">+8.2% YoY</p>
+                                    </div>
+                                    <div class="bg-blue-50 rounded-lg p-4">
+                                        <p class="text-sm text-gray-600">Net Income</p>
+                                        <p class="text-2xl font-bold text-blue-700">$97.0B</p>
+                                        <p class="text-xs text-blue-600">+5.4% YoY</p>
+                                    </div>
+                                    <div class="bg-purple-50 rounded-lg p-4">
+                                        <p class="text-sm text-gray-600">Op Margin</p>
+                                        <p class="text-2xl font-bold text-purple-700">30.1%</p>
+                                        <p class="text-xs text-purple-600">+1.2pp</p>
+                                    </div>
+                                    <div class="bg-indigo-50 rounded-lg p-4">
+                                        <p class="text-sm text-gray-600">Free Cash Flow</p>
+                                        <p class="text-2xl font-bold text-indigo-700">$99.6B</p>
+                                        <p class="text-xs text-indigo-600">+12.3% YoY</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="bg-white rounded-xl p-6 border border-gray-200">
+                                <h2 class="text-xl font-bold mb-4">Revenue Trend</h2>
+                                <div class="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
+                                    <p class="text-gray-400">[Chart Placeholder - Revenue Growth Over 5 Years]</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Qualitative Content -->
+                        <div x-show="analysisTab === 'qualitative'" class="space-y-4">
+                            <div class="bg-white rounded-xl p-6 border border-gray-200 card-hover">
+                                <h3 class="font-semibold text-gray-900 mb-2">What is the company's business model?</h3>
+                                <p class="text-gray-600 text-sm">Apple designs, manufactures, and markets smartphones, personal computers, tablets, wearables, and accessories worldwide...</p>
+                            </div>
+                            <div class="bg-white rounded-xl p-6 border border-gray-200 card-hover">
+                                <h3 class="font-semibold text-gray-900 mb-2">What are the key growth drivers?</h3>
+                                <p class="text-gray-600 text-sm">Services revenue growth, iPhone upgrade cycles, expansion in emerging markets, wearables adoption...</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Export Content -->
+                        <div x-show="analysisTab === 'export'" class="space-y-4">
+                            <div class="bg-white rounded-xl p-6 border border-gray-200">
+                                <h2 class="text-xl font-bold mb-4">Export Financial Statements</h2>
+                                <p class="text-gray-600 mb-6">Download comprehensive financial data to Excel for further analysis</p>
+                                <button class="bg-green-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-green-700">
+                                    <i class="fas fa-file-excel mr-2"></i>Export to Excel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Research View -->
+                <div x-show="currentView === 'research'" class="fade-in h-full flex flex-col">
+                    <div class="flex-1 overflow-auto p-6 space-y-4">
+                        <template x-if="researchMessages.length === 0">
+                            <div class="text-center py-20">
+                                <div class="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                                    <i class="fas fa-brain text-3xl text-indigo-600"></i>
+                                </div>
+                                <h2 class="text-2xl font-bold text-gray-900 mb-4">Research Assistant</h2>
+                                <p class="text-gray-600 mb-8">Ask questions about AAPL or compare with other companies</p>
+                                <div class="grid grid-cols-2 gap-4 max-w-2xl mx-auto">
+                                    <button @click="quickQuery('What are the key risks for AAPL?')" 
+                                            class="bg-white p-6 rounded-xl border border-gray-200 text-left hover:shadow-lg transition-all">
+                                        <div class="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center mb-3">
+                                            <i class="fas fa-exclamation-triangle text-red-600"></i>
+                                        </div>
+                                        <h3 class="font-semibold text-gray-900 mb-2">Risk Analysis</h3>
+                                        <p class="text-sm text-gray-600">Key risks and challenges</p>
+                                    </button>
+                                    <button @click="quickQuery('Compare AAPL revenue with MSFT')" 
+                                            class="bg-white p-6 rounded-xl border border-gray-200 text-left hover:shadow-lg transition-all">
+                                        <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mb-3">
+                                            <i class="fas fa-chart-line text-blue-600"></i>
+                                        </div>
+                                        <h3 class="font-semibold text-gray-900 mb-2">Compare</h3>
+                                        <p class="text-sm text-gray-600">Compare with peers</p>
+                                    </button>
+                                </div>
+                            </div>
+                        </template>
+                        
+                        <template x-for="message in researchMessages" :key="message.id">
+                            <div>
+                                <div x-show="message.role === 'user'" class="flex justify-end mb-4">
+                                    <div class="message-user" x-text="message.content"></div>
+                                </div>
+                                <div x-show="message.role === 'assistant'" class="flex justify-start mb-4">
+                                    <div class="message-assistant">
+                                        <p x-text="message.content"></p>
+                                        <button @click="saveToScratchpad(message)" 
+                                                class="mt-3 text-xs text-indigo-600 hover:text-indigo-700 flex items-center">
+                                            <i class="fas fa-bookmark mr-1"></i>Save to Scratchpad
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                    
+                    <div class="border-t border-gray-200 p-6 bg-white">
+                        <div class="flex items-end space-x-3">
+                            <textarea x-model="researchInput" 
+                                      @keydown.enter.prevent="sendResearchMessage()"
+                                      placeholder="Ask about any company..."
+                                      rows="2"
+                                      class="flex-1 border-2 border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-indigo-500 resize-none"></textarea>
+                            <button @click="sendResearchMessage()" 
+                                    class="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3 rounded-xl font-medium hover:shadow-lg">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                        <p class="text-xs text-gray-400 mt-2">Press Enter to send</p>
+                    </div>
+                </div>
+                
+                <!-- Scratchpad View -->
+                <div x-show="currentView === 'scratchpad'" class="fade-in p-8">
+                    <div class="max-w-4xl mx-auto">
+                        <div class="flex justify-between items-center mb-6">
+                            <h1 class="text-2xl font-bold">Research Scratchpad</h1>
+                            <button class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
+                                <i class="fas fa-download mr-2"></i>Export to Markdown
+                            </button>
+                        </div>
+                        
+                        <template x-if="scratchpadItems.length === 0">
+                            <div class="text-center py-20">
+                                <i class="fas fa-bookmark text-6xl text-gray-300 mb-4"></i>
+                                <h2 class="text-xl font-semibold text-gray-900 mb-2">No saved items yet</h2>
+                                <p class="text-gray-600">Save answers from Research Assistant to build your analysis</p>
+                            </div>
+                        </template>
+                        
+                        <div class="space-y-4">
+                            <template x-for="item in scratchpadItems" :key="item.id">
+                                <div class="bg-white rounded-xl p-6 border border-gray-200 card-hover">
+                                    <p class="text-gray-700 mb-3" x-text="item.content"></p>
+                                    <div x-show="item.notes" class="bg-yellow-50 border-l-4 border-yellow-400 p-3 mb-3">
+                                        <p class="text-sm text-gray-700"><strong>My Notes:</strong> <span x-text="item.notes"></span></p>
+                                    </div>
+                                    <div class="flex justify-between items-center text-xs text-gray-400">
+                                        <span x-text="item.timestamp"></span>
+                                        <button @click="deleteFromScratchpad(item.id)" class="text-red-600 hover:text-red-700">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- IC Memo View -->
+                <div x-show="currentView === 'ic-memo'" class="fade-in p-8">
+                    <div class="max-w-4xl mx-auto">
+                        <h1 class="text-2xl font-bold mb-6">Investment Committee Memo</h1>
+                        
+                        <template x-if="!memoGenerated">
+                            <div class="bg-white rounded-xl p-8 border border-gray-200 text-center">
+                                <div class="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                                    <i class="fas fa-file-export text-3xl text-green-600"></i>
+                                </div>
+                                <h2 class="text-xl font-semibold mb-4">Generate IC Memo</h2>
+                                <p class="text-gray-600 mb-6">Create a comprehensive investment memo using your research and analysis</p>
+                                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 text-left max-w-md mx-auto">
+                                    <h3 class="font-semibold text-blue-900 mb-2">Memo will include:</h3>
+                                    <ul class="text-sm text-blue-800 space-y-1">
+                                        <li><i class="fas fa-check mr-2"></i>Executive Summary</li>
+                                        <li><i class="fas fa-check mr-2"></i>Financial Metrics</li>
+                                        <li><i class="fas fa-check mr-2"></i>Your Research Notes (<span x-text="scratchpadCount"></span> items)</li>
+                                        <li><i class="fas fa-check mr-2"></i>Investment Recommendation</li>
+                                    </ul>
+                                </div>
+                                <button @click="generateMemo()" 
+                                        class="bg-gradient-to-r from-green-500 to-teal-600 text-white px-8 py-3 rounded-xl font-medium hover:shadow-lg">
+                                    <i class="fas fa-magic mr-2"></i>Generate Memo
+                                </button>
+                            </div>
+                        </template>
+                        
+                        <template x-if="memoGenerated">
+                            <div class="bg-white rounded-xl p-8 border border-gray-200">
+                                <div class="prose max-w-none">
+                                    <h1>Investment Committee Memo: AAPL</h1>
+                                    <p><strong>Date:</strong> January 26, 2026</p>
+                                    
+                                    <h2>Executive Summary</h2>
+                                    <p>Apple Inc. presents a compelling investment opportunity with strong fundamentals...</p>
+                                    
+                                    <h2>Financial Highlights</h2>
+                                    <ul>
+                                        <li>Revenue: $394.3B (+8.2% YoY)</li>
+                                        <li>Net Income: $97.0B (+5.4% YoY)</li>
+                                        <li>Operating Margin: 30.1%</li>
+                                    </ul>
+                                    
+                                    <h2>Key Insights</h2>
+                                    <p>[Content from your scratchpad...]</p>
+                                    
+                                    <h2>Recommendation</h2>
+                                    <p>Based on the analysis, we recommend...</p>
+                                </div>
+                                
+                                <div class="flex gap-3 mt-6 pt-6 border-t border-gray-200">
+                                    <button class="flex-1 bg-indigo-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-indigo-700">
+                                        <i class="fas fa-download mr-2"></i>Download PDF
+                                    </button>
+                                    <button @click="memoGenerated = false" 
+                                            class="flex-1 border border-gray-300 px-6 py-3 rounded-lg font-medium hover:bg-gray-50">
+                                        Generate New
+                                    </button>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function workspacePrototype() {
+            return {
+                // Current state
+                currentView: 'analysis',
+                analysisTab: 'quantitative',
+                
+                // Deal data
+                currentDeal: {
+                    ticker: 'AAPL',
+                    name: 'Apple Inc.',
+                    marketCap: '2.8T'
+                },
+                
+                // Research
+                researchMessages: [],
+                researchInput: '',
+                
+                // Scratchpad
+                scratchpadItems: [],
+                scratchpadCount: 3,
+                
+                // IC Memo
+                memoGenerated: false,
+                
+                init() {
+                    // Add some demo scratchpad items
+                    this.scratchpadItems = [
+                        {
+                            id: 1,
+                            content: 'Key risks include supply chain dependencies in Asia, regulatory challenges in EU and China, and competition in smartphone market.',
+                            notes: 'Important for Q4 review',
+                            timestamp: '2 hours ago'
+                        },
+                        {
+                            id: 2,
+                            content: 'Revenue grew 15% YoY, driven by strong services growth and iPhone upgrade cycles.',
+                            notes: 'Strong services growth - key differentiator',
+                            timestamp: '1 day ago'
+                        },
+                        {
+                            id: 3,
+                            content: 'Operating margin improved to 30.1%, reflecting operational efficiency and pricing power.',
+                            notes: '',
+                            timestamp: '2 days ago'
+                        }
+                    ];
+                    
+                    // Keyboard shortcuts
+                    document.addEventListener('keydown', (e) => {
+                        if (e.metaKey || e.ctrlKey) {
+                            if (e.key === '1') {
+                                e.preventDefault();
+                                this.switchView('analysis');
+                            } else if (e.key === '2') {
+                                e.preventDefault();
+                                this.switchView('research');
+                            } else if (e.key === '3') {
+                                e.preventDefault();
+                                this.switchView('scratchpad');
+                            } else if (e.key === '4') {
+                                e.preventDefault();
+                                this.switchView('ic-memo');
+                            }
+                        }
+                    });
+                },
+                
+                switchView(view) {
+                    this.currentView = view;
+                    window.location.hash = view;
+                },
+                
+                quickQuery(query) {
+                    this.researchInput = query;
+                    this.sendResearchMessage();
+                },
+                
+                sendResearchMessage() {
+                    if (!this.researchInput.trim()) return;
+                    
+                    // Add user message
+                    this.researchMessages.push({
+                        id: Date.now(),
+                        role: 'user',
+                        content: this.researchInput
+                    });
+                    
+                    // Simulate AI response
+                    setTimeout(() => {
+                        this.researchMessages.push({
+                            id: Date.now() + 1,
+                            role: 'assistant',
+                            content: 'Based on the 10-K filing, key risks include: 1) Supply chain dependencies in Asia, 2) Regulatory challenges in EU and China, 3) Competition in smartphone market, 4) App Store revenue concentration.'
+                        });
+                    }, 1000);
+                    
+                    this.researchInput = '';
+                },
+                
+                saveToScratchpad(message) {
+                    const notes = prompt('Add your notes (optional):');
+                    this.scratchpadItems.unshift({
+                        id: Date.now(),
+                        content: message.content,
+                        notes: notes || '',
+                        timestamp: 'Just now'
+                    });
+                    this.scratchpadCount = this.scratchpadItems.length;
+                    alert('Saved to scratchpad!');
+                },
+                
+                deleteFromScratchpad(id) {
+                    if (confirm('Remove this item?')) {
+                        this.scratchpadItems = this.scratchpadItems.filter(item => item.id !== id);
+                        this.scratchpadCount = this.scratchpadItems.length;
+                    }
+                },
+                
+                generateMemo() {
+                    this.memoGenerated = true;
+                }
+            };
+        }
+    </script>
+</body>
+</html>

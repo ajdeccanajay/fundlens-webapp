@@ -1,0 +1,382 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'FundLens ECS Cluster and Task Definition Stack'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues:
+      - production
+      - staging
+    Description: Environment name
+
+  VpcStackName:
+    Type: String
+    Default: fundlens-vpc-production
+    Description: Name of the VPC CloudFormation stack
+
+  SecurityGroupsStackName:
+    Type: String
+    Default: fundlens-sg-production
+    Description: Name of the Security Groups CloudFormation stack
+
+  ECRStackName:
+    Type: String
+    Default: fundlens-ecr-production
+    Description: Name of the ECR CloudFormation stack (optional if using direct URIs)
+
+  BackendRepositoryUri:
+    Type: String
+    Default: ''
+    Description: Direct ECR URI for backend (overrides ECRStackName import)
+
+  PythonParserRepositoryUri:
+    Type: String
+    Default: ''
+    Description: Direct ECR URI for Python parser (overrides ECRStackName import)
+
+  BackendImageTag:
+    Type: String
+    Default: latest
+    Description: Docker image tag for backend
+
+  PythonParserImageTag:
+    Type: String
+    Default: latest
+    Description: Docker image tag for Python parser
+
+  # Secrets Manager ARNs
+  DatabaseSecretArn:
+    Type: String
+    Description: ARN of the database credentials secret
+
+  CognitoSecretArn:
+    Type: String
+    Description: ARN of the Cognito credentials secret
+
+  PlatformSecretArn:
+    Type: String
+    Description: ARN of the platform admin key secret
+
+Resources:
+  # ===========================================================================
+  # ECS Cluster
+  # ===========================================================================
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub 'fundlens-${Environment}'
+      ClusterSettings:
+        - Name: containerInsights
+          Value: enabled
+      CapacityProviders:
+        - FARGATE
+        - FARGATE_SPOT
+      DefaultCapacityProviderStrategy:
+        - CapacityProvider: FARGATE
+          Weight: 1
+          Base: 2
+      Tags:
+        - Key: Name
+          Value: !Sub 'fundlens-${Environment}'
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ===========================================================================
+  # CloudWatch Log Groups
+  # ===========================================================================
+  BackendLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/ecs/fundlens-${Environment}/backend'
+      RetentionInDays: 30
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Service
+          Value: backend
+
+  PythonParserLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/ecs/fundlens-${Environment}/python-parser'
+      RetentionInDays: 30
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Service
+          Value: python-parser
+
+  # ===========================================================================
+  # ECS Task Execution Role
+  # ===========================================================================
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'fundlens-${Environment}-ecs-execution-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+        - PolicyName: SecretsManagerAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource:
+                  - !Ref DatabaseSecretArn
+                  - !Ref CognitoSecretArn
+                  - !Ref PlatformSecretArn
+        - PolicyName: CloudWatchLogsAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !GetAtt BackendLogGroup.Arn
+                  - !GetAtt PythonParserLogGroup.Arn
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ===========================================================================
+  # ECS Task Role (for application access to AWS services)
+  # ===========================================================================
+  ECSTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'fundlens-${Environment}-ecs-task-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:PutObjectTagging
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                Resource:
+                  - arn:aws:s3:::fundlens-documents-dev
+                  - arn:aws:s3:::fundlens-documents-dev/*
+                  - arn:aws:s3:::fundlens-data-lake
+                  - arn:aws:s3:::fundlens-data-lake/*
+                  - arn:aws:s3:::fundlens-bedrock-chunks
+                  - arn:aws:s3:::fundlens-bedrock-chunks/*
+        - PolicyName: BedrockAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - bedrock-agent-runtime:Retrieve
+                  - bedrock-agent-runtime:RetrieveAndGenerate
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - bedrock-agent:StartIngestionJob
+                  - bedrock-agent:GetIngestionJob
+                  - bedrock-agent:ListIngestionJobs
+                Resource: '*'
+        - PolicyName: CognitoAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cognito-idp:AdminGetUser
+                  - cognito-idp:AdminCreateUser
+                  - cognito-idp:AdminUpdateUserAttributes
+                  - cognito-idp:AdminDeleteUser
+                  - cognito-idp:ListUsers
+                Resource: 'arn:aws:cognito-idp:us-east-1:*:userpool/us-east-1_4OYqnpE18'
+        - PolicyName: LambdaInvoke
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource: 'arn:aws:lambda:us-east-1:*:function:bedrock-kb-sync'
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ===========================================================================
+  # ECS Task Definition
+  # ===========================================================================
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub 'fundlens-${Environment}'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: '2048'
+      Memory: '4096'
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt ECSTaskRole.Arn
+      ContainerDefinitions:
+        # NestJS Backend Container (Primary)
+        - Name: backend
+          Image: !Sub '${BackendRepositoryUri}:${BackendImageTag}'
+          Essential: true
+          PortMappings:
+            - ContainerPort: 3000
+              Protocol: tcp
+          Environment:
+            - Name: NODE_ENV
+              Value: production
+            - Name: PORT
+              Value: '3000'
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+            - Name: PYTHON_PARSER_URL
+              Value: 'http://localhost:8000'
+            - Name: BEDROCK_KB_ID
+              Value: 'NB5XNMHBQT'
+            - Name: BEDROCK_DATA_SOURCE_ID
+              Value: 'OQMSFOE5SL'
+            - Name: BEDROCK_CHUNKS_BUCKET
+              Value: 'fundlens-bedrock-chunks'
+            - Name: S3_DATA_LAKE_BUCKET
+              Value: 'fundlens-data-lake'
+            - Name: S3_BUCKET_NAME
+              Value: 'fundlens-documents-dev'
+            - Name: KB_SYNC_LAMBDA_NAME
+              Value: 'bedrock-kb-sync'
+            - Name: SEC_USER_AGENT
+              Value: 'FundLensAI/1.0 (contact: ops@fundlens.ai)'
+            - Name: REQUEST_DELAY_MS
+              Value: '150'
+            - Name: CACHE_TTL_MS
+              Value: '86400000'
+            - Name: COGNITO_USER_POOL_ID
+              Value: 'us-east-1_4OYqnpE18'
+            - Name: COGNITO_REGION
+              Value: 'us-east-1'
+          Secrets:
+            - Name: DATABASE_URL
+              ValueFrom: !Sub '${DatabaseSecretArn}:DATABASE_URL::'
+            - Name: COGNITO_APP_CLIENT_ID
+              ValueFrom: !Sub '${CognitoSecretArn}:clientId::'
+            - Name: COGNITO_APP_CLIENT_SECRET
+              ValueFrom: !Sub '${CognitoSecretArn}:clientSecret::'
+            - Name: PLATFORM_ADMIN_KEY
+              ValueFrom: !Sub '${PlatformSecretArn}:adminKey::'
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref BackendLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: backend
+          HealthCheck:
+            Command:
+              - CMD-SHELL
+              - 'wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1'
+            Interval: 30
+            Timeout: 10
+            Retries: 3
+            StartPeriod: 60
+          DependsOn:
+            - ContainerName: python-parser
+              Condition: HEALTHY
+
+        # Python Parser Container (Sidecar)
+        - Name: python-parser
+          Image: !Sub '${PythonParserRepositoryUri}:${PythonParserImageTag}'
+          Essential: true
+          PortMappings:
+            - ContainerPort: 8000
+              Protocol: tcp
+          Environment:
+            - Name: PYTHONUNBUFFERED
+              Value: '1'
+            - Name: PORT
+              Value: '8000'
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref PythonParserLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: python-parser
+          HealthCheck:
+            Command:
+              - CMD-SHELL
+              - 'curl -f http://localhost:8000/health || exit 1'
+            Interval: 30
+            Timeout: 10
+            Retries: 3
+            StartPeriod: 30
+
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+Outputs:
+  ClusterArn:
+    Description: ECS Cluster ARN
+    Value: !GetAtt ECSCluster.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-ClusterArn'
+
+  ClusterName:
+    Description: ECS Cluster Name
+    Value: !Ref ECSCluster
+    Export:
+      Name: !Sub '${AWS::StackName}-ClusterName'
+
+  TaskDefinitionArn:
+    Description: Task Definition ARN
+    Value: !Ref TaskDefinition
+    Export:
+      Name: !Sub '${AWS::StackName}-TaskDefinitionArn'
+
+  TaskExecutionRoleArn:
+    Description: Task Execution Role ARN
+    Value: !GetAtt ECSTaskExecutionRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-TaskExecutionRoleArn'
+
+  TaskRoleArn:
+    Description: Task Role ARN
+    Value: !GetAtt ECSTaskRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-TaskRoleArn'
+
+  BackendLogGroupName:
+    Description: Backend Log Group Name
+    Value: !Ref BackendLogGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-BackendLogGroupName'
+
+  PythonParserLogGroupName:
+    Description: Python Parser Log Group Name
+    Value: !Ref PythonParserLogGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-PythonParserLogGroupName'

@@ -1,0 +1,691 @@
+{
+  "metrics": [
+    {
+      "id": "product_revenue",
+      "name": "Product Revenue",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "product revenue",
+        "product sales",
+        "goods revenue"
+      ],
+      "category": "income_statement"
+    },
+    {
+      "id": "service_revenue",
+      "name": "Service Revenue",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "service revenue",
+        "services revenue",
+        "service sales"
+      ],
+      "category": "income_statement"
+    },
+    {
+      "id": "license_revenue",
+      "name": "License Revenue",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "license revenue",
+        "licensing revenue",
+        "royalty revenue"
+      ],
+      "category": "income_statement"
+    },
+    {
+      "id": "other_income_expense",
+      "name": "Other Income/Expense",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "other income",
+        "other expense",
+        "non-operating income"
+      ],
+      "category": "income_statement"
+    },
+    {
+      "id": "pretax_income",
+      "name": "Pretax Income",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "pretax income",
+        "income before tax",
+        "ebt"
+      ],
+      "category": "income_statement"
+    },
+    {
+      "id": "minority_interest",
+      "name": "Minority Interest",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "minority interest",
+        "noncontrolling interest"
+      ],
+      "category": "income_statement"
+    },
+    {
+      "id": "discontinued_operations",
+      "name": "Discontinued Operations",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "discontinued operations",
+        "income from discontinued ops"
+      ],
+      "category": "income_statement"
+    },
+    {
+      "id": "extraordinary_items",
+      "name": "Extraordinary Items",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "extraordinary items",
+        "unusual items"
+      ],
+      "category": "income_statement"
+    },
+    {
+      "id": "preferred_dividends",
+      "name": "Preferred Dividends",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "preferred dividends",
+        "preferred stock dividends"
+      ],
+      "category": "income_statement"
+    },
+    {
+      "id": "net_income_common",
+      "name": "Net Income to Common",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "net income to common",
+        "net income available to common"
+      ],
+      "category": "income_statement"
+    },
+    {
+      "id": "short_term_investments",
+      "name": "Short-term Investments",
+      "statement_type": "balance_sheet",
+      "synonyms": [
+        "short term investments",
+        "marketable securities"
+      ],
+      "category": "balance_sheet"
+    },
+    {
+      "id": "long_term_investments",
+      "name": "Long-term Investments",
+      "statement_type": "balance_sheet",
+      "synonyms": [
+        "long term investments",
+        "non-current investments"
+      ],
+      "category": "balance_sheet"
+    },
+    {
+      "id": "deferred_revenue",
+      "name": "Deferred Revenue",
+      "statement_type": "balance_sheet",
+      "synonyms": [
+        "deferred revenue",
+        "unearned revenue",
+        "contract liabilities"
+      ],
+      "category": "balance_sheet"
+    },
+    {
+      "id": "accrued_expenses",
+      "name": "Accrued Expenses",
+      "statement_type": "balance_sheet",
+      "synonyms": [
+        "accrued expenses",
+        "accrued liabilities"
+      ],
+      "category": "balance_sheet"
+    },
+    {
+      "id": "short_term_debt",
+      "name": "Short-term Debt",
+      "statement_type": "balance_sheet",
+      "synonyms": [
+        "short term debt",
+        "current debt",
+        "current portion of long term debt"
+      ],
+      "category": "balance_sheet"
+    },
+    {
+      "id": "long_term_debt",
+      "name": "Long-term Debt",
+      "statement_type": "balance_sheet",
+      "synonyms": [
+        "long term debt",
+        "non-current debt"
+      ],
+      "category": "balance_sheet"
+    },
+    {
+      "id": "capital_lease_obligations",
+      "name": "Capital Lease Obligations",
+      "statement_type": "balance_sheet",
+      "synonyms": [
+        "capital leases",
+        "finance leases"
+      ],
+      "category": "balance_sheet"
+    },
+    {
+      "id": "pension_liabilities",
+      "name": "Pension Liabilities",
+      "statement_type": "balance_sheet",
+      "synonyms": [
+        "pension liabilities",
+        "pension obligations"
+      ],
+      "category": "balance_sheet"
+    },
+    {
+      "id": "deferred_tax_assets",
+      "name": "Deferred Tax Assets",
+      "statement_type": "balance_sheet",
+      "synonyms": [
+        "deferred tax assets",
+        "dta"
+      ],
+      "category": "balance_sheet"
+    },
+    {
+      "id": "deferred_tax_liabilities",
+      "name": "Deferred Tax Liabilities",
+      "statement_type": "balance_sheet",
+      "synonyms": [
+        "deferred tax liabilities",
+        "dtl"
+      ],
+      "category": "balance_sheet"
+    },
+    {
+      "id": "common_stock",
+      "name": "Common Stock",
+      "statement_type": "balance_sheet",
+      "synonyms": [
+        "common stock",
+        "common shares"
+      ],
+      "category": "balance_sheet"
+    },
+    {
+      "id": "preferred_stock",
+      "name": "Preferred Stock",
+      "statement_type": "balance_sheet",
+      "synonyms": [
+        "preferred stock",
+        "preferred shares"
+      ],
+      "category": "balance_sheet"
+    },
+    {
+      "id": "treasury_stock",
+      "name": "Treasury Stock",
+      "statement_type": "balance_sheet",
+      "synonyms": [
+        "treasury stock",
+        "treasury shares"
+      ],
+      "category": "balance_sheet"
+    },
+    {
+      "id": "additional_paid_in_capital",
+      "name": "Additional Paid-in Capital",
+      "statement_type": "balance_sheet",
+      "synonyms": [
+        "apic",
+        "paid in capital",
+        "capital surplus"
+      ],
+      "category": "balance_sheet"
+    },
+    {
+      "id": "accumulated_other_comprehensive_income",
+      "name": "AOCI",
+      "statement_type": "balance_sheet",
+      "synonyms": [
+        "aoci",
+        "accumulated other comprehensive income"
+      ],
+      "category": "balance_sheet"
+    },
+    {
+      "id": "stock_based_comp_cf",
+      "name": "Stock-Based Comp (CF)",
+      "statement_type": "cash_flow",
+      "synonyms": [
+        "stock based compensation cash flow"
+      ],
+      "category": "cash_flow"
+    },
+    {
+      "id": "deferred_taxes_cf",
+      "name": "Deferred Taxes (CF)",
+      "statement_type": "cash_flow",
+      "synonyms": [
+        "deferred taxes cash flow"
+      ],
+      "category": "cash_flow"
+    },
+    {
+      "id": "accounts_receivable_change",
+      "name": "AR Change",
+      "statement_type": "cash_flow",
+      "synonyms": [
+        "change in accounts receivable",
+        "ar change"
+      ],
+      "category": "cash_flow"
+    },
+    {
+      "id": "inventory_change",
+      "name": "Inventory Change",
+      "statement_type": "cash_flow",
+      "synonyms": [
+        "change in inventory",
+        "inventory change"
+      ],
+      "category": "cash_flow"
+    },
+    {
+      "id": "accounts_payable_change",
+      "name": "AP Change",
+      "statement_type": "cash_flow",
+      "synonyms": [
+        "change in accounts payable",
+        "ap change"
+      ],
+      "category": "cash_flow"
+    },
+    {
+      "id": "investing_cash_flow",
+      "name": "Investing Cash Flow",
+      "statement_type": "cash_flow",
+      "synonyms": [
+        "cash from investing",
+        "investing activities"
+      ],
+      "category": "cash_flow"
+    },
+    {
+      "id": "financing_cash_flow",
+      "name": "Financing Cash Flow",
+      "statement_type": "cash_flow",
+      "synonyms": [
+        "cash from financing",
+        "financing activities"
+      ],
+      "category": "cash_flow"
+    },
+    {
+      "id": "debt_issuance",
+      "name": "Debt Issuance",
+      "statement_type": "cash_flow",
+      "synonyms": [
+        "debt issued",
+        "proceeds from debt"
+      ],
+      "category": "cash_flow"
+    },
+    {
+      "id": "debt_repayment",
+      "name": "Debt Repayment",
+      "statement_type": "cash_flow",
+      "synonyms": [
+        "debt repaid",
+        "repayment of debt"
+      ],
+      "category": "cash_flow"
+    },
+    {
+      "id": "equity_issuance",
+      "name": "Equity Issuance",
+      "statement_type": "cash_flow",
+      "synonyms": [
+        "stock issued",
+        "proceeds from stock issuance"
+      ],
+      "category": "cash_flow"
+    },
+    {
+      "id": "acquisitions",
+      "name": "Acquisitions",
+      "statement_type": "cash_flow",
+      "synonyms": [
+        "business acquisitions",
+        "acquisition of businesses"
+      ],
+      "category": "cash_flow"
+    },
+    {
+      "id": "asset_sales",
+      "name": "Asset Sales",
+      "statement_type": "cash_flow",
+      "synonyms": [
+        "proceeds from asset sales",
+        "sale of assets"
+      ],
+      "category": "cash_flow"
+    },
+    {
+      "id": "roe",
+      "name": "Return on Equity",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "roe",
+        "return on equity"
+      ],
+      "category": "ratios"
+    },
+    {
+      "id": "roa",
+      "name": "Return on Assets",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "roa",
+        "return on assets"
+      ],
+      "category": "ratios"
+    },
+    {
+      "id": "roic",
+      "name": "Return on Invested Capital",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "roic",
+        "return on invested capital"
+      ],
+      "category": "ratios"
+    },
+    {
+      "id": "current_ratio",
+      "name": "Current Ratio",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "current ratio"
+      ],
+      "category": "ratios"
+    },
+    {
+      "id": "quick_ratio",
+      "name": "Quick Ratio",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "quick ratio",
+        "acid test"
+      ],
+      "category": "ratios"
+    },
+    {
+      "id": "debt_to_equity",
+      "name": "Debt to Equity",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "debt to equity",
+        "d/e ratio"
+      ],
+      "category": "ratios"
+    },
+    {
+      "id": "interest_coverage",
+      "name": "Interest Coverage",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "interest coverage",
+        "times interest earned"
+      ],
+      "category": "ratios"
+    },
+    {
+      "id": "asset_turnover",
+      "name": "Asset Turnover",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "asset turnover"
+      ],
+      "category": "ratios"
+    },
+    {
+      "id": "inventory_turnover",
+      "name": "Inventory Turnover",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "inventory turnover"
+      ],
+      "category": "ratios"
+    },
+    {
+      "id": "receivables_turnover",
+      "name": "Receivables Turnover",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "receivables turnover",
+        "ar turnover"
+      ],
+      "category": "ratios"
+    },
+    {
+      "id": "payables_turnover",
+      "name": "Payables Turnover",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "payables turnover",
+        "ap turnover"
+      ],
+      "category": "ratios"
+    },
+    {
+      "id": "working_capital",
+      "name": "Working Capital",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "working capital",
+        "net working capital"
+      ],
+      "category": "ratios"
+    },
+    {
+      "id": "book_value_per_share",
+      "name": "Book Value per Share",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "book value per share",
+        "bvps"
+      ],
+      "category": "ratios"
+    },
+    {
+      "id": "tangible_book_value",
+      "name": "Tangible Book Value",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "tangible book value",
+        "tbv"
+      ],
+      "category": "ratios"
+    },
+    {
+      "id": "enterprise_value",
+      "name": "Enterprise Value",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "enterprise value",
+        "ev"
+      ],
+      "category": "ratios"
+    },
+    {
+      "id": "net_interest_income",
+      "name": "Net Interest Income",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "net interest income",
+        "nii"
+      ],
+      "category": "banking"
+    },
+    {
+      "id": "net_interest_margin",
+      "name": "Net Interest Margin",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "net interest margin",
+        "nim"
+      ],
+      "category": "banking"
+    },
+    {
+      "id": "noninterest_income",
+      "name": "Noninterest Income",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "noninterest income",
+        "fee income"
+      ],
+      "category": "banking"
+    },
+    {
+      "id": "provision_for_loan_losses",
+      "name": "Provision for Loan Losses",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "provision for loan losses",
+        "credit losses"
+      ],
+      "category": "banking"
+    },
+    {
+      "id": "net_charge_offs",
+      "name": "Net Charge-offs",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "net charge offs",
+        "loan charge offs"
+      ],
+      "category": "banking"
+    },
+    {
+      "id": "nonperforming_loans",
+      "name": "Nonperforming Loans",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "nonperforming loans",
+        "npl"
+      ],
+      "category": "banking"
+    },
+    {
+      "id": "loan_loss_reserves",
+      "name": "Loan Loss Reserves",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "loan loss reserves",
+        "allowance for loan losses"
+      ],
+      "category": "banking"
+    },
+    {
+      "id": "tier_1_capital_ratio",
+      "name": "Tier 1 Capital Ratio",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "tier 1 capital ratio",
+        "tier 1 ratio"
+      ],
+      "category": "banking"
+    },
+    {
+      "id": "total_capital_ratio",
+      "name": "Total Capital Ratio",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "total capital ratio"
+      ],
+      "category": "banking"
+    },
+    {
+      "id": "efficiency_ratio",
+      "name": "Efficiency Ratio",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "efficiency ratio"
+      ],
+      "category": "banking"
+    },
+    {
+      "id": "premiums_written",
+      "name": "Premiums Written",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "premiums written",
+        "gross premiums written"
+      ],
+      "category": "insurance"
+    },
+    {
+      "id": "premiums_earned",
+      "name": "Premiums Earned",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "premiums earned",
+        "net premiums earned"
+      ],
+      "category": "insurance"
+    },
+    {
+      "id": "loss_ratio",
+      "name": "Loss Ratio",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "loss ratio"
+      ],
+      "category": "insurance"
+    },
+    {
+      "id": "expense_ratio",
+      "name": "Expense Ratio",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "expense ratio"
+      ],
+      "category": "insurance"
+    },
+    {
+      "id": "combined_ratio",
+      "name": "Combined Ratio",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "combined ratio"
+      ],
+      "category": "insurance"
+    },
+    {
+      "id": "underwriting_income",
+      "name": "Underwriting Income",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "underwriting income",
+        "underwriting profit"
+      ],
+      "category": "insurance"
+    },
+    {
+      "id": "investment_income_insurance",
+      "name": "Investment Income",
+      "statement_type": "income_statement",
+      "synonyms": [
+        "investment income insurance"
+      ],
+      "category": "insurance"
+    }
+  ]
+}

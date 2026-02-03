@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FundLens - Deal Dashboard</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- Design System -->
+    <link rel="stylesheet" href="/css/design-system.css">
+    <script src="/js/theme-toggle.js"></script>
+    
+    <!-- Keep Tailwind for gradual migration -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        /* ═══════════════════════════════════════════════════════════════
+           DESIGN SYSTEM OVERRIDES - Force design system styles
+           ═══════════════════════════════════════════════════════════════ */
+        
+        /* Force design system fonts to override Tailwind */
+        * {
+            font-family: var(--font-sans) !important;
+        }
+        
+        code, pre, .font-mono {
+            font-family: var(--font-mono) !important;
+        }
+        
+        /* Force body background to use design system */
+        body {
+            background: linear-gradient(135deg, var(--color-gray-50) 0%, var(--color-white) 50%, var(--color-teal-50) 100%) !important;
+            font-family: var(--font-sans) !important;
+        }
+        
+        [x-cloak] { display: none !important; }
+        
+        /* Update gradients to use design system colors */
+        .gradient-bg { 
+            background: var(--gradient-hero) !important;
+        }
+        
+        .metric-card {
+            background: linear-gradient(145deg, var(--bg-primary) 0%, var(--bg-secondary) 100%) !important;
+            border-radius: var(--radius-xl) !important;
+            box-shadow: var(--shadow-md) !important;
+            transition: all var(--transition-slow) !important;
+        }
+        
+        .metric-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-xl) !important;
+        }
+        
+        .btn-primary {
+            background: var(--gradient-button) !important;
+            transition: all var(--transition-slow) !important;
+            color: var(--text-inverse) !important;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(30, 90, 122, 0.4) !important;
+        }
+        
+        .tenant-badge {
+            background: linear-gradient(135deg, var(--color-success-500) 0%, var(--color-success-600) 100%) !important;
+        }
+        
+        /* Update navigation to use design system navy */
+        nav.bg-white {
+            background: var(--color-navy-900) !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+        }
+        
+        nav.bg-white * {
+            color: var(--text-inverse) !important;
+        }
+        
+        /* Update text colors to use design system */
+        .text-gray-900 {
+            color: var(--text-primary) !important;
+        }
+        
+        .text-gray-600 {
+            color: var(--text-secondary) !important;
+        }
+        
+        .text-gray-500 {
+            color: var(--text-tertiary) !important;
+        }
+        
+        /* Update card backgrounds */
+        .bg-white {
+            background: var(--bg-primary) !important;
+        }
+        
+        /* Update borders */
+        .border-gray-100,
+        .border-gray-200 {
+            border-color: var(--border-subtle) !important;
+        }
+        
+        @keyframes fadeIn { 
+            from { opacity: 0; transform: translateY(10px); } 
+            to { opacity: 1; transform: translateY(0); } 
+        }
+        
+        .animate-fade-in { 
+            animation: fadeIn 0.4s ease-out; 
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-gray-50 via-white to-indigo-50">
+    <div x-data="dealDashboard()" x-init="init()" x-cloak>
+        <!-- Top Navigation Bar -->
+        <nav class="bg-white shadow-sm border-b border-gray-100 sticky top-0 z-50">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between items-center h-16">
+                    <!-- Logo & Tenant -->
+                    <div class="flex items-center space-x-4">
+                        <div class="flex items-center">
+                            <div class="w-10 h-10 gradient-bg rounded-xl flex items-center justify-center shadow-lg">
+                                <i class="fas fa-chart-line text-white text-lg"></i>
+                            </div>
+                            <div class="ml-3">
+                                <h1 class="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">FundLens</h1>
+                            </div>
+                        </div>
+                        <!-- Tenant Badge -->
+                        <div class="hidden sm:flex items-center">
+                            <span class="text-gray-300 mx-3">|</span>
+                            <div class="tenant-badge px-3 py-1 rounded-full">
+                                <span class="text-white text-sm font-medium" x-text="user.tenantName || 'Loading...'"></span>
+                            </div>
+                            <!-- Platform Admin Badge -->
+                            <div x-show="user.isPlatformAdmin" class="ml-2 px-2 py-1 rounded-full bg-yellow-500">
+                                <span class="text-white text-xs font-bold">PLATFORM ADMIN</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- User Menu -->
+                    <div class="flex items-center space-x-4">
+                        <!-- Theme Toggle Button -->
+                        <button onclick="window.FundLensTheme.toggle()" class="p-2 rounded-lg hover:bg-gray-100 transition-colors" title="Toggle theme">
+                            <i class="fas fa-moon text-gray-600 text-lg"></i>
+                        </button>
+                        
+                        <div class="relative" x-data="{ open: false }">
+                            <button @click="open = !open" class="flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors">
+                                <div class="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center">
+                                    <span class="text-indigo-600 font-semibold text-sm" x-text="getUserInitials()"></span>
+                                </div>
+                                <div class="hidden md:block text-left">
+                                    <p class="text-sm font-medium text-gray-700" x-text="user.email"></p>
+                                    <p class="text-xs text-gray-500 capitalize" x-text="user.role"></p>
+                                </div>
+                                <i class="fas fa-chevron-down text-gray-400 text-xs"></i>
+                            </button>
+                            
+                            <!-- Dropdown -->
+                            <div x-show="open" @click.away="open = false" 
+                                 x-transition:enter="transition ease-out duration-100"
+                                 x-transition:enter-start="transform opacity-0 scale-95"
+                                 x-transition:enter-end="transform opacity-100 scale-100"
+                                 x-transition:leave="transition ease-in duration-75"
+                                 x-transition:leave-start="transform opacity-100 scale-100"
+                                 x-transition:leave-end="transform opacity-0 scale-95"
+                                 class="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-50">
+                                <div class="px-4 py-3 border-b border-gray-100">
+                                    <p class="text-sm font-medium text-gray-900" x-text="user.email"></p>
+                                    <p class="text-xs text-gray-500" x-text="user.tenantName"></p>
+                                </div>
+                                <a href="#" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                                    <i class="fas fa-user-circle mr-3 text-gray-400"></i> Profile Settings
+                                </a>
+                                <a href="#" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                                    <i class="fas fa-cog mr-3 text-gray-400"></i> Preferences
+                                </a>
+                                <div class="border-t border-gray-100 mt-2 pt-2">
+                                    <button @click="logout()" class="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50">
+                                        <i class="fas fa-sign-out-alt mr-3"></i> Sign Out
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <!-- Page Header -->
+            <div class="flex flex-col md:flex-row md:justify-between md:items-center mb-8 gap-4">
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-900">Deal Dashboard</h1>
+                    <p class="text-gray-600 mt-1">Manage your financial analysis projects</p>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <div class="bg-white rounded-lg px-4 py-2 shadow-sm border border-gray-200">
+                        <span class="text-sm text-gray-500">Total Deals:</span>
+                        <span class="font-bold text-indigo-600 ml-1" x-text="deals.length"></span>
+                    </div>
+                    <button @click="showCreateModal = true" class="btn-primary text-white px-5 py-2.5 rounded-xl font-medium flex items-center">
+                        <i class="fas fa-plus mr-2"></i>New Deal
+                    </button>
+                </div>
+            </div>
+
+            <!-- Quick Analysis Card -->
+            <div class="metric-card p-6 mb-8 border border-indigo-100 bg-gradient-to-br from-indigo-50 to-purple-50">
+                <div class="flex items-center mb-5">
+                    <div class="w-12 h-12 gradient-bg rounded-xl flex items-center justify-center shadow-lg">
+                        <i class="fas fa-rocket text-white text-xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <h2 class="text-xl font-bold text-gray-900">Quick Analysis</h2>
+                        <p class="text-gray-600 text-sm">Start a new financial analysis in seconds</p>
+                    </div>
+                </div>
+                <div class="flex flex-wrap gap-3">
+                    <input x-model="quickTicker" type="text" placeholder="Enter ticker (e.g., AAPL)" 
+                           class="flex-1 min-w-[180px] px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all">
+                    <select x-model="quickYears" class="px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100">
+                        <option value="2">Last 2 Years</option>
+                        <option value="3">Last 3 Years</option>
+                        <option value="5">Last 5 Years</option>
+                    </select>
+                    <button @click="quickAnalysis()" class="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-2.5 rounded-xl font-medium transition-all flex items-center">
+                        <i class="fas fa-chart-line mr-2"></i>Analyze Now
+                    </button>
+                </div>
+            </div>
+
+            <!-- Deals Table -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                    <h2 class="text-lg font-semibold text-gray-900">All Deals</h2>
+                    <select x-model="statusFilter" class="text-sm border border-gray-300 rounded-lg px-3 py-1.5">
+                        <option value="">All Status</option>
+                        <option value="processing">Processing</option>
+                        <option value="ready">Ready</option>
+                        <option value="draft">Draft</option>
+                        <option value="error">Error</option>
+                    </select>
+                </div>
+
+                <!-- Deals List -->
+                <div x-show="filteredDeals.length > 0">
+                    <table class="w-full">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Deal</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Company</th>
+                                <th x-show="user.isPlatformAdmin" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tenant</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200">
+                            <template x-for="deal in filteredDeals" :key="deal.id">
+                                <tr class="hover:bg-gray-50 transition-colors animate-fade-in">
+                                    <td class="px-6 py-4">
+                                        <div class="flex items-center">
+                                            <div class="w-10 h-10 gradient-bg rounded-lg flex items-center justify-center shadow-sm">
+                                                <i class="fas fa-chart-bar text-white text-sm"></i>
+                                            </div>
+                                            <div class="ml-3">
+                                                <p class="text-sm font-medium text-gray-900" x-text="deal.name"></p>
+                                                <p class="text-xs text-gray-500" x-text="deal.description || 'No description'"></p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4">
+                                        <p class="text-sm text-gray-900" x-text="deal.companyName || deal.ticker || '-'"></p>
+                                        <p class="text-xs text-gray-500" x-text="deal.dealType === 'public' ? deal.ticker : 'Private'"></p>
+                                    </td>
+                                    <td x-show="user.isPlatformAdmin" class="px-6 py-4">
+                                        <span class="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800" x-text="deal.tenantName || deal.tenantSlug || 'Default'"></span>
+                                    </td>
+                                    <td class="px-6 py-4">
+                                        <span class="inline-flex px-2.5 py-1 text-xs font-semibold rounded-full" 
+                                              :class="getStatusClass(deal.status)" x-text="deal.status"></span>
+                                    </td>
+                                    <td class="px-6 py-4 text-sm text-gray-500" x-text="formatDate(deal.createdAt)"></td>
+                                    <td class="px-6 py-4">
+                                        <div class="flex items-center space-x-2">
+                                            <button @click="openDeal(deal)" class="text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg text-sm font-medium transition-all">
+                                                <i class="fas fa-eye mr-1"></i>View
+                                            </button>
+                                            <button @click="confirmDelete(deal)" class="text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg text-sm font-medium transition-all">
+                                                <i class="fas fa-trash mr-1"></i>Delete
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Empty State -->
+                <div x-show="filteredDeals.length === 0" class="text-center py-16">
+                    <div class="w-20 h-20 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <i class="fas fa-chart-bar text-3xl text-indigo-500"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-gray-900 mb-2">No deals yet</h3>
+                    <p class="text-gray-600 mb-6">Create your first financial analysis deal to get started.</p>
+                    <button @click="showCreateModal = true" class="btn-primary text-white px-6 py-3 rounded-xl font-medium">
+                        <i class="fas fa-plus mr-2"></i>Create Your First Deal
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Create Deal Modal -->
+        <div x-show="showCreateModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto" 
+             x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+             x-transition:leave="transition ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0">
+            <div class="fixed inset-0 bg-black bg-opacity-50" @click="showCreateModal = false"></div>
+            <div class="flex min-h-full items-center justify-center p-4">
+                <div class="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl" @click.stop>
+                    <div class="p-6 border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-t-2xl">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center">
+                                <div class="w-10 h-10 gradient-bg rounded-xl flex items-center justify-center shadow-lg">
+                                    <i class="fas fa-plus text-white"></i>
+                                </div>
+                                <div class="ml-3">
+                                    <h2 class="text-xl font-bold text-gray-900">Create New Deal</h2>
+                                    <p class="text-sm text-gray-600">Set up a financial analysis</p>
+                                </div>
+                            </div>
+                            <button @click="showCreateModal = false" class="text-gray-400 hover:text-gray-600">
+                                <i class="fas fa-times text-xl"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="p-6 space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Deal Name</label>
+                            <input x-model="newDeal.name" type="text" placeholder="e.g., AAPL Analysis Q4 2024" class="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100">
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Deal Type</label>
+                                <select x-model="newDeal.dealType" class="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:border-indigo-500">
+                                    <option value="public">Public Company</option>
+                                    <option value="private">Private Company</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Ticker Symbol</label>
+                                <input x-model="newDeal.ticker" type="text" placeholder="e.g., AAPL" class="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:border-indigo-500" :disabled="newDeal.dealType === 'private'">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Company Name</label>
+                            <input x-model="newDeal.companyName" type="text" placeholder="e.g., Apple Inc." class="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:border-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Analysis Period</label>
+                            <select x-model="newDeal.years" class="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:border-indigo-500">
+                                <option value="2">Last 2 Years</option>
+                                <option value="3">Last 3 Years</option>
+                                <option value="5">Last 5 Years</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                            <textarea x-model="newDeal.description" placeholder="Brief description..." class="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:border-indigo-500 h-20 resize-none"></textarea>
+                        </div>
+                    </div>
+                    <div class="p-6 border-t border-gray-200 bg-gray-50 rounded-b-2xl flex justify-end space-x-3">
+                        <button @click="showCreateModal = false" class="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-medium">Cancel</button>
+                        <button @click="createDeal()" class="btn-primary text-white px-5 py-2.5 rounded-xl font-medium">
+                            <i class="fas fa-rocket mr-2"></i>Create Deal
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Delete Confirmation Modal -->
+        <div x-show="showDeleteModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto"
+             x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+             x-transition:leave="transition ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0">
+            <div class="fixed inset-0 bg-black bg-opacity-50" @click="showDeleteModal = false"></div>
+            <div class="flex min-h-full items-center justify-center p-4">
+                <div class="relative w-full max-w-md bg-white rounded-2xl shadow-2xl" @click.stop>
+                    <div class="p-6 border-b border-gray-200 bg-gradient-to-r from-red-50 to-pink-50 rounded-t-2xl">
+                        <div class="flex items-center">
+                            <div class="w-10 h-10 bg-red-500 rounded-xl flex items-center justify-center shadow-lg">
+                                <i class="fas fa-exclamation-triangle text-white"></i>
+                            </div>
+                            <div class="ml-3">
+                                <h2 class="text-xl font-bold text-gray-900">Delete Deal</h2>
+                                <p class="text-sm text-gray-600">This action cannot be undone</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="p-6">
+                        <p class="text-gray-700 mb-4">Are you sure you want to delete <strong x-text="dealToDelete?.name"></strong>?</p>
+                        <p class="text-sm text-gray-500">All associated data including metrics, chat history, and analysis will be permanently removed.</p>
+                    </div>
+                    <div class="p-6 border-t border-gray-200 bg-gray-50 rounded-b-2xl flex justify-end space-x-3">
+                        <button @click="showDeleteModal = false" class="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-medium">Cancel</button>
+                        <button @click="deleteDeal()" class="px-5 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 font-medium">
+                            <i class="fas fa-trash mr-2"></i>Delete
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Overlay -->
+        <div x-show="loading" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-white bg-opacity-80">
+            <div class="text-center">
+                <div class="w-16 h-16 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4"></div>
+                <p class="text-gray-600 font-medium">Loading...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function dealDashboard() {
+            return {
+                loading: true,
+                user: { email: '', tenantId: '', tenantName: '', tenantSlug: '', role: '', isPlatformAdmin: false },
+                deals: [],
+                statusFilter: '',
+                showCreateModal: false,
+                showDeleteModal: false,
+                dealToDelete: null,
+                quickTicker: '',
+                quickYears: '3',
+                newDeal: { name: '', description: '', dealType: 'public', ticker: '', companyName: '', years: '3' },
+
+                async init() {
+                    // Check authentication
+                    const token = localStorage.getItem('fundlens_token');
+                    if (!token) {
+                        window.location.href = '/login.html';
+                        return;
+                    }
+
+                    // Load user info
+                    const userStr = localStorage.getItem('fundlens_user');
+                    if (userStr) {
+                        this.user = JSON.parse(userStr);
+                    }
+
+                    // Verify token and load deals
+                    try {
+                        await this.verifyAuth();
+                        await this.loadDeals();
+                    } catch (error) {
+                        console.error('Auth error:', error);
+                        this.logout();
+                    }
+                    
+                    this.loading = false;
+                },
+
+                async verifyAuth() {
+                    const token = localStorage.getItem('fundlens_token');
+                    const response = await fetch('/api/auth/me', {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('Authentication failed');
+                    }
+                    
+                    const data = await response.json();
+                    if (data.success && data.user) {
+                        // Check if platform admin (default tenant + admin role)
+                        const isPlatformAdmin = data.user.tenantId === '00000000-0000-0000-0000-000000000000' && 
+                                               data.user.tenantRole === 'admin';
+                        this.user = { 
+                            ...this.user, 
+                            ...data.user,
+                            isPlatformAdmin: isPlatformAdmin
+                        };
+                        localStorage.setItem('fundlens_user', JSON.stringify(this.user));
+                    }
+                },
+
+                async loadDeals() {
+                    const token = localStorage.getItem('fundlens_token');
+                    const response = await fetch('/api/deals', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    
+                    if (response.ok) {
+                        const result = await response.json();
+                        this.deals = result.success ? result.data : (Array.isArray(result) ? result : []);
+                    }
+                },
+
+                get filteredDeals() {
+                    if (!this.statusFilter) return this.deals;
+                    return this.deals.filter(d => d.status === this.statusFilter);
+                },
+
+                getUserInitials() {
+                    if (!this.user.email) return '?';
+                    return this.user.email.substring(0, 2).toUpperCase();
+                },
+
+                getStatusClass(status) {
+                    const classes = {
+                        'ready': 'bg-green-100 text-green-800',
+                        'processing': 'bg-blue-100 text-blue-800',
+                        'draft': 'bg-gray-100 text-gray-800',
+                        'error': 'bg-red-100 text-red-800',
+                        'closed': 'bg-purple-100 text-purple-800'
+                    };
+                    return classes[status] || 'bg-gray-100 text-gray-800';
+                },
+
+                formatDate(dateStr) {
+                    if (!dateStr) return '-';
+                    return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                },
+
+                async quickAnalysis() {
+                    if (!this.quickTicker.trim()) {
+                        alert('Please enter a ticker symbol');
+                        return;
+                    }
+                    this.newDeal = {
+                        name: `${this.quickTicker.toUpperCase()} Analysis`,
+                        description: `${this.quickYears}-year comprehensive analysis`,
+                        dealType: 'public',
+                        ticker: this.quickTicker.toUpperCase(),
+                        companyName: '',
+                        years: this.quickYears
+                    };
+                    await this.createDeal();
+                },
+
+                async createDeal() {
+                    const token = localStorage.getItem('fundlens_token');
+                    try {
+                        const response = await fetch('/api/deals', {
+                            method: 'POST',
+                            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                            body: JSON.stringify(this.newDeal)
+                        });
+                        
+                        const result = await response.json();
+                        if (response.ok && (result.success || result.id)) {
+                            const deal = result.data || result;
+                            this.deals.unshift(deal);
+                            this.showCreateModal = false;
+                            this.resetNewDeal();
+                            this.openDeal(deal, true); // Auto-start pipeline after creation
+                        } else {
+                            alert('Failed to create deal: ' + (result.message || 'Unknown error'));
+                        }
+                    } catch (error) {
+                        console.error('Create deal error:', error);
+                        alert('Failed to create deal');
+                    }
+                },
+
+                resetNewDeal() {
+                    this.newDeal = { name: '', description: '', dealType: 'public', ticker: '', companyName: '', years: '3' };
+                    this.quickTicker = '';
+                },
+
+                openDeal(deal, autostart = false) {
+                    const autostartParam = autostart ? '&autostart=true' : '';
+                    window.location.href = `/deal-analysis.html?id=${deal.id}${autostartParam}`;
+                },
+
+                confirmDelete(deal) {
+                    this.dealToDelete = deal;
+                    this.showDeleteModal = true;
+                },
+
+                async deleteDeal() {
+                    if (!this.dealToDelete) return;
+                    const token = localStorage.getItem('fundlens_token');
+                    try {
+                        const response = await fetch(`/api/deals/${this.dealToDelete.id}`, {
+                            method: 'DELETE',
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                        
+                        if (response.ok) {
+                            this.deals = this.deals.filter(d => d.id !== this.dealToDelete.id);
+                            this.showDeleteModal = false;
+                            this.dealToDelete = null;
+                        } else {
+                            alert('Failed to delete deal');
+                        }
+                    } catch (error) {
+                        console.error('Delete error:', error);
+                        alert('Failed to delete deal');
+                    }
+                },
+
+                logout() {
+                    localStorage.removeItem('fundlens_token');
+                    localStorage.removeItem('fundlens_refresh_token');
+                    localStorage.removeItem('fundlens_user');
+                    localStorage.removeItem('fundlens_email');
+                    window.location.href = '/login.html';
+                }
+            };
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FundLens RAG Query Interface</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 1200px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .card h2 {
+            color: #333;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .query-box {
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        .query-input {
+            width: 100%;
+            padding: 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            resize: vertical;
+            min-height: 100px;
+            font-family: inherit;
+        }
+
+        .query-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .query-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .sample-queries {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .sample-query {
+            background: #f8f9ff;
+            padding: 12px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 2px solid transparent;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .sample-query:hover {
+            border-color: #667eea;
+            transform: translateX(5px);
+        }
+
+        .sample-query .icon {
+            font-size: 1.5rem;
+        }
+
+        .sample-query .text {
+            flex: 1;
+        }
+
+        .sample-query .type {
+            font-size: 0.75rem;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+
+        .type-structured {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .type-semantic {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .type-hybrid {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #667eea;
+        }
+
+        .loading .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .response-container {
+            margin-top: 20px;
+        }
+
+        .response-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .response-stats {
+            display: flex;
+            gap: 20px;
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .response-stat {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .answer-box {
+            background: #f8f9ff;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            margin-bottom: 20px;
+        }
+
+        .answer-box h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+
+        .answer-text {
+            white-space: pre-wrap;
+            line-height: 1.6;
+            color: #333;
+            font-size: 1.05rem;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .metric-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border: 2px solid #e0e0e0;
+        }
+
+        .metric-card .ticker {
+            font-weight: 600;
+            color: #667eea;
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+        }
+
+        .metric-card .metric-name {
+            color: #666;
+            font-size: 0.9rem;
+            margin-bottom: 5px;
+        }
+
+        .metric-card .metric-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .metric-card .metric-meta {
+            font-size: 0.85rem;
+            color: #999;
+        }
+
+        .sources-list {
+            margin-top: 20px;
+        }
+
+        .source-item {
+            background: #f8f9ff;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            font-size: 0.9rem;
+        }
+
+        .source-item .source-type {
+            font-weight: 600;
+            color: #667eea;
+            margin-right: 10px;
+        }
+
+        .intent-display {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .intent-display h4 {
+            color: #856404;
+            margin-bottom: 10px;
+        }
+
+        .intent-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .intent-tag {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            background: white;
+            color: #856404;
+        }
+
+        .error-box {
+            background: #f8d7da;
+            border: 2px solid #f5c6cb;
+            color: #721c24;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #666;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .history-item {
+            background: #f8f9ff;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .history-item:hover {
+            border-left: 4px solid #667eea;
+            padding-left: 19px;
+        }
+
+        .history-query {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .history-meta {
+            font-size: 0.85rem;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 FundLens RAG Query Interface</h1>
+            <p>Ask questions about financial data - Test Weeks 1 & 2 Implementation</p>
+        </div>
+
+        <div class="main-grid">
+            <!-- Left Column: Query Input -->
+            <div class="card">
+                <h2>💬 Ask a Question</h2>
+                
+                <div class="query-box">
+                    <textarea 
+                        class="query-input" 
+                        id="queryInput" 
+                        placeholder="Ask anything about financial data...
+
+Examples:
+• What was Apple's revenue in FY2025?
+• Compare AAPL and GOOGL revenue
+• What is Microsoft's latest net income?
+• Show me Tesla's cash position"></textarea>
+                </div>
+
+                <div class="query-actions">
+                    <button class="btn btn-primary" onclick="executeQuery()">
+                        🚀 Ask Question
+                    </button>
+                    <button class="btn btn-secondary" onclick="clearQuery()">
+                        🗑️ Clear
+                    </button>
+                    <button class="btn btn-success" onclick="showExamples()">
+                        💡 Examples
+                    </button>
+                </div>
+
+                <div class="sample-queries" id="sampleQueries" style="display: none;">
+                    <h3 style="margin-top: 20px; color: #333;">Sample Queries</h3>
+                    
+                    <div class="sample-query" onclick="useQuery(this.dataset.query)">
+                        <span class="icon">📊</span>
+                        <span class="text" data-query="What was Apple's revenue in FY2025?">What was Apple's revenue in FY2025?</span>
+                        <span class="type type-structured">Structured</span>
+                    </div>
+
+                    <div class="sample-query" onclick="useQuery(this.dataset.query)">
+                        <span class="icon">📊</span>
+                        <span class="text" data-query="Compare AAPL and GOOGL revenue">Compare AAPL and GOOGL revenue</span>
+                        <span class="type type-structured">Structured</span>
+                    </div>
+
+                    <div class="sample-query" onclick="useQuery(this.dataset.query)">
+                        <span class="icon">📊</span>
+                        <span class="text" data-query="What is Microsoft's latest net income?">What is Microsoft's latest net income?</span>
+                        <span class="type type-structured">Structured</span>
+                    </div>
+
+                    <div class="sample-query" onclick="useQuery(this.dataset.query)">
+                        <span class="icon">📊</span>
+                        <span class="text" data-query="Show me Amazon's total assets">Show me Amazon's total assets</span>
+                        <span class="type type-structured">Structured</span>
+                    </div>
+
+                    <div class="sample-query" onclick="useQuery(this.dataset.query)">
+                        <span class="icon">🔄</span>
+                        <span class="text" data-query="Why did Apple's revenue grow in 2024?">Why did Apple's revenue grow in 2024?</span>
+                        <span class="type type-hybrid">Hybrid (Week 3)</span>
+                    </div>
+
+                    <div class="sample-query" onclick="useQuery(this.dataset.query)">
+                        <span class="icon">📝</span>
+                        <span class="text" data-query="Explain Apple's business model">Explain Apple's business model</span>
+                        <span class="type type-semantic">Semantic (Week 3)</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Response -->
+            <div class="card">
+                <h2>📋 Response</h2>
+                
+                <div id="responseArea">
+                    <div style="text-align: center; padding: 60px 20px; color: #999;">
+                        <div style="font-size: 4rem; margin-bottom: 20px;">🤔</div>
+                        <p style="font-size: 1.1rem;">Ask a question to see the response</p>
+                        <p style="font-size: 0.9rem; margin-top: 10px;">Currently testing: Structured Retrieval (Week 2)</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Section: Tabs -->
+        <div class="card">
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('intent')">🎯 Intent Detection</button>
+                <button class="tab" onclick="switchTab('metrics')">📊 Metrics</button>
+                <button class="tab" onclick="switchTab('sources')">📄 Sources</button>
+                <button class="tab" onclick="switchTab('history')">📜 History</button>
+            </div>
+
+            <div id="intent-tab" class="tab-content active">
+                <p style="color: #999; text-align: center; padding: 40px;">Ask a question to see intent detection</p>
+            </div>
+
+            <div id="metrics-tab" class="tab-content">
+                <p style="color: #999; text-align: center; padding: 40px;">Metrics will appear here</p>
+            </div>
+
+            <div id="sources-tab" class="tab-content">
+                <p style="color: #999; text-align: center; padding: 40px;">Sources will appear here</p>
+            </div>
+
+            <div id="history-tab" class="tab-content">
+                <p style="color: #999; text-align: center; padding: 40px;">Query history will appear here</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:3000';
+        let queryHistory = [];
+
+        function useQuery(query) {
+            document.getElementById('queryInput').value = query;
+            executeQuery();
+        }
+
+        function clearQuery() {
+            document.getElementById('queryInput').value = '';
+            document.getElementById('responseArea').innerHTML = `
+                <div style="text-align: center; padding: 60px 20px; color: #999;">
+                    <div style="font-size: 4rem; margin-bottom: 20px;">🤔</div>
+                    <p style="font-size: 1.1rem;">Ask a question to see the response</p>
+                </div>
+            `;
+        }
+
+        function showExamples() {
+            const examples = document.getElementById('sampleQueries');
+            examples.style.display = examples.style.display === 'none' ? 'block' : 'none';
+        }
+
+        async function executeQuery() {
+            const query = document.getElementById('queryInput').value.trim();
+            if (!query) {
+                alert('Please enter a question');
+                return;
+            }
+
+            // Show loading
+            document.getElementById('responseArea').innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Processing your query...</p>
+                </div>
+            `;
+
+            const startTime = Date.now();
+
+            try {
+                const response = await fetch(`${API_BASE}/api/rag/query`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                const latency = Date.now() - startTime;
+
+                // Add to history
+                queryHistory.unshift({
+                    query,
+                    timestamp: new Date(),
+                    latency,
+                    type: data.intent.type
+                });
+                if (queryHistory.length > 10) queryHistory.pop();
+
+                // Display response
+                displayResponse(data, latency);
+                displayIntent(data.intent);
+                displayMetrics(data.metrics);
+                displaySources(data.sources);
+                updateHistory();
+
+            } catch (error) {
+                document.getElementById('responseArea').innerHTML = `
+                    <div class="error-box">
+                        <h3>❌ Error</h3>
+                        <p>${error.message}</p>
+                        <p style="margin-top: 10px; font-size: 0.9rem;">Make sure the backend is running on port 3000</p>
+                    </div>
+                `;
+            }
+        }
+
+        function displayResponse(data, latency) {
+            const html = `
+                <div class="response-container">
+                    <div class="response-header">
+                        <h3>Answer</h3>
+                        <div class="response-stats">
+                            <div class="response-stat">
+                                <span>⚡</span>
+                                <span>${latency}ms</span>
+                            </div>
+                            <div class="response-stat">
+                                <span>💰</span>
+                                <span>$${data.cost.toFixed(4)}</span>
+                            </div>
+                            <div class="response-stat">
+                                <span>🎯</span>
+                                <span>${data.intent.type}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="answer-box">
+                        <h3>📝 Response</h3>
+                        <div class="answer-text">${data.answer}</div>
+                    </div>
+
+                    ${data.metrics && data.metrics.length > 0 ? `
+                        <div>
+                            <h4 style="color: #333; margin-bottom: 15px;">📊 Retrieved Metrics (${data.metrics.length})</h4>
+                            <div class="metrics-grid">
+                                ${data.metrics.slice(0, 6).map(m => `
+                                    <div class="metric-card">
+                                        <div class="ticker">${m.ticker}</div>
+                                        <div class="metric-name">${m.normalizedMetric}</div>
+                                        <div class="metric-value">${formatValue(m.value, m.normalizedMetric)}</div>
+                                        <div class="metric-meta">
+                                            ${m.fiscalPeriod} • ${m.filingType}
+                                            ${m.confidenceScore ? ` • ${(m.confidenceScore * 100).toFixed(0)}% confidence` : ''}
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                            ${data.metrics.length > 6 ? `<p style="text-align: center; margin-top: 15px; color: #999;">+${data.metrics.length - 6} more metrics</p>` : ''}
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+
+            document.getElementById('responseArea').innerHTML = html;
+        }
+
+        function displayIntent(intent) {
+            const html = `
+                <div class="intent-display">
+                    <h4>🎯 Detected Intent</h4>
+                    <div class="intent-tags">
+                        <span class="intent-tag">Type: ${intent.type}</span>
+                        ${intent.ticker ? `<span class="intent-tag">Ticker: ${Array.isArray(intent.ticker) ? intent.ticker.join(', ') : intent.ticker}</span>` : ''}
+                        ${intent.metrics && intent.metrics.length > 0 ? `<span class="intent-tag">Metrics: ${intent.metrics.join(', ')}</span>` : ''}
+                        ${intent.period ? `<span class="intent-tag">Period: ${intent.period}</span>` : ''}
+                        <span class="intent-tag">Confidence: ${(intent.confidence * 100).toFixed(0)}%</span>
+                    </div>
+                    <div style="margin-top: 15px; font-size: 0.9rem;">
+                        <strong>Characteristics:</strong>
+                        ${intent.needsNarrative ? '✅ Narrative' : '❌ Narrative'}
+                        ${intent.needsComparison ? '✅ Comparison' : '❌ Comparison'}
+                        ${intent.needsComputation ? '✅ Computation' : '❌ Computation'}
+                        ${intent.needsTrend ? '✅ Trend' : '❌ Trend'}
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('intent-tab').innerHTML = html;
+        }
+
+        function displayMetrics(metrics) {
+            if (!metrics || metrics.length === 0) {
+                document.getElementById('metrics-tab').innerHTML = '<p style="color: #999; text-align: center; padding: 40px;">No metrics retrieved</p>';
+                return;
+            }
+
+            const html = `
+                <div class="metrics-grid">
+                    ${metrics.map(m => `
+                        <div class="metric-card">
+                            <div class="ticker">${m.ticker}</div>
+                            <div class="metric-name">${m.normalizedMetric}</div>
+                            <div class="metric-value">${formatValue(m.value, m.normalizedMetric)}</div>
+                            <div class="metric-meta">
+                                <div>${m.fiscalPeriod} • ${m.filingType}</div>
+                                <div>Filed: ${new Date(m.filingDate).toLocaleDateString()}</div>
+                                <div>Confidence: ${(m.confidenceScore * 100).toFixed(0)}%</div>
+                                ${m.sourcePage ? `<div>Page: ${m.sourcePage}</div>` : ''}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+
+            document.getElementById('metrics-tab').innerHTML = html;
+        }
+
+        function displaySources(sources) {
+            if (!sources || sources.length === 0) {
+                document.getElementById('sources-tab').innerHTML = '<p style="color: #999; text-align: center; padding: 40px;">No sources available</p>';
+                return;
+            }
+
+            const html = `
+                <div class="sources-list">
+                    ${sources.map(s => `
+                        <div class="source-item">
+                            <span class="source-type">${s.type.toUpperCase()}</span>
+                            ${s.ticker} • ${s.filingType} • ${s.fiscalPeriod}
+                            ${s.pageNumber ? ` • Page ${s.pageNumber}` : ''}
+                            ${s.section ? ` • ${s.section}` : ''}
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+
+            document.getElementById('sources-tab').innerHTML = html;
+        }
+
+        function updateHistory() {
+            if (queryHistory.length === 0) {
+                document.getElementById('history-tab').innerHTML = '<p style="color: #999; text-align: center; padding: 40px;">No queries yet</p>';
+                return;
+            }
+
+            const html = queryHistory.map((h, i) => `
+                <div class="history-item" onclick="useQuery('${h.query.replace(/'/g, "\\'")}')">
+                    <div class="history-query">${h.query}</div>
+                    <div class="history-meta">
+                        ${h.timestamp.toLocaleTimeString()} • ${h.latency}ms • ${h.type}
+                    </div>
+                </div>
+            `).join('');
+
+            document.getElementById('history-tab').innerHTML = html;
+        }
+
+        function formatValue(value, metric) {
+            // Percentages
+            if (metric.includes('margin') || metric.includes('pct')) {
+                return `${value.toFixed(2)}%`;
+            }
+
+            // Large numbers
+            if (Math.abs(value) >= 1_000_000_000) {
+                return `$${(value / 1_000_000_000).toFixed(2)}B`;
+            }
+
+            if (Math.abs(value) >= 1_000_000) {
+                return `$${(value / 1_000_000).toFixed(2)}M`;
+            }
+
+            if (Math.abs(value) >= 1_000) {
+                return `$${(value / 1_000).toFixed(2)}K`;
+            }
+
+            return `$${value.toFixed(2)}`;
+        }
+
+        function switchTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+        }
+
+        // Keyboard shortcut: Enter to submit
+        document.getElementById('queryInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                executeQuery();
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,44 @@
+# =============================================================================
+# Docker Ignore - Python Parser
+# =============================================================================
+
+# Python cache
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv
+.venv
+env
+.env
+
+# IDE and editor files
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# Test files
+tests/
+test_*.py
+*_test.py
+.pytest_cache
+.coverage
+htmlcov/
+
+# Documentation
+*.md
+docs/
+
+# Misc
+.DS_Store
+Thumbs.db
+*.log
+
+# Git
+.git
+.gitignore
