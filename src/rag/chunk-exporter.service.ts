@@ -9,6 +9,7 @@ export interface BedrockChunk {
     document_type: string;
     filing_type: string;
     section_type: string;
+    subsection_name?: string; // NEW: Fine-grained subsection within major sections
     fiscal_period?: string;
     filing_date?: string;
     chunk_index: number;
@@ -173,7 +174,9 @@ export class ChunkExporterService {
    * This allows all tenants to access SEC data via Bedrock KB filter:
    * (visibility='public' OR tenant_id=current_tenant)
    * 
-   * Requirements: 7.1, 7.2, 7.3, 7.4
+   * PHASE 1: Include subsection_name metadata for fine-grained retrieval
+   * 
+   * Requirements: 7.1, 7.2, 7.3, 7.4, 16.1, 16.5
    */
   private formatChunkForBedrock(chunk: any): BedrockChunk {
     // Determine visibility and tenant_id based on document type
@@ -182,21 +185,29 @@ export class ChunkExporterService {
                         !chunk.tenantId || 
                         chunk.visibility === 'public';
     
+    const metadata: any = {
+      ticker: chunk.ticker,
+      document_type: chunk.documentType || 'sec_filing',
+      filing_type: chunk.filingType || '10-K',
+      section_type: chunk.sectionType,
+      fiscal_period: chunk.fiscalPeriod,
+      filing_date: chunk.filingDate ? new Date(chunk.filingDate).toISOString().split('T')[0] : undefined,
+      chunk_index: chunk.chunkIndex,
+      page_number: chunk.sourcePage,
+      // Multi-tenant fields: SEC data is public, tenant uploads are private
+      visibility: isSecFiling ? 'public' : 'private',
+      tenant_id: isSecFiling ? null : chunk.tenantId,
+    };
+    
+    // Include subsection_name if available (Phase 1 enhancement)
+    // Omit if null to avoid exporting null values to Bedrock KB
+    if (chunk.subsectionName) {
+      metadata.subsection_name = chunk.subsectionName;
+    }
+    
     return {
       content: this.cleanContent(chunk.content),
-      metadata: {
-        ticker: chunk.ticker,
-        document_type: chunk.documentType || 'sec_filing',
-        filing_type: chunk.filingType || '10-K',
-        section_type: chunk.sectionType,
-        fiscal_period: chunk.fiscalPeriod,
-        filing_date: chunk.filingDate ? new Date(chunk.filingDate).toISOString().split('T')[0] : undefined,
-        chunk_index: chunk.chunkIndex,
-        page_number: chunk.sourcePage,
-        // Multi-tenant fields: SEC data is public, tenant uploads are private
-        visibility: isSecFiling ? 'public' : 'private',
-        tenant_id: isSecFiling ? null : chunk.tenantId,
-      },
+      metadata,
     };
   }
 
@@ -377,6 +388,7 @@ export class ChunkExporterService {
                 document_type: chunk.metadata.document_type,
                 filing_type: chunk.metadata.filing_type,
                 section_type: chunk.metadata.section_type,
+                ...(chunk.metadata.subsection_name ? { subsection_name: chunk.metadata.subsection_name } : {}),
                 ...(chunk.metadata.fiscal_period ? { fiscal_period: chunk.metadata.fiscal_period } : {}),
                 ...(chunk.metadata.filing_date ? { filing_date: chunk.metadata.filing_date } : {}),
                 chunk_index: String(chunk.metadata.chunk_index),

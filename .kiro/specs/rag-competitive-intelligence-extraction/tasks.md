@@ -16,34 +16,34 @@ This implementation plan breaks down the RAG competitive intelligence extraction
 **Risk Level**: LOW
 **Estimated Time**: 1-2 weeks
 
-- [ ] 1. Create baseline git tag and CHANGELOG
+- [x] 1. Create baseline git tag and CHANGELOG
   - Create git tag `rag-extraction-baseline` before any changes
   - Initialize CHANGELOG-RAG-EXTRACTION.md with baseline state
   - Document current system behavior
   - _Requirements: 35.1_
 
-- [ ] 2. Enhance Python Section Parser for subsection identification
-  - [ ] 2.1 Implement subsection identification for Item 1 (Business)
+- [x] 2. Enhance Python Section Parser for subsection identification
+  - [x] 2.1 Implement subsection identification for Item 1 (Business)
     - Add pattern matching for: Competition, Products, Customers, Markets, Operations, Strategy, Intellectual Property, Human Capital
     - Return subsection boundaries and names
     - _Requirements: 1.2_
   
-  - [ ] 2.2 Implement subsection identification for Item 7 (MD&A)
+  - [x] 2.2 Implement subsection identification for Item 7 (MD&A)
     - Add pattern matching for: Results of Operations, Liquidity and Capital Resources, Critical Accounting Policies, Market Risk, Contractual Obligations
     - Return subsection boundaries and names
     - _Requirements: 1.3_
   
-  - [ ] 2.3 Implement subsection identification for Item 8 (Financial Statements)
+  - [x] 2.3 Implement subsection identification for Item 8 (Financial Statements)
     - Add pattern matching for: Note 1, Note 2, etc., Revenue Recognition, Leases, Stock-Based Compensation
     - Return subsection boundaries and names
     - _Requirements: 1.4_
   
-  - [ ] 2.4 Implement subsection identification for Item 1A (Risk Factors)
+  - [x] 2.4 Implement subsection identification for Item 1A (Risk Factors)
     - Add pattern matching for: Operational Risks, Financial Risks, Market Risks, Regulatory Risks
     - Return subsection boundaries and names
     - _Requirements: 1.5_
   
-  - [ ] 2.5 Implement hierarchical subsection support
+  - [x] 2.5 Implement hierarchical subsection support
     - Support nested subsections (e.g., Item 7 > Results of Operations > Revenue Analysis)
     - Store full hierarchy in subsection_name
     - _Requirements: 1.10_
@@ -61,14 +61,14 @@ This implementation plan breaks down the RAG competitive intelligence extraction
     - Test Item 1A risk factor subsection identification
     - _Requirements: 1.2, 1.3, 1.4, 1.5_
 
-- [ ] 3. Update database schema for subsection storage
-  - [ ] 3.1 Create migration script for subsection_name column
+- [x] 3. Update database schema for subsection storage
+  - [x] 3.1 Create migration script for subsection_name column
     - Add nullable TEXT column subsection_name to narrative_chunks
     - Create index on (ticker, section_type, subsection_name)
     - Test migration on development database
     - _Requirements: 15.1, 15.3_
   
-  - [ ] 3.2 Update chunk creation to include subsection metadata
+  - [x] 3.2 Update chunk creation to include subsection metadata
     - Modify Section Parser to populate subsection_name when creating chunks
     - Handle null subsection_name for ambiguous sections
     - Maintain backward compatibility with existing chunks
@@ -84,26 +84,26 @@ This implementation plan breaks down the RAG competitive intelligence extraction
     - **Validates: Requirements 1.8**
     - Test that existing chunks without subsection_name work without errors
 
-- [ ] 4. Update Bedrock KB metadata synchronization
-  - [ ] 4.1 Enhance chunk exporter to include subsection metadata
+- [x] 4. Update Bedrock KB metadata synchronization
+  - [x] 4.1 Enhance chunk exporter to include subsection metadata
     - Update S3 export format to include subsection_name in metadata
     - Omit subsection_name if null (don't export null values)
     - Test export with sample chunks
     - _Requirements: 16.1, 16.5_
   
-  - [ ] 4.2 Configure Bedrock KB to index subsection_name
+  - [x] 4.2 Configure Bedrock KB to index subsection_name
     - Update Bedrock KB metadata schema
     - Add subsection_name as filterable attribute
     - Test metadata filtering in Bedrock KB
     - _Requirements: 16.2_
   
-  - [ ] 4.3 Re-export existing chunks with updated metadata
+  - [x] 4.3 Re-export existing chunks with updated metadata
     - Create backfill script for existing chunks
     - Run backfill on development environment
     - Verify Bedrock KB ingestion
     - _Requirements: 16.4_
 
-- [ ] 5. Phase 1 checkpoint and git tag
+- [x] 5. Phase 1 checkpoint and git tag
   - Run all Phase 1 tests
   - Verify no impact on current retrieval behavior
   - Update CHANGELOG with Phase 1 changes

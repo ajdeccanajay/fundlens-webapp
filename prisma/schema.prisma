@@ -36,22 +36,24 @@ model FinancialMetric {
 }
 
 model NarrativeChunk {
-  id           String   @id @default(uuid())
-  ticker       String
-  filingType   String   @map("filing_type")
-  sectionType  String   @map("section_type")
-  chunkIndex   Int      @map("chunk_index")
-  content      String
-  s3Path       String?  @map("s3_path")
-  bedrockKbId  String?  @map("bedrock_kb_id")
-  dataSourceId String?  @map("data_source_id")
-  createdAt    DateTime @default(now()) @map("created_at")
-  filingDate   DateTime @map("filing_date") @db.Timestamp(6)
+  id            String   @id @default(uuid())
+  ticker        String
+  filingType    String   @map("filing_type")
+  sectionType   String   @map("section_type")
+  subsectionName String? @map("subsection_name")
+  chunkIndex    Int      @map("chunk_index")
+  content       String
+  s3Path        String?  @map("s3_path")
+  bedrockKbId   String?  @map("bedrock_kb_id")
+  dataSourceId  String?  @map("data_source_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+  filingDate    DateTime @map("filing_date") @db.Timestamp(6)
 
   @@unique([ticker, filingType, filingDate, sectionType, chunkIndex], map: "narrative_chunks_ticker_filing_type_filing_date_section_type_ch")
   @@index([ticker, filingType, sectionType])
   @@index([ticker, filingDate])
   @@index([dataSourceId])
+  @@index([ticker, sectionType, subsectionName], map: "idx_narrative_chunks_subsection")
   @@map("narrative_chunks")
 }
 
