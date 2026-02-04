@@ -16,7 +16,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ScratchpadItemService } from './scratchpad-item.service';
-import {
+import type {
   SaveItemRequest,
   GetItemsResponse,
   ExportRequest,

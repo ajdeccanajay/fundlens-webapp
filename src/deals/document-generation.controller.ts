@@ -21,7 +21,7 @@ export class DocumentGenerationController {
    */
   @Post('generate-memo')
   async generateInvestmentMemo(@Body() request: DocumentGenerationRequest) {
-    this.logger.log(`Generating investment memo for deal: ${request.dealId}`);
+    this.logger.log(`Generating investment memo for ticker: ${request.ticker}`);
 
     try {
       const result = await this.documentGenerationService.generateInvestmentMemo(request);
@@ -169,20 +169,20 @@ export class DocumentGenerationController {
 
   /**
    * Generate document preview
-   * POST /api/deals/:dealId/preview-memo
+   * POST /api/deals/:ticker/preview-memo
    */
-  @Post(':dealId/preview-memo')
+  @Post(':ticker/preview-memo')
   async previewMemo(
-    @Param('dealId') dealId: string,
+    @Param('ticker') ticker: string,
     @Body() request: Partial<DocumentGenerationRequest>,
   ) {
-    this.logger.log(`Generating memo preview for deal: ${dealId}`);
+    this.logger.log(`Generating memo preview for ticker: ${ticker}`);
 
     try {
       // Generate a shorter preview version
       const previewRequest: DocumentGenerationRequest = {
         ...request,
-        dealId,
+        ticker,
         content: request.content || '',
       };
 

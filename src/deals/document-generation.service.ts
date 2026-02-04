@@ -4,7 +4,8 @@ import { RAGService } from '../rag/rag.service';
 import { FinancialCalculatorService } from './financial-calculator.service';
 
 export interface DocumentGenerationRequest {
-  dealId: string;
+  ticker: string;
+  dealId?: string; // Optional for backward compatibility
   structure?: string;
   customSections?: string;
   voiceTone?: string;
@@ -17,7 +18,8 @@ export interface DocumentGenerationRequest {
 }
 
 export interface PresentationGenerationRequest {
-  dealId: string;
+  ticker: string;
+  dealId?: string; // Optional for backward compatibility
   presentationType: string;
   slideCount: string;
   includeCharts: {
@@ -60,22 +62,23 @@ export class DocumentGenerationService {
     content: string;
     downloadUrl: string;
   }> {
-    this.logger.log(`Generating investment memo for deal: ${request.dealId}`);
+    this.logger.log(`Generating investment memo for ticker: ${request.ticker}`);
 
     try {
-      // Get deal context
-      const deal = await this.getDealContext(request.dealId);
+      // Use ticker directly instead of looking up deal
+      const ticker = request.ticker;
       
       // Get comprehensive data
       const [metrics, marketData, narrativeContext] = await Promise.all([
-        this.getMetricsForMemo(deal.ticker),
-        this.getMarketDataForMemo(deal.ticker),
-        this.getNarrativeContextForMemo(deal.ticker)
+        this.getMetricsForMemo(ticker),
+        this.getMarketDataForMemo(ticker),
+        this.getNarrativeContextForMemo(ticker)
       ]);
 
       // Build comprehensive prompt for LLM
       const prompt = this.buildMemoPrompt({
-        deal,
+        ticker,
+        companyName: `${ticker} Inc.`, // Default company name
         metrics,
         marketData,
         narrativeContext,
@@ -89,9 +92,10 @@ export class DocumentGenerationService {
       // Generate memo using Claude Opus (best for writing)
       const generatedMemo = await this.generateWithClaudeOpus(prompt, 'investment_memo');
 
-      // Save generated document
+      // Save generated document (use ticker as identifier if no dealId)
       const documentId = await this.saveGeneratedDocument({
-        dealId: request.dealId,
+        ticker: ticker,
+        dealId: request.dealId || null,
         type: 'investment_memo',
         content: generatedMemo.content,
         metadata: {
@@ -119,11 +123,15 @@ export class DocumentGenerationService {
     slides: any[];
     downloadUrl: string;
   }> {
-    this.logger.log(`Generating PowerPoint deck for deal: ${request.dealId}`);
+    this.logger.log(`Generating PowerPoint deck for ticker: ${request.ticker}`);
 
     try {
-      // Get deal context
-      const deal = await this.getDealContext(request.dealId);
+      // TODO: Update this method to work without deal lookup
+      // For now, create a minimal deal object from ticker
+      const deal = {
+        ticker: request.ticker,
+        companyName: `${request.ticker} Inc.`
+      };
 
       // Build presentation structure
       const slideStructure = this.buildSlideStructure(
@@ -147,7 +155,8 @@ export class DocumentGenerationService {
 
       // Save generated presentation
       const documentId = await this.saveGeneratedDocument({
-        dealId: request.dealId,
+        ticker: request.ticker,
+        dealId: request.dealId || null,
         type: 'presentation',
         content: JSON.stringify(slides),
         metadata: {
@@ -201,7 +210,8 @@ export class DocumentGenerationService {
    * Build memo generation prompt
    */
   private buildMemoPrompt(data: {
-    deal: any;
+    ticker: string;
+    companyName: string;
     metrics: any;
     marketData: any;
     narrativeContext: any;
@@ -211,13 +221,13 @@ export class DocumentGenerationService {
     voiceTone?: string;
     customSections?: string;
   }): string {
-    const { deal, metrics, marketData, narrativeContext, userContent, fundCriteria, structure, voiceTone } = data;
+    const { ticker, companyName, metrics, marketData, narrativeContext, userContent, fundCriteria, structure, voiceTone } = data;
 
     let prompt = `You are a senior investment analyst tasked with writing a comprehensive investment memorandum. Use the following information to create a professional, well-structured document.\n\n`;
 
     // Add company context
     prompt += `COMPANY INFORMATION:\n`;
-    prompt += `Company: ${deal.companyName} (${deal.ticker})\n`;
+    prompt += `Company: ${companyName} (${ticker})\n`;
     prompt += `Current Price: $${marketData?.price?.toFixed(2) || 'N/A'}\n`;
     prompt += `Market Cap: ${marketData?.marketCapFormatted || 'N/A'}\n\n`;
 
@@ -500,21 +510,6 @@ export class DocumentGenerationService {
   }
 
   /**
-   * Get deal context
-   */
-  private async getDealContext(dealId: string): Promise<any> {
-    const deals = await this.prisma.$queryRaw`
-      SELECT * FROM deals WHERE id = ${dealId}::uuid
-    ` as any[];
-
-    if (!deals[0]) {
-      throw new Error(`Deal ${dealId} not found`);
-    }
-
-    return deals[0];
-  }
-
-  /**
    * Get metrics for memo generation
    */
   private async getMetricsForMemo(ticker: string): Promise<any> {
@@ -565,18 +560,93 @@ export class DocumentGenerationService {
    * Save generated document
    */
   private async saveGeneratedDocument(params: {
-    dealId: string;
+    ticker: string;
+    dealId?: string | null;
     type: string;
     content: string;
     metadata: any;
   }): Promise<string> {
     const documentId = `doc_${Date.now()}`;
 
-    await this.prisma.$executeRaw`
-      INSERT INTO generated_documents (id, deal_id, document_type, content, metadata, created_at)
-      VALUES (${documentId}, ${params.dealId}::uuid, ${params.type}, ${params.content}, ${JSON.stringify(params.metadata)}::jsonb, NOW())
-    `;
+    // If dealId is provided, use it; otherwise use NULL (we'll store ticker in metadata)
+    const dealIdValue = params.dealId || null;
+
+    if (dealIdValue) {
+      // If we have a dealId, insert with it
+      await this.prisma.$executeRaw`
+        INSERT INTO generated_documents (id, deal_id, document_type, content, metadata, created_at)
+        VALUES (${documentId}, ${dealIdValue}::uuid, ${params.type}, ${params.content}, ${JSON.stringify(params.metadata)}::jsonb, NOW())
+      `;
+    } else {
+      // If no dealId, we need to create a placeholder deal or store without deal_id
+      // For now, let's create a minimal deal record for this ticker
+      const tempDealId = await this.getOrCreateDealForTicker(params.ticker);
+      
+      await this.prisma.$executeRaw`
+        INSERT INTO generated_documents (id, deal_id, document_type, content, metadata, created_at)
+        VALUES (${documentId}, ${tempDealId}::uuid, ${params.type}, ${params.content}, ${JSON.stringify(params.metadata)}::jsonb, NOW())
+      `;
+    }
 
     return documentId;
+  }
+
+  /**
+   * Get or create a deal record for a ticker (for document storage)
+   */
+  private async getOrCreateDealForTicker(ticker: string): Promise<string> {
+    // Try to find an existing deal for this ticker
+    const existingDeal = await this.prisma.deal.findFirst({
+      where: { ticker },
+      select: { id: true }
+    });
+
+    if (existingDeal) {
+      return existingDeal.id;
+    }
+
+    // Create a minimal deal record for document storage
+    // Note: This requires a tenantId - we'll use a default system tenant
+    const systemTenantId = await this.getSystemTenantId();
+    
+    const newDeal = await this.prisma.deal.create({
+      data: {
+        name: `${ticker} Analysis`,
+        ticker: ticker,
+        dealType: 'analysis',
+        status: 'draft',
+        tenantId: systemTenantId,
+      },
+      select: { id: true }
+    });
+
+    return newDeal.id;
+  }
+
+  /**
+   * Get system tenant ID (or create if doesn't exist)
+   */
+  private async getSystemTenantId(): Promise<string> {
+    const systemTenant = await this.prisma.tenant.findFirst({
+      where: { slug: 'system' },
+      select: { id: true }
+    });
+
+    if (systemTenant) {
+      return systemTenant.id;
+    }
+
+    // Create system tenant if it doesn't exist
+    const newTenant = await this.prisma.tenant.create({
+      data: {
+        name: 'System',
+        slug: 'system',
+        tier: 'enterprise',
+        status: 'active',
+      },
+      select: { id: true }
+    });
+
+    return newTenant.id;
   }
 }

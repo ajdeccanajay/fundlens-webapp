@@ -110,7 +110,7 @@ export class CompTableService {
     }
 
     // Get metric values for this company and period
-    const values: Record<string, number> = {};
+    const values: Record<string, number | null> = {};
 
     for (const metric of metrics) {
       const metricData = await this.prisma.financialMetric.findFirst({
@@ -171,12 +171,12 @@ export class CompTableService {
         continue;
       }
 
-      summary.median[metric] = this.calculateMedian(values);
-      summary.mean[metric] = this.calculateMean(values);
+      summary.median[metric] = this.calculateMedian(values.filter((v): v is number => v !== null));
+      summary.mean[metric] = this.calculateMean(values.filter((v): v is number => v !== null));
       summary.percentiles[metric] = {
-        p25: this.calculatePercentile(values, 25),
-        p50: this.calculatePercentile(values, 50),
-        p75: this.calculatePercentile(values, 75),
+        p25: this.calculatePercentile(values.filter((v): v is number => v !== null), 25),
+        p50: this.calculatePercentile(values.filter((v): v is number => v !== null), 50),
+        p75: this.calculatePercentile(values.filter((v): v is number => v !== null), 75),
       };
     }
 
@@ -210,7 +210,7 @@ export class CompTableService {
         }
 
         // Calculate percentile rank (0-100)
-        const rank = allValues.filter((v) => v < value).length;
+        const rank = allValues.filter((v): v is number => v !== null && v < value).length;
         row.percentiles[metric] = (rank / allValues.length) * 100;
       }
     }

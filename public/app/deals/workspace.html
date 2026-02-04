@@ -1322,7 +1322,37 @@
                     <div class="max-w-4xl mx-auto">
                         <h1 class="text-2xl font-bold mb-6">Investment Committee Memo</h1>
                         
-                        <template x-if="!memoGenerated">
+                        <!-- Loading State -->
+                        <template x-if="memoGenerating">
+                            <div class="bg-white rounded-xl p-8 border border-gray-200 text-center">
+                                <div class="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6" style="background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);">
+                                    <div class="animate-spin rounded-full h-12 w-12 border-b-2" style="border-color: var(--fundlens-primary);"></div>
+                                </div>
+                                <h2 class="text-xl font-semibold mb-4">Generating Investment Memo...</h2>
+                                <p class="text-gray-600 mb-4">Using Claude Opus to analyze your research and create a comprehensive memo</p>
+                                <div class="max-w-md mx-auto">
+                                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 text-left">
+                                        <div class="space-y-2 text-sm text-gray-700">
+                                            <div class="flex items-center">
+                                                <div class="w-2 h-2 rounded-full mr-3 animate-pulse" style="background: var(--fundlens-primary);"></div>
+                                                <span>Analyzing scratchpad content...</span>
+                                            </div>
+                                            <div class="flex items-center">
+                                                <div class="w-2 h-2 rounded-full mr-3 animate-pulse" style="background: var(--fundlens-primary); animation-delay: 0.2s;"></div>
+                                                <span>Fetching financial data...</span>
+                                            </div>
+                                            <div class="flex items-center">
+                                                <div class="w-2 h-2 rounded-full mr-3 animate-pulse" style="background: var(--fundlens-primary); animation-delay: 0.4s;"></div>
+                                                <span>Generating comprehensive memo...</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <p class="text-sm text-gray-500 mt-4">This may take up to 60 seconds</p>
+                                </div>
+                            </div>
+                        </template>
+                        
+                        <template x-if="!memoGenerated && !memoGenerating">
                             <div class="bg-white rounded-xl p-8 border border-gray-200 text-center">
                                 <div class="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6" style="background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);">
                                     <i class="fas fa-file-export text-3xl" style="color: var(--fundlens-success);"></i>
@@ -1583,6 +1613,7 @@
                 
                 // IC Memo
                 memoGenerated: false,
+                memoGenerating: false,
                 memoContent: '',
                 
                 // Export Wizard State
@@ -2475,15 +2506,54 @@
                 
                 async generateMemo() {
                     try {
-                        const headers = this.getAuthHeaders();
-                        if (!headers) return;
+                        this.memoGenerating = true;
                         
-                        const response = await fetch('/api/deals/document-generation/ic-memo', {
+                        const headers = this.getAuthHeaders();
+                        if (!headers) {
+                            this.memoGenerating = false;
+                            return;
+                        }
+                        
+                        // Get ticker from dealInfo (already loaded from URL)
+                        const ticker = this.dealInfo.ticker;
+                        
+                        if (!ticker) {
+                            alert('Ticker not found');
+                            this.memoGenerating = false;
+                            return;
+                        }
+                        
+                        console.log('Generating memo for ticker:', ticker);
+                        
+                        // Extract text content from scratchpad items based on their type
+                        const contentText = this.scratchpadItems.map(item => {
+                            switch (item.type) {
+                                case 'direct_answer':
+                                    return item.content.text;
+                                case 'revenue_framework':
+                                    const pit = item.content.pointInTime.map(c => c.name).join(', ');
+                                    const ot = item.content.overTime.map(c => c.name).join(', ');
+                                    return `Revenue Framework:\nPoint-in-Time: ${pit}\nOver-Time: ${ot}`;
+                                case 'trend_analysis':
+                                    const trend = item.content.data.map(d => 
+                                        `${d.year}: ${d.value}M (${d.yoyChange > 0 ? '+' : ''}${d.yoyChange}%)`
+                                    ).join(', ');
+                                    return `${item.content.metric} Trend: ${trend}`;
+                                case 'provocation':
+                                    return `Question: ${item.content.question}`;
+                                default:
+                                    return '';
+                            }
+                        }).filter(text => text).join('\n\n');
+                        
+                        const response = await fetch('/api/deals/generate-memo', {
                             method: 'POST',
                             headers: headers,
                             body: JSON.stringify({
-                                ticker: this.dealInfo.ticker,
-                                scratchpadItems: this.scratchpadItems
+                                ticker: ticker,
+                                content: contentText || 'No scratchpad content available',
+                                structure: 'standard',
+                                voiceTone: 'professional'
                             })
                         });
                         
@@ -2495,15 +2565,27 @@
                         }
                         
                         if (response.ok) {
-                            const data = await response.json();
-                            this.memoContent = this.renderMarkdown(data.content);
-                            this.memoGenerated = true;
+                            const result = await response.json();
+                            console.log('Memo generation response:', result);
+                            
+                            if (result.success && result.data) {
+                                this.memoContent = this.renderMarkdown(result.data.content);
+                                this.memoGenerated = true;
+                            } else {
+                                const errorMsg = result.error || result.message || 'Failed to generate memo';
+                                console.error('Backend error:', errorMsg);
+                                throw new Error(errorMsg);
+                            }
                         } else {
-                            throw new Error(`HTTP ${response.status}`);
+                            const errorText = await response.text();
+                            console.error('HTTP error:', response.status, errorText);
+                            throw new Error(`HTTP ${response.status}: ${errorText}`);
                         }
                     } catch (error) {
                         console.error('Error generating memo:', error);
-                        alert('Error generating memo');
+                        alert(`Error generating memo: ${error.message}`);
+                    } finally {
+                        this.memoGenerating = false;
                     }
                 },
                 
