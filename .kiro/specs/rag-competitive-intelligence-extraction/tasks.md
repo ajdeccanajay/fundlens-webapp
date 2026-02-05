@@ -359,15 +359,15 @@ This implementation plan breaks down the RAG competitive intelligence extraction
 **Risk Level**: MEDIUM
 **Estimated Time**: 2-3 weeks
 
-- [ ] 13. Create Reranker Service
-  - [ ] 13.1 Implement Mistral reranking via Bedrock
+- [x] 13. Create Reranker Service
+  - [x] 13.1 Implement Mistral reranking via Bedrock
     - Integrate with Bedrock Rerank API
     - Accept query text and chunk content as inputs
     - Return relevance scores (0.0 to 1.0)
     - Sort chunks by reranked scores descending
     - _Requirements: 5A.1, 5A.2, 5A.4_
   
-  - [ ] 13.2 Implement reranking fallback
+  - [x] 13.2 Implement reranking fallback
     - Detect reranking failures
     - Preserve original scores when reranking fails
     - Log reranking failures for monitoring
@@ -389,21 +389,21 @@ This implementation plan breaks down the RAG competitive intelligence extraction
     - Test reranking with empty chunk list
     - _Requirements: 5A.1, 5A.3_
 
-- [ ] 14. Implement HyDE (Hypothetical Document Embeddings)
-  - [ ] 14.1 Implement hypothetical answer generation
+- [x] 14. Implement HyDE (Hypothetical Document Embeddings)
+  - [x] 14.1 Implement hypothetical answer generation
     - Use Claude to generate hypothetical answer for query
     - Embed hypothetical answer using Bedrock embeddings
     - Handle generation failures gracefully
     - _Requirements: 23.1, 23.2_
   
-  - [ ] 14.2 Implement HyDE-based retrieval
+  - [x] 14.2 Implement HyDE-based retrieval
     - Retrieve using hypothetical embedding
     - Retrieve using original query embedding
     - Merge results from both methods
     - Deduplicate merged results
     - _Requirements: 23.2, 23.3, 23.4_
   
-  - [ ] 14.3 Implement HyDE fallback
+  - [x] 14.3 Implement HyDE fallback
     - Fallback to standard query-based retrieval if HyDE fails
     - Log HyDE failures for monitoring
     - _Requirements: 23.5_
@@ -420,20 +420,20 @@ This implementation plan breaks down the RAG competitive intelligence extraction
     - Test HyDE fallback
     - _Requirements: 23.1, 23.2, 23.4, 23.5_
 
-- [ ] 15. Implement Query Decomposition
-  - [ ] 15.1 Implement multi-faceted query detection
+- [x] 15. Implement Query Decomposition
+  - [x] 15.1 Implement multi-faceted query detection
     - Detect queries with multiple questions
     - Use Claude to decompose into sub-queries
     - Handle decomposition failures
     - _Requirements: 22.1_
   
-  - [ ] 15.2 Implement sub-query execution
+  - [x] 15.2 Implement sub-query execution
     - Execute each sub-query independently
     - Track which sub-query contributed to which results
     - Merge sub-query results
     - _Requirements: 22.2, 22.4_
   
-  - [ ] 15.3 Implement unified response synthesis
+  - [x] 15.3 Implement unified response synthesis
     - Synthesize sub-query results into unified response
     - Handle conflicting sub-query results
     - Prioritize most recent or most relevant information
@@ -451,14 +451,14 @@ This implementation plan breaks down the RAG competitive intelligence extraction
     - Test unified response synthesis
     - _Requirements: 22.1, 22.2, 22.3_
 
-- [ ] 16. Implement Contextual Chunk Expansion
-  - [ ] 16.1 Implement adjacent chunk retrieval
+- [x] 16. Implement Contextual Chunk Expansion
+  - [x] 16.1 Implement adjacent chunk retrieval
     - Fetch chunks with chunk_index ± 1 for each retrieved chunk
     - Merge adjacent chunks into coherent context window
     - Preserve chunk boundaries for citations
     - _Requirements: 21.1, 21.2, 21.3_
   
-  - [ ] 16.2 Implement token budget enforcement
+  - [x] 16.2 Implement token budget enforcement
     - Calculate total token count of expanded context
     - Limit expansion to maximum token budget (4000 tokens)
     - Prioritize chunks with highest relevance scores
@@ -476,19 +476,19 @@ This implementation plan breaks down the RAG competitive intelligence extraction
     - Test prioritization by relevance
     - _Requirements: 21.1, 21.2, 21.4, 21.5_
 
-- [ ] 17. Implement Iterative Retrieval
-  - [ ] 17.1 Implement low-confidence detection
+- [x] 17. Implement Iterative Retrieval
+  - [x] 17.1 Implement low-confidence detection
     - Detect when initial retrieval returns low-confidence results
     - Generate follow-up queries to fill gaps
     - _Requirements: 26.1_
   
-  - [ ] 17.2 Implement follow-up query execution
+  - [x] 17.2 Implement follow-up query execution
     - Execute follow-up queries
     - Merge results with initial retrieval
     - Track which iteration contributed to which information
     - _Requirements: 26.2, 26.4_
   
-  - [ ] 17.3 Implement iteration limit
+  - [x] 17.3 Implement iteration limit
     - Limit iterative retrieval to maximum 2 iterations
     - Stop if iterative retrieval does not improve results
     - _Requirements: 26.3, 26.5_
@@ -504,14 +504,14 @@ This implementation plan breaks down the RAG competitive intelligence extraction
     - Test iteration limit enforcement
     - _Requirements: 26.1, 26.2, 26.3_
 
-- [ ] 18. Create Advanced Retrieval Service orchestration
-  - [ ] 18.1 Integrate all advanced techniques
+- [x] 18. Create Advanced Retrieval Service orchestration
+  - [x] 18.1 Integrate all advanced techniques
     - Orchestrate reranking, HyDE, query decomposition, contextual expansion, iterative retrieval
     - Implement feature flags for each technique
     - Handle failures gracefully with fallbacks
     - _Requirements: 20.1, 20.2, 20.3, 20.4, 20.5_
   
-  - [ ] 18.2 Implement performance optimization
+  - [x] 18.2 Implement performance optimization
     - Ensure latency p95 < 5 seconds
     - Optimize parallel execution where possible
     - Cache intermediate results
@@ -523,7 +523,7 @@ This implementation plan breaks down the RAG competitive intelligence extraction
     - Compare Phase 2 vs Phase 3 retrieval quality
     - _Requirements: 20.1, 36.2_
 
-- [ ] 19. Phase 3 checkpoint and git tag
+- [x] 19. Phase 3 checkpoint and git tag
   - Run all Phase 3 tests (unit + property + integration)
   - Verify reranking improves top-3 relevance by 10%
   - Verify latency p95 < 5 seconds

@@ -140,6 +140,11 @@ Ticker: NVDA (correctly identified by Claude 3.5 Haiku)
 | Phase 3 | ✅ Complete | Advanced retrieval techniques (HyDE, reranking) |
 | Phase 4 | ⏳ Not Started | Dynamic calculations and multi-modal responses |
 
+### Phase 3 Git Tag
+- **Tag**: `rag-extraction-phase3-v1.0.0`
+- **Commit**: `2501f03`
+- **Rollback**: `git checkout rag-extraction-phase2-v1.0.0` to revert to Phase 2
+
 ---
 
 ## Files Modified
