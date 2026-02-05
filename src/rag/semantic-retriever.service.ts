@@ -8,6 +8,7 @@ export interface SemanticQuery {
   query: string;
   tickers?: string[];
   sectionTypes?: string[];
+  subsectionNames?: string[]; // Phase 2: Subsection filtering
   documentTypes?: string[];
   fiscalPeriod?: string;
   numberOfResults?: number;
@@ -165,16 +166,19 @@ export class SemanticRetrieverService {
 
   /**
    * Retrieve from AWS Bedrock Knowledge Base
+   * Phase 2: Now supports subsection filtering with fallback chain
    */
   private async retrieveFromBedrock(
     query: SemanticQuery,
   ): Promise<ChunkResult[]> {
     // CRITICAL: Always filter by ticker to prevent company mix-ups
     const primaryTicker = query.tickers?.[0];
+    const primarySubsection = query.subsectionNames?.[0];
     
     const filter: MetadataFilter = {
       ticker: primaryTicker, // ALWAYS filter by primary ticker
       sectionType: query.sectionTypes?.[0],
+      subsectionName: primarySubsection, // Phase 2: Subsection filtering
       filingType: query.documentTypes?.[0],
       fiscalPeriod: query.fiscalPeriod,
     };
@@ -184,13 +188,40 @@ export class SemanticRetrieverService {
     this.logger.log(`🔍 Bedrock retrieval with STRICT ticker filtering`);
     this.logger.log(`   Query: "${query.query}"`);
     this.logger.log(`   Primary Ticker: ${primaryTicker || 'NONE - WARNING!'}`);
+    if (primarySubsection) {
+      this.logger.log(`   Subsection: ${primarySubsection}`);
+    }
     this.logger.log(`   Filter: ${JSON.stringify(filter)}`);
 
     if (!primaryTicker) {
       this.logger.warn('⚠️ NO TICKER FILTER - This may return mixed company results!');
     }
 
-    const results = await this.bedrock.retrieve(query.query, filter, numberOfResults);
+    // Phase 2: Implement fallback chain for subsection filtering
+    let results = await this.bedrock.retrieve(query.query, filter, numberOfResults);
+    
+    // Fallback 1: If subsection filtering returns no results, try section-only
+    if (results.length === 0 && primarySubsection) {
+      this.logger.log(`⚠️ No results with subsection filter, falling back to section-only`);
+      const sectionOnlyFilter: MetadataFilter = {
+        ticker: primaryTicker,
+        sectionType: query.sectionTypes?.[0],
+        filingType: query.documentTypes?.[0],
+        fiscalPeriod: query.fiscalPeriod,
+      };
+      results = await this.bedrock.retrieve(query.query, sectionOnlyFilter, numberOfResults);
+    }
+    
+    // Fallback 2: If section filtering returns no results, try broader search (ticker only)
+    if (results.length === 0 && query.sectionTypes?.[0]) {
+      this.logger.log(`⚠️ No results with section filter, falling back to broader search`);
+      const broaderFilter: MetadataFilter = {
+        ticker: primaryTicker,
+        filingType: query.documentTypes?.[0],
+        fiscalPeriod: query.fiscalPeriod,
+      };
+      results = await this.bedrock.retrieve(query.query, broaderFilter, numberOfResults);
+    }
     
     // Post-filter results to ensure ticker accuracy (double-check)
     const filteredResults = primaryTicker 
@@ -209,6 +240,7 @@ export class SemanticRetrieverService {
   /**
    * Retrieve from PostgreSQL (fallback)
    * Uses enhanced keyword search on narrative chunks
+   * Phase 2: Now supports subsection filtering with fallback chain
    */
   private async retrieveFromPostgres(
     query: SemanticQuery,
@@ -226,6 +258,13 @@ export class SemanticRetrieverService {
       where.sectionType = { in: query.sectionTypes };
     }
 
+    // Phase 2: Add subsection filtering if provided
+    const primarySubsection = query.subsectionNames?.[0];
+    if (primarySubsection) {
+      where.subsectionName = primarySubsection;
+      this.logger.log(`🔍 PostgreSQL: Filtering by subsection: ${primarySubsection}`);
+    }
+
     if (query.documentTypes && query.documentTypes.length > 0) {
       where.filingType = { in: query.documentTypes };
     }
@@ -233,10 +272,10 @@ export class SemanticRetrieverService {
     // Enhanced keyword extraction and matching
     const keywords = this.extractKeywords(query.query);
     
-    // Try different search strategies
+    // Try different search strategies with fallback chain
     let chunks: any[] = [];
 
-    // Strategy 1: Exact phrase search
+    // Strategy 1: Exact phrase search with subsection filter
     if (query.query.length > 10) {
       chunks = await this.prisma.narrativeChunk.findMany({
         where: {
@@ -251,6 +290,10 @@ export class SemanticRetrieverService {
           chunkIndex: 'asc',
         },
       });
+      
+      if (chunks.length > 0) {
+        this.logger.log(`✅ PostgreSQL: Found ${chunks.length} chunks with exact phrase + subsection`);
+      }
     }
 
     // Strategy 2: Multi-keyword search if exact phrase didn't work
@@ -270,6 +313,10 @@ export class SemanticRetrieverService {
           chunkIndex: 'asc',
         },
       });
+      
+      if (chunks.length > 0) {
+        this.logger.log(`✅ PostgreSQL: Found ${chunks.length} chunks with multi-keyword + subsection`);
+      }
     }
 
     // Strategy 3: Any keyword match if AND search didn't work
@@ -289,9 +336,73 @@ export class SemanticRetrieverService {
           chunkIndex: 'asc',
         },
       });
+      
+      if (chunks.length > 0) {
+        this.logger.log(`✅ PostgreSQL: Found ${chunks.length} chunks with any keyword + subsection`);
+      }
     }
 
-    // Strategy 4: Section-based fallback for common queries
+    // Phase 2 Fallback 1: If subsection filtering returns no results, try section-only
+    if (chunks.length === 0 && primarySubsection) {
+      this.logger.log(`⚠️ PostgreSQL: No results with subsection filter, falling back to section-only`);
+      const sectionOnlyWhere = { ...where };
+      delete sectionOnlyWhere.subsectionName;
+      
+      // Retry with section-only filter
+      if (query.query.length > 10) {
+        chunks = await this.prisma.narrativeChunk.findMany({
+          where: {
+            ...sectionOnlyWhere,
+            content: {
+              contains: query.query,
+              mode: 'insensitive' as const,
+            },
+          },
+          take: query.numberOfResults || 5,
+          orderBy: {
+            chunkIndex: 'asc',
+          },
+        });
+      }
+      
+      if (chunks.length === 0 && keywords.length > 0) {
+        chunks = await this.prisma.narrativeChunk.findMany({
+          where: {
+            ...sectionOnlyWhere,
+            OR: keywords.map((keyword) => ({
+              content: {
+                contains: keyword,
+                mode: 'insensitive' as const,
+              },
+            })),
+          },
+          take: query.numberOfResults || 5,
+          orderBy: {
+            chunkIndex: 'asc',
+          },
+        });
+      }
+      
+      if (chunks.length > 0) {
+        this.logger.log(`✅ PostgreSQL: Found ${chunks.length} chunks with section-only fallback`);
+      }
+    }
+
+    // Phase 2 Fallback 2: If section filtering returns no results, try broader search
+    if (chunks.length === 0 && query.sectionTypes && query.sectionTypes.length > 0) {
+      this.logger.log(`⚠️ PostgreSQL: No results with section filter, falling back to broader search`);
+      const broaderWhere = { ...where };
+      delete broaderWhere.sectionType;
+      delete broaderWhere.subsectionName;
+      
+      chunks = await this.getSectionBasedResults(query, broaderWhere);
+      
+      if (chunks.length > 0) {
+        this.logger.log(`✅ PostgreSQL: Found ${chunks.length} chunks with broader fallback`);
+      }
+    }
+
+    // Strategy 4: Section-based fallback for common queries (if still no results)
     if (chunks.length === 0) {
       chunks = await this.getSectionBasedResults(query, where);
     }

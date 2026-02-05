@@ -9,10 +9,12 @@ import {
   ConverseCommand,
   InvokeModelCommand,
 } from '@aws-sdk/client-bedrock-runtime';
+import { PromptLibraryService } from './prompt-library.service';
 
 export interface MetadataFilter {
   ticker?: string;
   sectionType?: string;
+  subsectionName?: string; // Phase 2: Subsection filtering
   filingType?: string;
   fiscalPeriod?: string;
 }
@@ -47,7 +49,7 @@ export class BedrockService {
   private readonly kbId: string;
   private readonly modelId = 'us.anthropic.claude-opus-4-5-20251101-v1:0'; // Claude Opus 4.5 Inference Profile
 
-  constructor() {
+  constructor(private readonly promptLibrary: PromptLibraryService) {
     const region = process.env.AWS_REGION || 'us-east-1';
 
     this.bedrockAgentClient = new BedrockAgentRuntimeClient({ region });
@@ -115,6 +117,8 @@ export class BedrockService {
       metrics?: any[];
       narratives?: ChunkResult[];
       systemPrompt?: string; // Custom system prompt from user
+      intentType?: string; // Intent type for prompt selection (Phase 2)
+      promptVersion?: number; // Optional specific prompt version
     },
   ): Promise<{
     answer: string;
@@ -122,15 +126,37 @@ export class BedrockService {
       inputTokens: number;
       outputTokens: number;
     };
+    promptVersion?: number; // Track which prompt version was used
   }> {
     try {
-      // Use custom system prompt if provided, otherwise use default
-      const systemPrompt = context.systemPrompt 
-        ? `${context.systemPrompt}\n\n${this.buildSystemPrompt()}` 
-        : this.buildSystemPrompt();
+      // Get prompt from library based on intent type
+      let systemPrompt: string;
+      let promptVersion: number | undefined;
+
+      if (context.systemPrompt) {
+        // Use custom system prompt if provided
+        systemPrompt = `${context.systemPrompt}\n\n${this.buildSystemPrompt()}`;
+      } else if (context.intentType) {
+        // Get prompt from library based on intent type
+        const promptTemplate = await this.promptLibrary.getPrompt(
+          context.intentType,
+          context.promptVersion,
+        );
+        systemPrompt = promptTemplate.systemPrompt;
+        promptVersion = promptTemplate.version;
+        this.logger.log(
+          `Using prompt library: ${context.intentType} v${promptVersion}`,
+        );
+      } else {
+        // Fallback to default prompt
+        systemPrompt = this.buildSystemPrompt();
+      }
+
       const userMessage = this.buildUserMessage(query, context);
 
-      this.logger.log(`Generating response with Claude Opus 4.5${context.systemPrompt ? ' (custom prompt)' : ''}`);
+      this.logger.log(
+        `Generating response with Claude Opus 4.5${context.intentType ? ` (${context.intentType})` : ''}`,
+      );
 
       const command = new ConverseCommand({
         modelId: this.modelId,
@@ -162,7 +188,7 @@ export class BedrockService {
         `Generated response: ${usage.inputTokens} input tokens, ${usage.outputTokens} output tokens`,
       );
 
-      return { answer, usage };
+      return { answer, usage, promptVersion };
     } catch (error) {
       this.logger.error(`Claude generation error: ${error.message}`);
       throw error;
@@ -172,6 +198,7 @@ export class BedrockService {
   /**
    * Build metadata filter for Knowledge Base retrieval
    * CRITICAL: This prevents mixing up companies like META vs MSFT
+   * Phase 2: Now supports subsection filtering
    */
   private buildFilter(filters: MetadataFilter): any {
     const conditions: any[] = [];
@@ -190,6 +217,14 @@ export class BedrockService {
         equals: { key: 'section_type', value: filters.sectionType },
       });
       this.logger.log(`🔒 Applying section filter: ${filters.sectionType}`);
+    }
+
+    // Phase 2: Filter by subsection name if provided
+    if (filters.subsectionName) {
+      conditions.push({
+        equals: { key: 'subsection_name', value: filters.subsectionName },
+      });
+      this.logger.log(`🔒 Applying subsection filter: ${filters.subsectionName}`);
     }
 
     // Filter by filing type if provided
@@ -385,7 +420,7 @@ export class BedrockService {
     max_tokens?: number;
   }): Promise<string> {
     try {
-      const modelId = params.modelId || 'anthropic.claude-3-haiku-20240307-v1:0';
+      const modelId = params.modelId || 'us.anthropic.claude-3-haiku-20240307-v1:0'; // Claude 3 Haiku Inference Profile
       
       const command = new ConverseCommand({
         modelId,

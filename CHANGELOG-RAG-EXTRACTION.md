@@ -132,62 +132,128 @@ pm2 restart all
 ## Phase 2: Intent Detection and Subsection-Aware Retrieval
 
 **Tag**: `rag-extraction-phase2-v1.0.0`
-**Date**: TBD
+**Date**: Started 2026-02-03
 **Risk Level**: MEDIUM
 **Estimated Duration**: 2-3 weeks
+**Status**: IN PROGRESS
+
+### CRITICAL CLARIFICATION (2026-02-03)
+
+**Phase 2 enhances the EXISTING intent detector with subsection awareness. It does NOT replace the existing system with a narrow competitive-intelligence-only detector.**
+
+The existing `IntentDetectorService` already handles:
+- Query types: structured, semantic, hybrid
+- Tickers: single or multiple for comparison queries
+- Metrics: Revenue, Net_Income, Gross_Profit, Operating_Income, Cost_of_Revenue, R&D, SG&A, Total_Assets, Total_Liabilities, Total_Equity, Cash, Accounts_Payable, Accounts_Receivable, Inventory, margins, ROE, ROA
+- Periods: FY2024, Q4-2024, latest, specific years
+- Document types: 10-K, 10-Q, 8-K, news, earnings transcripts
+- Section types: item_1, item_7, item_8, item_1a, item_2, item_3
+- Query characteristics: needsNarrative, needsComparison, needsComputation, needsTrend
+
+**Phase 2 adds ONE NEW FIELD**: `subsectionName?: string` to the `QueryIntent` interface
+
+**Phase 2 adds ONE NEW METHOD**: `identifyTargetSubsection(query: string, sectionType: string): string | undefined`
+
+**How it works**:
+1. Existing behavior runs first: Extract ticker, metrics, period, document types, section types, determine query type
+2. New behavior runs second: If a section type was identified, also identify the target subsection
+3. Result: All existing fields are populated as before, PLUS subsectionName is added when applicable
+
+**Examples**:
+- "What is AAPL's revenue recognition policy?" → `{ type: 'semantic', ticker: 'AAPL', sectionTypes: ['item_8'], subsectionName: 'Revenue Recognition' }`
+- "Who are NVDA's competitors?" → `{ type: 'semantic', ticker: 'NVDA', sectionTypes: ['item_1'], subsectionName: 'Competition' }`
+- "What is AMZN's revenue and how do they recognize it?" → `{ type: 'hybrid', ticker: 'AMZN', metrics: ['Revenue'], sectionTypes: ['item_8'], subsectionName: 'Revenue Recognition' }`
+- "What does TSLA do?" → `{ type: 'semantic', ticker: 'TSLA', sectionTypes: ['item_1'], subsectionName: undefined }` (no subsection keywords)
+
+**Why this matters**: The spec was originally written with a focus on competitive intelligence, MD&A, and footnote queries (the example failures), but the solution is general-purpose and applies to ALL query types.
+
+**Documents updated**: design.md, requirements.md, tasks.md, PHASE2_SCOPE_CLARIFICATION.md
 
 ### Changes
 
-#### Intent Detector (`src/rag/intent-detector.service.ts`)
-- **Added**: Competitive intelligence intent detection
-  - Keywords: "competitors", "competitive landscape", "competition", "peer comparison"
-  - Target: Item 1, Subsection: Competition
-- **Added**: MD&A intelligence intent detection
-  - Keywords: "growth drivers", "trends", "outlook", "guidance", "management discussion"
-  - Target: Item 7, Subsection: Results of Operations / Liquidity / Critical Accounting
-- **Added**: Footnote intent detection
-  - Keywords: "footnote", "accounting policy", "revenue recognition", "note [number]"
-  - Target: Item 8, Subsection: Specific note or policy
-- **Added**: Intent prioritization logic (most specific intent wins)
-- **Enhanced**: `QueryIntent` interface with `subsectionName` field
+#### Intent Detector (`src/rag/intent-detector.service.ts`) - ✅ STARTED
+- **✅ COMPLETE**: Added `subsectionName?: string` field to `QueryIntent` interface
+- **✅ COMPLETE**: Added `identifyTargetSubsection()` method to identify subsections for all section types
+- **✅ COMPLETE**: Item 1 (Business) subsection identification
+  - Keywords: "competitors", "products", "customers", "markets", "operations", "strategy", "intellectual property", "employees"
+  - Subsections: Competition, Products, Customers, Markets, Operations, Strategy, Intellectual Property, Human Capital
+- **✅ COMPLETE**: Item 7 (MD&A) subsection identification
+  - Keywords: "results of operations", "liquidity", "critical accounting", "market risk", "contractual obligations"
+  - Subsections: Results of Operations, Liquidity and Capital Resources, Critical Accounting Policies, Market Risk, Contractual Obligations
+- **✅ COMPLETE**: Item 8 (Financial Statements) subsection identification
+  - Keywords: "revenue recognition", "leases", "stock-based compensation", "income taxes", "debt", "fair value", "note [number]"
+  - Subsections: Revenue Recognition, Leases, Stock-Based Compensation, Income Taxes, Debt, Fair Value, Note {number}
+- **✅ COMPLETE**: Item 1A (Risk Factors) subsection identification
+  - Keywords: "operational risk", "financial risk", "market risk", "regulatory risk", "technology risk"
+  - Subsections: Operational Risks, Financial Risks, Market Risks, Regulatory Risks, Technology Risks
+- **✅ COMPLETE**: Subsection prioritization logic (first match wins)
+- **✅ COMPLETE**: Integration into `detectIntent()` method - subsection identification runs after section type extraction
 
-#### Semantic Retriever (`src/rag/semantic-retriever.service.ts`)
-- **Enhanced**: Filter by `subsection_name` in Bedrock KB queries
-- **Enhanced**: Filter by `subsection_name` in PostgreSQL fallback queries
-- **Added**: Fallback chain: subsection → section → broad search
-- **Added**: Multi-ticker isolation with validation
-- **Added**: Logging for all fallback events
+#### Semantic Retriever (`src/rag/semantic-retriever.service.ts`) - ✅ COMPLETE
+- **✅ COMPLETE**: Added `subsectionNames?: string[]` field to `SemanticQuery` interface
+- **✅ COMPLETE**: Filter by `subsection_name` in Bedrock KB queries
+- **✅ COMPLETE**: Filter by `subsection_name` in PostgreSQL fallback queries
+- **✅ COMPLETE**: Fallback chain: subsection → section → broad search
+  - Bedrock KB: Try subsection filter → section-only → ticker-only
+  - PostgreSQL: Try subsection filter → section-only → broader search
+- **✅ COMPLETE**: Logging for all fallback events
+- **Pending**: Multi-ticker isolation with validation
 
-#### Response Generator (`src/rag/response-generator.service.ts`) - NEW SERVICE
-- **Added**: Structured competitive intelligence extraction
+#### Response Generator (`src/rag/response-generator.service.ts`) - ⏳ PENDING (NEW SERVICE)
+- **Pending**: Structured competitive intelligence extraction
   - Extracts: competitor names, market positioning, competitive advantages/disadvantages
-- **Added**: Structured MD&A intelligence extraction
+- **Pending**: Structured MD&A intelligence extraction
   - Extracts: key trends, risks (categorized), forward guidance, management perspective
-- **Added**: Structured footnote content extraction
+- **Pending**: Structured footnote content extraction
   - Extracts: policy summary, key assumptions, quantitative details, changes from prior periods
-- **Added**: Confidence scoring (0.0 to 1.0)
-- **Added**: Response quality validation
-- **Added**: Citation generation with section/subsection references
+- **Pending**: Confidence scoring (0.0 to 1.0)
+- **Pending**: Response quality validation
+- **Pending**: Citation generation with section/subsection references
 
-#### Prompt Templates (`src/rag/prompts/`)
-- **Added**: Competitive intelligence extraction prompt
-- **Added**: MD&A intelligence extraction prompt
-- **Added**: Footnote extraction prompt
-- **Added**: Prompt versioning and management
+#### Prompt Templates (`src/rag/prompts/`) - ⏳ PENDING
+- **Pending**: Competitive intelligence extraction prompt
+- **Pending**: MD&A intelligence extraction prompt
+- **Pending**: Footnote extraction prompt
+- **Pending**: Prompt versioning and management
 
-#### Monitoring (`src/rag/monitoring.service.ts`)
-- **Added**: Extraction attempt logging (intent type, ticker, success/failure)
-- **Added**: Success rate metrics by intent type
-- **Added**: Average confidence score tracking
-- **Added**: Alerting for success rates < 95% (competitive intelligence)
+#### Monitoring (`src/rag/monitoring.service.ts`) - ⏳ PENDING
+- **Pending**: Extraction attempt logging (intent type, ticker, success/failure)
+- **Pending**: Success rate metrics by intent type
+- **Pending**: Average confidence score tracking
+- **Pending**: Alerting for success rates < 95% (competitive intelligence)
 
-#### Tests
-- **Added**: Property tests for intent classification (Properties 5-8)
-- **Added**: Property tests for subsection-filtered retrieval (Properties 9-10)
-- **Added**: Property test for multi-ticker isolation (Property 11)
-- **Added**: Property tests for confidence scoring and citations (Properties 23-25)
-- **Added**: Unit tests for specific intent examples
-- **Added**: Integration tests for end-to-end extraction
+#### Tests - ⏳ PENDING
+- **Pending**: Property tests for intent classification (Properties 5-8)
+- **Pending**: Property tests for subsection-filtered retrieval (Properties 9-10)
+- **Pending**: Property test for multi-ticker isolation (Property 11)
+- **Pending**: Property tests for confidence scoring and citations (Properties 23-25)
+- **Pending**: Unit tests for specific intent examples
+- **Pending**: Integration tests for end-to-end extraction
+
+### Progress Summary (2026-02-03)
+
+**Completed Tasks**:
+- ✅ Task 6.1: Add subsection identification for Item 1 (Business) queries
+- ✅ Task 6.2: Add subsection identification for Item 7 (MD&A) queries
+- ✅ Task 6.3: Add subsection identification for Item 8 (Financial Statements) queries
+- ✅ Task 6.4: Add subsection identification for Item 1A (Risk Factors) queries
+- ✅ Task 6.5: Implement subsection prioritization logic
+- ✅ Task 7.1: Add subsection filtering to Bedrock KB retrieval
+- ✅ Task 7.2: Add subsection filtering to PostgreSQL fallback
+- ✅ Task 7.3: Implement fallback chain for retrieval
+
+**In Progress**:
+- Task 6: Enhance Intent Detector with subsection identification for ALL query types (5/8 subtasks complete)
+- Task 7: Implement subsection-aware retrieval in Semantic Retriever (3/6 subtasks complete)
+
+**Next Steps**:
+- Task 6.6-6.8: Write property tests and unit tests for intent detection
+- Task 7.4-7.6: Write property tests and unit tests for subsection-aware retrieval
+- Task 8: Implement multi-ticker isolation
+- Task 9: Create Response Generator Service
+- Task 10: Implement prompt engineering
+- Task 11: Add monitoring and observability
+- Task 12: Phase 2 checkpoint and git tag
 
 ### Success Criteria
 - [ ] Competitive intelligence queries extract competitor names (success rate >95%)

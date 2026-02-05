@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # FundLens - Pre-Flight Deployment Check
-# Validates that all changes are in place before deployment
+# Verifies all prerequisites before deployment
 # =============================================================================
 
 set -euo pipefail
@@ -11,118 +11,219 @@ echo "FundLens Pre-Flight Deployment Check"
 echo "=============================================="
 echo ""
 
-ERRORS=0
+CHECKS_PASSED=0
+CHECKS_FAILED=0
 
-# Check 1: Python Calculator Changes
-echo "✓ Checking Python calculator changes..."
-if grep -q "operating_expenses" python_parser/comprehensive_financial_calculator.py; then
-    echo "  ✅ Python calculator has operating_expenses fallback"
+# Helper functions
+check_pass() {
+    echo "  ✅ $1"
+    ((CHECKS_PASSED++))
+}
+
+check_fail() {
+    echo "  ❌ $1"
+    ((CHECKS_FAILED++))
+}
+
+check_warn() {
+    echo "  ⚠️  $1"
+}
+
+# Check 1: Node.js and npm
+echo "📦 Checking Node.js and npm..."
+if command -v node &> /dev/null; then
+    NODE_VERSION=$(node --version)
+    check_pass "Node.js installed: ${NODE_VERSION}"
 else
-    echo "  ❌ Python calculator missing operating_expenses fallback"
-    ERRORS=$((ERRORS + 1))
+    check_fail "Node.js not found"
 fi
 
-# Check 2: Frontend YoY Growth Fix (comprehensive-financial-analysis.html)
-echo "✓ Checking comprehensive-financial-analysis.html..."
-if grep -q "g.period.endsWith(period)" public/comprehensive-financial-analysis.html; then
-    echo "  ✅ comprehensive-financial-analysis.html has YoY growth fix"
+if command -v npm &> /dev/null; then
+    NPM_VERSION=$(npm --version)
+    check_pass "npm installed: ${NPM_VERSION}"
 else
-    echo "  ❌ comprehensive-financial-analysis.html missing YoY growth fix"
-    ERRORS=$((ERRORS + 1))
+    check_fail "npm not found"
 fi
+echo ""
 
-# Check 3: Frontend YoY Growth Fix (workspace.html)
-echo "✓ Checking workspace.html..."
-if grep -q "g.period.endsWith(period)" public/app/deals/workspace.html; then
-    echo "  ✅ workspace.html has YoY growth fix"
-else
-    echo "  ❌ workspace.html missing YoY growth fix"
-    ERRORS=$((ERRORS + 1))
-fi
-
-# Check 4: AWS CLI Available
-echo "✓ Checking AWS CLI..."
-if command -v aws &> /dev/null; then
-    AWS_VERSION=$(aws --version 2>&1 | cut -d' ' -f1)
-    echo "  ✅ AWS CLI available: $AWS_VERSION"
-else
-    echo "  ❌ AWS CLI not found"
-    ERRORS=$((ERRORS + 1))
-fi
-
-# Check 5: Docker Available
-echo "✓ Checking Docker..."
+# Check 2: Docker
+echo "🐳 Checking Docker..."
 if command -v docker &> /dev/null; then
-    DOCKER_VERSION=$(docker --version | cut -d' ' -f3 | tr -d ',')
-    echo "  ✅ Docker available: $DOCKER_VERSION"
+    DOCKER_VERSION=$(docker --version)
+    check_pass "Docker installed: ${DOCKER_VERSION}"
+    
+    # Check if Docker daemon is running
+    if docker info &> /dev/null; then
+        check_pass "Docker daemon is running"
+    else
+        check_fail "Docker daemon is not running"
+    fi
 else
-    echo "  ❌ Docker not found"
-    ERRORS=$((ERRORS + 1))
+    check_fail "Docker not found"
 fi
+echo ""
 
-# Check 6: AWS Credentials
-echo "✓ Checking AWS credentials..."
-if aws sts get-caller-identity &> /dev/null; then
-    AWS_ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
-    echo "  ✅ AWS credentials valid (Account: $AWS_ACCOUNT)"
+# Check 3: AWS CLI
+echo "☁️  Checking AWS CLI..."
+if command -v aws &> /dev/null; then
+    AWS_VERSION=$(aws --version)
+    check_pass "AWS CLI installed: ${AWS_VERSION}"
+    
+    # Check AWS credentials
+    if aws sts get-caller-identity &> /dev/null; then
+        AWS_ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+        check_pass "AWS credentials configured (Account: ${AWS_ACCOUNT})"
+    else
+        check_fail "AWS credentials not configured or invalid"
+    fi
 else
-    echo "  ❌ AWS credentials not configured or invalid"
-    ERRORS=$((ERRORS + 1))
+    check_fail "AWS CLI not found"
 fi
+echo ""
 
-# Check 7: ECR Access
-echo "✓ Checking ECR access..."
-if aws ecr describe-repositories --repository-names fundlens-backend &> /dev/null; then
-    echo "  ✅ ECR repository 'fundlens-backend' accessible"
+# Check 4: Git
+echo "📝 Checking Git..."
+if command -v git &> /dev/null; then
+    GIT_VERSION=$(git --version)
+    check_pass "Git installed: ${GIT_VERSION}"
+    
+    # Check if we're in a git repository
+    if git rev-parse --git-dir &> /dev/null; then
+        check_pass "In a Git repository"
+        
+        # Check for uncommitted changes
+        if git diff-index --quiet HEAD --; then
+            check_pass "No uncommitted changes"
+        else
+            check_warn "Uncommitted changes detected"
+        fi
+        
+        # Get current branch
+        CURRENT_BRANCH=$(git branch --show-current)
+        check_pass "Current branch: ${CURRENT_BRANCH}"
+    else
+        check_fail "Not in a Git repository"
+    fi
 else
-    echo "  ❌ Cannot access ECR repository 'fundlens-backend'"
-    ERRORS=$((ERRORS + 1))
+    check_fail "Git not found"
 fi
+echo ""
 
-# Check 8: ECS Cluster
-echo "✓ Checking ECS cluster..."
-if aws ecs describe-clusters --clusters fundlens-production --query 'clusters[0].status' --output text 2>/dev/null | grep -q "ACTIVE"; then
-    echo "  ✅ ECS cluster 'fundlens-production' is ACTIVE"
+# Check 5: Package.json and build script
+echo "📋 Checking package.json..."
+if [ -f "package.json" ]; then
+    check_pass "package.json exists"
+    
+    # Check if build script exists
+    if grep -q '"build"' package.json; then
+        check_pass "Build script found in package.json"
+    else
+        check_fail "Build script not found in package.json"
+    fi
 else
-    echo "  ❌ ECS cluster 'fundlens-production' not found or not active"
-    ERRORS=$((ERRORS + 1))
+    check_fail "package.json not found"
 fi
+echo ""
 
-# Check 9: Deployment Scripts Executable
-echo "✓ Checking deployment scripts..."
-if [ -x "scripts/deploy/build-and-push.sh" ]; then
-    echo "  ✅ build-and-push.sh is executable"
+# Check 6: Dependencies
+echo "📚 Checking dependencies..."
+if [ -d "node_modules" ]; then
+    check_pass "node_modules directory exists"
 else
-    echo "  ❌ build-and-push.sh is not executable"
-    ERRORS=$((ERRORS + 1))
+    check_warn "node_modules not found - run 'npm install'"
 fi
+echo ""
 
-if [ -x "scripts/deploy/deploy-backend.sh" ]; then
-    echo "  ✅ deploy-backend.sh is executable"
+# Check 7: Dockerfile
+echo "🐋 Checking Dockerfile..."
+if [ -f "Dockerfile" ]; then
+    check_pass "Dockerfile exists"
+    
+    # Check if Dockerfile has build stage
+    if grep -q "npm run build" Dockerfile; then
+        check_pass "Dockerfile contains build command"
+    else
+        check_warn "Dockerfile may not contain build command"
+    fi
 else
-    echo "  ❌ deploy-backend.sh is not executable"
-    ERRORS=$((ERRORS + 1))
+    check_fail "Dockerfile not found"
 fi
+echo ""
+
+# Check 8: Deployment scripts
+echo "🚀 Checking deployment scripts..."
+DEPLOY_DIR="scripts/deploy"
+if [ -d "${DEPLOY_DIR}" ]; then
+    check_pass "Deployment scripts directory exists"
+    
+    REQUIRED_SCRIPTS=("build-and-push.sh" "deploy-backend.sh" "deploy-frontend.sh" "deploy-all.sh")
+    for script in "${REQUIRED_SCRIPTS[@]}"; do
+        if [ -f "${DEPLOY_DIR}/${script}" ]; then
+            check_pass "${script} exists"
+            
+            # Check if executable
+            if [ -x "${DEPLOY_DIR}/${script}" ]; then
+                check_pass "${script} is executable"
+            else
+                check_warn "${script} is not executable - run 'chmod +x ${DEPLOY_DIR}/${script}'"
+            fi
+        else
+            check_fail "${script} not found"
+        fi
+    done
+else
+    check_fail "Deployment scripts directory not found"
+fi
+echo ""
+
+# Check 9: Environment variables
+echo "🔐 Checking environment variables..."
+REQUIRED_ENV_VARS=("AWS_REGION")
+OPTIONAL_ENV_VARS=("DATABASE_URL" "BEDROCK_KB_ID" "S3_BUCKET_NAME")
+
+for var in "${REQUIRED_ENV_VARS[@]}"; do
+    if [ -n "${!var:-}" ]; then
+        check_pass "${var} is set"
+    else
+        check_warn "${var} is not set (may use default)"
+    fi
+done
+
+for var in "${OPTIONAL_ENV_VARS[@]}"; do
+    if [ -n "${!var:-}" ]; then
+        check_pass "${var} is set"
+    else
+        check_warn "${var} is not set (optional)"
+    fi
+done
+echo ""
+
+# Check 10: Build test
+echo "🔨 Testing build..."
+if npm run build &> /dev/null; then
+    check_pass "Build successful"
+else
+    check_fail "Build failed - run 'npm run build' to see errors"
+fi
+echo ""
 
 # Summary
-echo ""
 echo "=============================================="
-if [ $ERRORS -eq 0 ]; then
-    echo "✅ PRE-FLIGHT CHECK PASSED"
-    echo "=============================================="
+echo "Pre-Flight Check Summary"
+echo "=============================================="
+echo "Checks Passed: ${CHECKS_PASSED}"
+echo "Checks Failed: ${CHECKS_FAILED}"
+echo ""
+
+if [ ${CHECKS_FAILED} -eq 0 ]; then
+    echo "✅ All critical checks passed!"
+    echo "You are ready to deploy."
     echo ""
-    echo "All checks passed! Ready to deploy."
-    echo ""
-    echo "Next steps:"
-    echo "  1. ./scripts/deploy/build-and-push.sh"
-    echo "  2. IMAGE_TAG=<from-output> ./scripts/deploy/deploy-backend.sh"
-    echo ""
+    echo "To deploy, run:"
+    echo "  ./scripts/deploy/deploy-all.sh"
     exit 0
 else
-    echo "❌ PRE-FLIGHT CHECK FAILED"
-    echo "=============================================="
-    echo ""
-    echo "Found $ERRORS error(s). Please fix before deploying."
-    echo ""
+    echo "❌ Some checks failed!"
+    echo "Please fix the issues above before deploying."
     exit 1
 fi

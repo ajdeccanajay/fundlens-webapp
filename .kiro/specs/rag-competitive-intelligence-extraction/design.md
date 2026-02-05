@@ -128,37 +128,111 @@ class SectionParser:
 
 **Location**: `src/rag/intent-detector.service.ts`
 
-**Purpose**: Classify queries and identify target subsections
+**Purpose**: Enhance existing intent detection with subsection-level targeting for ALL query types
+
+**CRITICAL CLARIFICATION**: This enhancement ADDS subsection awareness to the existing intent detector, which already handles:
+- Query types: 'structured', 'semantic', 'hybrid'
+- Multiple tickers for comparison queries
+- Extensive metric extraction (Revenue, Net_Income, Gross_Profit, Operating_Income, etc.)
+- Period extraction (FY2024, Q4-2024, latest)
+- Document type detection (10-K, 10-Q, 8-K, news, earnings transcripts)
+- Section type detection (item_1, item_7, item_8, item_1a, item_2, item_3)
+- Flags: needsNarrative, needsComparison, needsComputation, needsTrend
+
+**Phase 2 Enhancement**: Add subsection identification to ALL existing query types, not just competitive intelligence.
 
 **Key Methods**:
 ```typescript
 interface QueryIntent {
-  type: 'competitive_intelligence' | 'mda_intelligence' | 'footnote' | 'structured' | 'semantic' | 'hybrid';
+  // EXISTING FIELDS (already implemented)
+  type: 'structured' | 'semantic' | 'hybrid';
   ticker?: string | string[];
   metrics?: string[];
   period?: string;
-  sectionType?: string;
-  subsectionName?: string; // NEW
+  periodType?: PeriodType;
+  documentTypes?: string[];
+  sectionTypes?: string[];
+  needsNarrative: boolean;
+  needsComparison: boolean;
+  needsComputation: boolean;
+  needsTrend: boolean;
   confidence: number;
+  originalQuery: string;
+  
+  // NEW FIELD (Phase 2 addition)
+  subsectionName?: string; // Target subsection within identified section
 }
 
 class IntentDetectorService {
   async detectIntent(query: string): Promise<QueryIntent>
   
-  private detectCompetitiveIntelligence(query: string): boolean
-  private detectMDAIntelligence(query: string): boolean
-  private detectFootnoteIntent(query: string): boolean
+  // EXISTING METHODS (already implemented)
+  private extractTicker(query: string): string | string[] | undefined
+  private extractMetrics(query: string): string[]
+  private extractPeriod(query: string): string | undefined
+  private extractDocumentTypes(query: string): any[]
+  private extractSectionTypes(query: string): any[]
+  private determineQueryType(query: string, metrics: string[], sections: any[]): QueryType
+  
+  // NEW METHOD (Phase 2 addition)
   private identifyTargetSubsection(query: string, sectionType: string): string | undefined
 }
 ```
 
-**Intent Classification Rules**:
-- **Competitive Intelligence**: Keywords: "competitors", "competitive landscape", "competition", "peer comparison"
-  - Target: Item 1, Subsection: Competition
-- **MD&A Intelligence**: Keywords: "growth drivers", "trends", "outlook", "guidance", "management discussion"
-  - Target: Item 7, Subsection: Results of Operations / Liquidity / Critical Accounting
-- **Footnote**: Keywords: "footnote", "accounting policy", "revenue recognition", "note [number]"
-  - Target: Item 8, Subsection: Specific note or policy
+**Subsection Identification Rules** (NEW in Phase 2):
+
+When `sectionType` is identified, also identify `subsectionName`:
+
+- **Item 1 (Business)**: 
+  - "competitors", "competitive landscape", "competition" → "Competition"
+  - "products", "product line", "offerings" → "Products"
+  - "customers", "customer base" → "Customers"
+  - "markets", "market segments" → "Markets"
+  - "operations", "business operations" → "Operations"
+  - "strategy", "business strategy" → "Strategy"
+  - "intellectual property", "patents", "trademarks" → "Intellectual Property"
+  - "employees", "human capital", "workforce" → "Human Capital"
+
+- **Item 7 (MD&A)**:
+  - "results of operations", "operating results", "performance" → "Results of Operations"
+  - "liquidity", "capital resources", "cash flow" → "Liquidity and Capital Resources"
+  - "critical accounting", "accounting policies", "estimates" → "Critical Accounting Policies"
+  - "market risk", "interest rate risk", "currency risk" → "Market Risk"
+  - "contractual obligations", "commitments" → "Contractual Obligations"
+
+- **Item 8 (Financial Statements)**:
+  - "revenue recognition", "revenue policy" → "Revenue Recognition"
+  - "leases", "lease accounting" → "Leases"
+  - "stock-based compensation", "equity compensation" → "Stock-Based Compensation"
+  - "income taxes", "tax provision" → "Income Taxes"
+  - "debt", "borrowings", "credit facilities" → "Debt"
+  - "fair value", "fair value measurements" → "Fair Value"
+  - "note [number]" → Extract note number
+
+- **Item 1A (Risk Factors)**:
+  - "operational risk" → "Operational Risks"
+  - "financial risk" → "Financial Risks"
+  - "market risk" → "Market Risks"
+  - "regulatory risk", "compliance" → "Regulatory Risks"
+  - "technology risk", "cybersecurity" → "Technology Risks"
+
+**Examples**:
+
+1. **Structured Query with Subsection**:
+   - Query: "What is AAPL's revenue recognition policy?"
+   - Intent: `{ type: 'semantic', ticker: 'AAPL', sectionTypes: ['item_8'], subsectionName: 'Revenue Recognition' }`
+
+2. **Competitive Intelligence Query**:
+   - Query: "Who are NVDA's competitors?"
+   - Intent: `{ type: 'semantic', ticker: 'NVDA', sectionTypes: ['item_1'], subsectionName: 'Competition' }`
+
+3. **MD&A Query**:
+   - Query: "What are META's growth drivers?"
+   - Intent: `{ type: 'semantic', ticker: 'META', sectionTypes: ['item_7'], subsectionName: 'Results of Operations' }`
+
+4. **Hybrid Query with Subsection**:
+   - Query: "What is AMZN's revenue and how do they recognize it?"
+   - Intent: `{ type: 'hybrid', ticker: 'AMZN', metrics: ['Revenue'], sectionTypes: ['item_8'], subsectionName: 'Revenue Recognition' }`
 
 ### 3. Semantic Retriever Service Enhancement (TypeScript)
 
@@ -544,33 +618,41 @@ A property is a characteristic or behavior that should hold true across all vali
 
 ### Phase 2 Properties (Intent Detection and Retrieval)
 
-**Property 5: Competitive Intelligence Intent Classification**
-*For any* query containing competitive keywords ("competitors", "competitive landscape", "competition"), the Intent_Detector should classify it as competitive_intelligence intent and target Item 1, Competition subsection.
-**Validates: Requirements 2.1, 2.2**
+**Property 5: Subsection Identification for ALL Query Types**
+*For any* query where the Intent_Detector identifies a section_type (item_1, item_7, item_8, item_1a), if the query contains subsection keywords, the Intent_Detector should also identify the target subsection_name.
+**Validates: Requirements 2.1**
 
-**Property 6: Intent Prioritization**
-*For any* query matching multiple intent patterns, the Intent_Detector should prioritize the most specific intent over general intents.
-**Validates: Requirements 2.5**
+**Property 6: Subsection Prioritization**
+*For any* query matching multiple subsection patterns, the Intent_Detector should prioritize the most specific subsection over general subsections.
+**Validates: Requirements 2.6**
 
-**Property 7: MD&A Intent Classification**
-*For any* query containing MD&A keywords ("growth drivers", "trends", "outlook", "guidance"), the Intent_Detector should classify it as mda_intelligence intent and target Item 7.
+**Property 7: Competitive Intelligence Subsection Detection**
+*For any* query containing competitive keywords ("competitors", "competitive landscape", "competition"), the Intent_Detector should set sectionTypes=['item_1'] and subsectionName='Competition'.
+**Validates: Requirements 2.2, 2.3**
+
+**Property 8: MD&A Subsection Detection**
+*For any* query containing MD&A keywords ("growth drivers", "trends", "outlook", "guidance"), the Intent_Detector should set sectionTypes=['item_7'] and identify the relevant subsection when specific topics are mentioned.
 **Validates: Requirements 3.1, 3.2**
 
-**Property 8: Footnote Intent Classification**
-*For any* query containing footnote keywords ("footnote", "accounting policy", "note [number]"), the Intent_Detector should classify it as footnote intent and target Item 8.
+**Property 9: Footnote Subsection Detection**
+*For any* query containing footnote keywords ("footnote", "accounting policy", "revenue recognition", "note [number]"), the Intent_Detector should set sectionTypes=['item_8'] and identify the relevant subsection when specific policies are mentioned.
 **Validates: Requirements 4.1, 4.2**
 
-**Property 9: Subsection-Filtered Retrieval**
+**Property 10: Subsection-Filtered Retrieval**
 *For any* query with a specified subsection, the Semantic_Retriever should filter results by both section_type and subsection_name.
 **Validates: Requirements 5.1**
 
-**Property 10: Retrieval Fallback Chain**
+**Property 11: Retrieval Fallback Chain**
 *For any* subsection-filtered retrieval returning zero results, the Semantic_Retriever should automatically fallback to section-only filtering, then broader semantic search.
 **Validates: Requirements 5.5, 12.1, 12.2**
 
-**Property 11: Multi-Ticker Isolation**
+**Property 12: Multi-Ticker Isolation**
 *For any* multi-ticker query, the Semantic_Retriever should process each ticker independently, and no chunk from ticker A should appear in ticker B's results.
 **Validates: Requirements 10.1, 10.2, 10.4**
+
+**Property 13: Existing Query Type Preservation**
+*For any* query processed by the enhanced Intent_Detector, the existing query type classification (structured, semantic, hybrid) should be preserved, with subsection identification added as an enhancement.
+**Validates: Requirements 2.7**
 
 ### Phase 3 Properties (Advanced Retrieval)
 

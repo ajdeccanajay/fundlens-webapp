@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intent Analytics Dashboard - FundLens Admin</title>
+    <link rel="stylesheet" href="/css/design-system.css">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+
+        .header-controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            margin-top: 15px;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .metric-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .metric-card h3 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .metric-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .metric-label {
+            font-size: 12px;
+            color: #999;
+        }
+
+        .metric-good { color: #10b981; }
+        .metric-warning { color: #f59e0b; }
+        .metric-bad { color: #ef4444; }
+
+        .patterns-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .patterns-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .patterns-header h2 {
+            margin: 0;
+            color: #333;
+        }
+
+        .filter-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .filter-btn {
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .filter-btn.active {
+            background: #3b82f6;
+            color: white;
+            border-color: #3b82f6;
+        }
+
+        .pattern-item {
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 10px;
+        }
+
+        .pattern-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 10px;
+        }
+
+        .pattern-text {
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            color: #333;
+            font-weight: 500;
+        }
+
+        .pattern-count {
+            background: #f3f4f6;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #666;
+        }
+
+        .pattern-examples {
+            margin: 10px 0;
+            padding: 10px;
+            background: #f9fafb;
+            border-radius: 4px;
+        }
+
+        .pattern-examples-title {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+
+        .example-query {
+            font-size: 13px;
+            color: #555;
+            padding: 4px 0;
+        }
+
+        .pattern-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .action-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .btn-reviewed { background: #3b82f6; color: white; }
+        .btn-implemented { background: #10b981; color: white; }
+        .btn-rejected { background: #ef4444; color: white; }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-pending { background: #fef3c7; color: #92400e; }
+        .status-reviewed { background: #dbeafe; color: #1e40af; }
+        .status-implemented { background: #d1fae5; color: #065f46; }
+        .status-rejected { background: #fee2e2; color: #991b1b; }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .error {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        select, input {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .refresh-info {
+            font-size: 12px;
+            color: #999;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎯 Intent Analytics Dashboard</h1>
+            <p>Monitor intent detection performance and manage failed patterns</p>
+            
+            <div class="header-controls">
+                <label>
+                    Tenant:
+                    <select id="tenantSelect">
+                        <option value="acme">ACME Corp</option>
+                        <option value="demo">Demo Tenant</option>
+                        <option value="test-tenant">Test Tenant</option>
+                    </select>
+                </label>
+                
+                <label>
+                    Period:
+                    <select id="periodSelect">
+                        <option value="24h">Last 24 Hours</option>
+                        <option value="7d">Last 7 Days</option>
+                    </select>
+                </label>
+                
+                <button onclick="refreshData()" class="filter-btn">🔄 Refresh</button>
+                
+                <span class="refresh-info" id="lastRefresh">Never</span>
+            </div>
+        </div>
+
+        <div id="error" class="error" style="display: none;"></div>
+
+        <div id="metricsGrid" class="metrics-grid">
+            <div class="loading">Loading metrics...</div>
+        </div>
+
+        <div class="patterns-section">
+            <div class="patterns-header">
+                <h2>Failed Query Patterns</h2>
+                <div class="filter-buttons">
+                    <button class="filter-btn active" data-status="all" onclick="filterPatterns('all')">All</button>
+                    <button class="filter-btn" data-status="pending" onclick="filterPatterns('pending')">Pending</button>
+                    <button class="filter-btn" data-status="reviewed" onclick="filterPatterns('reviewed')">Reviewed</button>
+                    <button class="filter-btn" data-status="implemented" onclick="filterPatterns('implemented')">Implemented</button>
+                    <button class="filter-btn" data-status="rejected" onclick="filterPatterns('rejected')">Rejected</button>
+                </div>
+            </div>
+            
+            <div id="patternsList">
+                <div class="loading">Loading patterns...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        const ADMIN_KEY = localStorage.getItem('adminKey') || prompt('Enter admin key:');
+        if (ADMIN_KEY) localStorage.setItem('adminKey', ADMIN_KEY);
+
+        let currentFilter = 'all';
+        let allPatterns = [];
+
+        // Auto-refresh every 30 seconds
+        setInterval(() => refreshData(), 30000);
+
+        // Initial load
+        refreshData();
+
+        async function refreshData() {
+            const tenantId = document.getElementById('tenantSelect').value;
+            const period = document.getElementById('periodSelect').value;
+            
+            await Promise.all([
+                loadMetrics(tenantId, period),
+                loadPatterns(tenantId, currentFilter)
+            ]);
+            
+            document.getElementById('lastRefresh').textContent = `Last refresh: ${new Date().toLocaleTimeString()}`;
+        }
+
+        async function loadMetrics(tenantId, period) {
+            try {
+                const response = await fetch(`${API_BASE}/admin/intent-analytics/realtime?tenantId=${tenantId}`, {
+                    headers: { 'x-admin-key': ADMIN_KEY }
+                });
+                
+                if (!response.ok) throw new Error('Failed to load metrics');
+                
+                const data = await response.json();
+                const metrics = period === '24h' ? data.metrics.last24Hours : data.metrics.last7Days;
+                
+                renderMetrics(metrics, period);
+                hideError();
+            } catch (error) {
+                showError('Failed to load metrics: ' + error.message);
+            }
+        }
+
+        function renderMetrics(metrics, period) {
+            const grid = document.getElementById('metricsGrid');
+            
+            grid.innerHTML = `
+                <div class="metric-card">
+                    <h3>Total Queries</h3>
+                    <div class="metric-value">${metrics.totalQueries.toLocaleString()}</div>
+                    <div class="metric-label">${period === '24h' ? 'Last 24 hours' : 'Last 7 days'}</div>
+                </div>
+                
+                <div class="metric-card">
+                    <h3>Regex Success Rate</h3>
+                    <div class="metric-value ${getMetricClass(metrics.regexSuccessRate, 80, 60)}">${metrics.regexSuccessRate.toFixed(1)}%</div>
+                    <div class="metric-label">Target: >80%</div>
+                </div>
+                
+                <div class="metric-card">
+                    <h3>LLM Fallback Rate</h3>
+                    <div class="metric-value ${getMetricClass(metrics.llmFallbackRate, 20, 30, true)}">${metrics.llmFallbackRate.toFixed(1)}%</div>
+                    <div class="metric-label">Target: <20%</div>
+                </div>
+                
+                <div class="metric-card">
+                    <h3>Avg Confidence</h3>
+                    <div class="metric-value ${getMetricClass(metrics.avgConfidence * 100, 85, 70)}">${(metrics.avgConfidence * 100).toFixed(1)}%</div>
+                    <div class="metric-label">Target: >85%</div>
+                </div>
+                
+                <div class="metric-card">
+                    <h3>Avg Latency</h3>
+                    <div class="metric-value ${getMetricClass(metrics.avgLatencyMs, 500, 1000, true)}">${metrics.avgLatencyMs}ms</div>
+                    <div class="metric-label">Target: <500ms</div>
+                </div>
+                
+                <div class="metric-card">
+                    <h3>LLM Cost</h3>
+                    <div class="metric-value">$${metrics.llmCostUsd.toFixed(4)}</div>
+                    <div class="metric-label">${period === '24h' ? 'Last 24 hours' : 'Last 7 days'}</div>
+                </div>
+            `;
+        }
+
+        function getMetricClass(value, goodThreshold, badThreshold, inverse = false) {
+            if (inverse) {
+                if (value <= goodThreshold) return 'metric-good';
+                if (value <= badThreshold) return 'metric-warning';
+                return 'metric-bad';
+            } else {
+                if (value >= goodThreshold) return 'metric-good';
+                if (value >= badThreshold) return 'metric-warning';
+                return 'metric-bad';
+            }
+        }
+
+        async function loadPatterns(tenantId, status) {
+            try {
+                const statusParam = status === 'all' ? '' : `&status=${status}`;
+                const response = await fetch(`${API_BASE}/admin/intent-analytics/failed-patterns?tenantId=${tenantId}${statusParam}`, {
+                    headers: { 'x-admin-key': ADMIN_KEY }
+                });
+                
+                if (!response.ok) throw new Error('Failed to load patterns');
+                
+                const data = await response.json();
+                allPatterns = data.patterns;
+                
+                renderPatterns(allPatterns);
+                hideError();
+            } catch (error) {
+                showError('Failed to load patterns: ' + error.message);
+            }
+        }
+
+        function renderPatterns(patterns) {
+            const list = document.getElementById('patternsList');
+            
+            if (patterns.length === 0) {
+                list.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">✨</div>
+                        <p>No failed patterns found</p>
+                        <p style="font-size: 14px; color: #999;">All queries are being detected successfully!</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            list.innerHTML = patterns.map(pattern => `
+                <div class="pattern-item">
+                    <div class="pattern-header">
+                        <div>
+                            <div class="pattern-text">${escapeHtml(pattern.queryPattern)}</div>
+                            <span class="status-badge status-${pattern.status}">${pattern.status}</span>
+                        </div>
+                        <div class="pattern-count">${pattern.occurrenceCount} occurrences</div>
+                    </div>
+                    
+                    <div class="pattern-examples">
+                        <div class="pattern-examples-title">Example Queries:</div>
+                        ${pattern.exampleQueries.slice(0, 3).map(q => 
+                            `<div class="example-query">• ${escapeHtml(q)}</div>`
+                        ).join('')}
+                    </div>
+                    
+                    ${pattern.notes ? `<div style="font-size: 13px; color: #666; margin-top: 8px;">📝 ${escapeHtml(pattern.notes)}</div>` : ''}
+                    
+                    <div class="pattern-actions">
+                        ${pattern.status === 'pending' ? `
+                            <button class="action-btn btn-reviewed" onclick="updatePattern('${pattern.id}', 'reviewed')">Mark Reviewed</button>
+                            <button class="action-btn btn-implemented" onclick="updatePattern('${pattern.id}', 'implemented')">Mark Implemented</button>
+                            <button class="action-btn btn-rejected" onclick="updatePattern('${pattern.id}', 'rejected')">Reject</button>
+                        ` : ''}
+                        ${pattern.status === 'reviewed' ? `
+                            <button class="action-btn btn-implemented" onclick="updatePattern('${pattern.id}', 'implemented')">Mark Implemented</button>
+                        ` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function updatePattern(patternId, status) {
+            const notes = prompt(`Notes for this ${status} action (optional):`);
+            const reviewedBy = prompt('Your name:') || 'Admin';
+            
+            try {
+                const response = await fetch(`${API_BASE}/admin/intent-analytics/update-pattern`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-admin-key': ADMIN_KEY
+                    },
+                    body: JSON.stringify({ patternId, status, reviewedBy, notes })
+                });
+                
+                if (!response.ok) throw new Error('Failed to update pattern');
+                
+                await refreshData();
+            } catch (error) {
+                showError('Failed to update pattern: ' + error.message);
+            }
+        }
+
+        function filterPatterns(status) {
+            currentFilter = status;
+            
+            // Update active button
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.status === status);
+            });
+            
+            // Filter patterns
+            if (status === 'all') {
+                renderPatterns(allPatterns);
+            } else {
+                renderPatterns(allPatterns.filter(p => p.status === status));
+            }
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+
+        function hideError() {
+            document.getElementById('error').style.display = 'none';
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Event listeners
+        document.getElementById('tenantSelect').addEventListener('change', refreshData);
+        document.getElementById('periodSelect').addEventListener('change', refreshData);
+    </script>
+</body>
+</html>

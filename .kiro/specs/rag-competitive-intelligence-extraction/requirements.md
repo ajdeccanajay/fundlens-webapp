@@ -53,41 +53,54 @@ This specification addresses critical failures in the Research Assistant (RAG sy
 9. WHEN subsection boundaries cannot be determined, THE Section_Parser SHALL label chunks with subsection_name as null
 10. THE Section_Parser SHALL support hierarchical subsections (e.g., Item 7 > Results of Operations > Revenue Analysis)
 
-### Requirement 2: Competitive Intelligence Intent Detection
+### Requirement 2: Subsection-Aware Intent Detection for ALL Query Types
 
-**User Story:** As an analyst, I want the system to recognize competitive intelligence queries, so that retrieval targets the Competition subsection of Item 1.
+**User Story:** As an analyst, I want the system to identify target subsections for ALL query types (structured, semantic, hybrid), so that retrieval can target fine-grained content regardless of query type.
 
-#### Acceptance Criteria
-
-1. WHEN a query contains terms "competitors", "competitive landscape", "competition", or "peer comparison", THE Intent_Detector SHALL classify it as competitive_intelligence intent
-2. WHEN competitive_intelligence intent is detected, THE Intent_Detector SHALL specify target section as item_1 with subsection Competition
-3. WHEN a query asks "Who are [TICKER]'s competitors?", THE Intent_Detector SHALL extract the ticker and set competitive_intelligence intent
-4. THE Intent_Detector SHALL distinguish competitive queries from general business queries
-5. WHEN multiple intent patterns match, THE Intent_Detector SHALL prioritize the most specific intent
-
-### Requirement 3: MD&A Intelligence Intent Detection
-
-**User Story:** As an analyst, I want the system to recognize MD&A-specific queries, so that retrieval targets relevant MD&A subsections.
+**CRITICAL CLARIFICATION**: This requirement enhances the EXISTING intent detector (which already handles structured queries, semantic queries, hybrid queries, metrics, periods, document types, sections, comparisons, trends, etc.) by ADDING subsection identification. It does NOT replace the existing system with a narrow competitive-intelligence-only detector.
 
 #### Acceptance Criteria
 
-1. WHEN a query contains terms "growth drivers", "trends", "outlook", "guidance", or "management discussion", THE Intent_Detector SHALL classify it as mda_intelligence intent
-2. WHEN mda_intelligence intent is detected, THE Intent_Detector SHALL specify target section as item_7
-3. WHEN a query asks about specific MD&A topics (liquidity, capital resources, critical accounting), THE Intent_Detector SHALL identify the relevant subsection
-4. THE Intent_Detector SHALL map MD&A queries to subsections: Results of Operations, Liquidity and Capital Resources, Critical Accounting Policies, Market Risk
-5. WHEN MD&A queries are ambiguous, THE Intent_Detector SHALL target the entire Item 7 section
+1. WHEN the Intent_Detector identifies a section_type (item_1, item_7, item_8, item_1a), THE Intent_Detector SHALL ALSO identify the target subsection_name when query keywords match subsection patterns
+2. WHEN a query contains terms "competitors", "competitive landscape", "competition", or "peer comparison", THE Intent_Detector SHALL set sectionTypes=['item_1'] and subsectionName='Competition'
+3. WHEN a query asks "Who are [TICKER]'s competitors?", THE Intent_Detector SHALL extract the ticker, set type='semantic', sectionTypes=['item_1'], and subsectionName='Competition'
+4. WHEN a query asks "What is [TICKER]'s revenue recognition policy?", THE Intent_Detector SHALL set type='semantic', sectionTypes=['item_8'], and subsectionName='Revenue Recognition'
+5. WHEN a query asks "What is [TICKER]'s revenue and how do they recognize it?", THE Intent_Detector SHALL set type='hybrid', metrics=['Revenue'], sectionTypes=['item_8'], and subsectionName='Revenue Recognition'
+6. WHEN multiple subsection patterns match, THE Intent_Detector SHALL prioritize the most specific subsection
+7. WHEN no subsection pattern matches, THE Intent_Detector SHALL leave subsectionName as undefined (existing behavior preserved)
 
-### Requirement 4: Footnote Intent Detection
+### Requirement 3: MD&A Subsection Detection
 
-**User Story:** As an analyst, I want the system to recognize footnote queries, so that retrieval targets Item 8 Notes to Financial Statements.
+**User Story:** As an analyst, I want the system to identify MD&A subsections for queries targeting management discussion, so that retrieval targets relevant MD&A subsections.
 
 #### Acceptance Criteria
 
-1. WHEN a query contains terms "footnote", "accounting policy", "revenue recognition", "lease accounting", or "note [number]", THE Intent_Detector SHALL classify it as footnote intent
-2. WHEN footnote intent is detected, THE Intent_Detector SHALL specify target section as item_8
+1. WHEN a query contains terms "growth drivers", "trends", "outlook", "guidance", or "management discussion", THE Intent_Detector SHALL set sectionTypes=['item_7']
+2. WHEN MD&A queries mention specific topics, THE Intent_Detector SHALL identify the relevant subsection:
+   - "results of operations", "operating results", "performance" → subsectionName='Results of Operations'
+   - "liquidity", "capital resources", "cash flow" → subsectionName='Liquidity and Capital Resources'
+   - "critical accounting", "accounting policies", "estimates" → subsectionName='Critical Accounting Policies'
+   - "market risk", "interest rate risk", "currency risk" → subsectionName='Market Risk'
+3. WHEN MD&A queries are ambiguous, THE Intent_Detector SHALL set sectionTypes=['item_7'] without subsectionName (existing behavior)
+4. THE Intent_Detector SHALL preserve existing query type classification (structured, semantic, hybrid) while adding subsection identification
+
+### Requirement 4: Footnote Subsection Detection
+
+**User Story:** As an analyst, I want the system to identify specific footnote subsections, so that retrieval targets Item 8 Notes to Financial Statements with subsection precision.
+
+#### Acceptance Criteria
+
+1. WHEN a query contains terms "footnote", "accounting policy", "revenue recognition", "lease accounting", or "note [number]", THE Intent_Detector SHALL set sectionTypes=['item_8']
+2. WHEN footnote queries mention specific policies, THE Intent_Detector SHALL identify the relevant subsection:
+   - "revenue recognition", "revenue policy" → subsectionName='Revenue Recognition'
+   - "leases", "lease accounting" → subsectionName='Leases'
+   - "stock-based compensation", "equity compensation" → subsectionName='Stock-Based Compensation'
+   - "income taxes", "tax provision" → subsectionName='Income Taxes'
+   - "debt", "borrowings", "credit facilities" → subsectionName='Debt'
+   - "fair value", "fair value measurements" → subsectionName='Fair Value'
 3. WHEN a query references a specific note number (e.g., "Note 3"), THE Intent_Detector SHALL extract the note number for targeted retrieval
-4. THE Intent_Detector SHALL recognize accounting policy terms (depreciation, amortization, inventory valuation) as footnote queries
-5. WHEN a query asks about financial statement details, THE Intent_Detector SHALL classify it as footnote intent
+4. THE Intent_Detector SHALL recognize accounting policy terms (depreciation, amortization, inventory valuation) and set sectionTypes=['item_8']
+5. WHEN a query asks about financial statement details without specific subsection keywords, THE Intent_Detector SHALL set sectionTypes=['item_8'] without subsectionName
 
 ### Requirement 5: Subsection-Aware Semantic Retrieval
 

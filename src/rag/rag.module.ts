@@ -4,9 +4,11 @@ import { RAGController } from './rag.controller';
 import { RAGService } from './rag.service';
 import { QueryRouterService } from './query-router.service';
 import { IntentDetectorService } from './intent-detector.service';
+import { IntentAnalyticsService } from './intent-analytics.service';
 import { StructuredRetrieverService } from './structured-retriever.service';
 import { SemanticRetrieverService } from './semantic-retriever.service';
 import { BedrockService } from './bedrock.service';
+import { PromptLibraryService } from './prompt-library.service';
 import { DocumentRAGService } from './document-rag.service';
 import { CitationService } from './citation.service';
 import { ChunkExporterService } from './chunk-exporter.service';
@@ -26,9 +28,11 @@ import { S3Module } from '../s3/s3.module';
     RAGService,
     QueryRouterService,
     IntentDetectorService,
+    IntentAnalyticsService,
     StructuredRetrieverService,
     SemanticRetrieverService,
     BedrockService,
+    PromptLibraryService,
     DocumentRAGService,
     CitationService,
     ChunkExporterService,
@@ -39,8 +43,10 @@ import { S3Module } from '../s3/s3.module';
     RAGService,
     QueryRouterService,
     IntentDetectorService,
+    IntentAnalyticsService,
     SemanticRetrieverService,
     BedrockService,
+    PromptLibraryService,
     DocumentRAGService,
     CitationService,
     ChunkExporterService,

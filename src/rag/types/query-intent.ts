@@ -30,6 +30,7 @@ export interface QueryIntent {
   // Document filtering
   documentTypes?: DocumentType[];
   sectionTypes?: SectionType[];
+  subsectionName?: string; // Target subsection within identified section (Phase 2)
   
   // Query characteristics
   needsNarrative: boolean;

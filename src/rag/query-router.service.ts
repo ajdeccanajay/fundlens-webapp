@@ -20,9 +20,9 @@ export class QueryRouterService {
   /**
    * Route a query to appropriate retrieval strategy
    */
-  async route(query: string): Promise<RetrievalPlan> {
+  async route(query: string, tenantId?: string): Promise<RetrievalPlan> {
     // Detect intent
-    const intent = await this.intentDetector.detectIntent(query);
+    const intent = await this.intentDetector.detectIntent(query, tenantId);
 
     this.logger.log(`Routing query type: ${intent.type}`);
 
@@ -165,7 +165,7 @@ export class QueryRouterService {
   /**
    * Get intent without routing (for testing)
    */
-  async getIntent(query: string): Promise<QueryIntent> {
-    return this.intentDetector.detectIntent(query);
+  async getIntent(query: string, tenantId?: string): Promise<QueryIntent> {
+    return this.intentDetector.detectIntent(query, tenantId);
   }
 }

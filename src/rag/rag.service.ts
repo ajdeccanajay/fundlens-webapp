@@ -46,8 +46,8 @@ export class RAGService {
 
     try {
       // Step 1: Route query
-      const plan = await this.queryRouter.route(query);
-      const intent = await this.queryRouter.getIntent(query);
+      const plan = await this.queryRouter.route(query, options?.tenantId);
+      const intent = await this.queryRouter.getIntent(query, options?.tenantId);
 
       // Step 2: HYBRID RETRIEVAL - Combine structured + semantic + user documents
       let metrics: any[] = [];

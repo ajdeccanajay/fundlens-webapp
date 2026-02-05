@@ -770,7 +770,7 @@
                 
                 // Authentication
                 async checkAuth() {
-                    const token = localStorage.getItem('authToken');
+                    const token = localStorage.getItem('fundlens_token');
                     if (!token) {
                         window.location.href = '/login.html';
                         return;
@@ -787,7 +787,7 @@
                         this.user = data;
                     } catch (error) {
                         console.error('Auth check failed:', error);
-                        localStorage.removeItem('authToken');
+                        localStorage.removeItem('fundlens_token');
                         window.location.href = '/login.html';
                     }
                 },
@@ -798,14 +798,14 @@
                 },
                 
                 logout() {
-                    localStorage.removeItem('authToken');
+                    localStorage.removeItem('fundlens_token');
                     window.location.href = '/login.html';
                 },
                 
                 // Conversations
                 async loadConversations() {
                     try {
-                        const token = localStorage.getItem('authToken');
+                        const token = localStorage.getItem('fundlens_token');
                         const response = await fetch(`${window.API_BASE_URL}/research/conversations?limit=50`, {
                             headers: { 'Authorization': `Bearer ${token}` }
                         });
@@ -822,7 +822,7 @@
                 
                 async createNewConversation() {
                     try {
-                        const token = localStorage.getItem('authToken');
+                        const token = localStorage.getItem('fundlens_token');
                         const response = await fetch(`${window.API_BASE_URL}/research/conversations`, {
                             method: 'POST',
                             headers: {
@@ -854,7 +854,7 @@
                 
                 async loadMessages(conversationId) {
                     try {
-                        const token = localStorage.getItem('authToken');
+                        const token = localStorage.getItem('fundlens_token');
                         const response = await fetch(`${window.API_BASE_URL}/research/conversations/${conversationId}`, {
                             headers: { 'Authorization': `Bearer ${token}` }
                         });
@@ -878,7 +878,7 @@
                     if (!conv) return;
                     
                     try {
-                        const token = localStorage.getItem('authToken');
+                        const token = localStorage.getItem('fundlens_token');
                         const response = await fetch(`${window.API_BASE_URL}/research/conversations/${conversationId}`, {
                             method: 'PATCH',
                             headers: {
@@ -909,7 +909,7 @@
                     if (!confirm('Delete this conversation? This cannot be undone.')) return;
                     
                     try {
-                        const token = localStorage.getItem('authToken');
+                        const token = localStorage.getItem('fundlens_token');
                         const response = await fetch(`${window.API_BASE_URL}/research/conversations/${conversationId}`, {
                             method: 'DELETE',
                             headers: { 'Authorization': `Bearer ${token}` }
@@ -959,7 +959,7 @@
                 async streamResponse(userMessage) {
                     this.isTyping = true;
                     
-                    const token = localStorage.getItem('authToken');
+                    const token = localStorage.getItem('fundlens_token');
                     const url = `${window.API_BASE_URL}/research/conversations/${this.activeConversationId}/messages`;
                     
                     try {
@@ -1112,7 +1112,7 @@
                 // Download document (NEW)
                 async downloadDocument(documentId) {
                     try {
-                        const token = localStorage.getItem('authToken');
+                        const token = localStorage.getItem('fundlens_token');
                         const response = await fetch(
                             `${window.API_BASE_URL}/documents/${documentId}/download`,
                             { headers: { 'Authorization': `Bearer ${token}` } }
@@ -1164,7 +1164,7 @@
                 // Scratchpad methods
                 async loadScratchpad() {
                     try {
-                        const token = localStorage.getItem('authToken');
+                        const token = localStorage.getItem('fundlens_token');
                         const response = await fetch(`${window.API_BASE_URL}/research/notebooks?limit=1`, {
                             headers: { 'Authorization': `Bearer ${token}` }
                         });
@@ -1186,7 +1186,7 @@
                 
                 async createScratchpad() {
                     try {
-                        const token = localStorage.getItem('authToken');
+                        const token = localStorage.getItem('fundlens_token');
                         const response = await fetch(`${window.API_BASE_URL}/research/notebooks`, {
                             method: 'POST',
                             headers: {
@@ -1213,7 +1213,7 @@
                     if (!this.activeScratchpadId) return;
                     
                     try {
-                        const token = localStorage.getItem('authToken');
+                        const token = localStorage.getItem('fundlens_token');
                         const response = await fetch(
                             `${window.API_BASE_URL}/research/notebooks/${this.activeScratchpadId}`,
                             { headers: { 'Authorization': `Bearer ${token}` } }
@@ -1253,7 +1253,7 @@
                     if (!this.activeScratchpadId || !this.selectedMessageForSave) return;
                     
                     try {
-                        const token = localStorage.getItem('authToken');
+                        const token = localStorage.getItem('fundlens_token');
                         const response = await fetch(
                             `${window.API_BASE_URL}/research/notebooks/${this.activeScratchpadId}/insights`,
                             {
@@ -1286,7 +1286,7 @@
                     if (!confirm('Remove this item from scratchpad?')) return;
                     
                     try {
-                        const token = localStorage.getItem('authToken');
+                        const token = localStorage.getItem('fundlens_token');
                         const response = await fetch(
                             `${window.API_BASE_URL}/research/notebooks/${this.activeScratchpadId}/insights/${insightId}`,
                             {
@@ -1308,7 +1308,7 @@
                     if (!this.activeScratchpadId) return;
                     
                     try {
-                        const token = localStorage.getItem('authToken');
+                        const token = localStorage.getItem('fundlens_token');
                         const response = await fetch(
                             `${window.API_BASE_URL}/research/notebooks/${this.activeScratchpadId}/export?format=markdown`,
                             { headers: { 'Authorization': `Bearer ${token}` } }

@@ -5,7 +5,7 @@
  * Uses TenantAwareS3Service for S3 operations with prefix enforcement.
  */
 
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { HttpModule } from '@nestjs/axios';
 import { DocumentsController } from './documents.controller';
@@ -15,14 +15,15 @@ import { DocumentUploadController } from './document-upload.controller';
 import { DocumentProcessingService } from './document-processing.service';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { TenantModule } from '../tenant/tenant.module';
+import { RAGModule } from '../rag/rag.module';
 import { S3Service } from '../services/s3.service';
-import { BedrockService } from '../rag/bedrock.service';
 
 @Module({
   imports: [
     PrismaModule,
     ConfigModule,
     TenantModule, // Provides TenantAwareS3Service
+    forwardRef(() => RAGModule), // Provides BedrockService
     HttpModule.register({ timeout: 120000, maxRedirects: 5 }),
   ],
   controllers: [DocumentsController, DocumentUploadController],
@@ -31,7 +32,6 @@ import { BedrockService } from '../rag/bedrock.service';
     DocumentProcessorService,
     DocumentProcessingService,
     S3Service,
-    BedrockService,
   ],
   exports: [DocumentsService, DocumentProcessorService, DocumentProcessingService],
 })

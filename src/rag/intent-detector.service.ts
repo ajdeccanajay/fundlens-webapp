@@ -755,7 +755,7 @@ Return ONLY the JSON object, no other text.`;
     try {
       const response = await this.bedrock.invokeClaude({
         prompt,
-        modelId: 'anthropic.claude-3-5-haiku-20241022-v1:0', // Claude 3.5 Haiku
+        modelId: 'us.anthropic.claude-3-5-haiku-20241022-v1:0', // Claude 3.5 Haiku Inference Profile
         max_tokens: 500,
       });
 

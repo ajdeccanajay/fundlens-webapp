@@ -7,7 +7,7 @@
  * Routes can opt-out of authentication using the @Public() decorator.
  */
 
-import { Module, Global } from '@nestjs/common';
+import { Module, Global, forwardRef } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { TenantGuard } from './tenant.guard';
@@ -19,7 +19,7 @@ import { TenantUserController } from './tenant-user.controller';
 import { AuditService } from './audit.service';
 import { AuditController } from './audit.controller';
 import { PrismaModule } from '../../prisma/prisma.module';
-import { BedrockService } from '../rag/bedrock.service';
+import { RAGModule } from '../rag/rag.module';
 import { CognitoAuthService } from '../auth/cognito-auth.service';
 
 @Global()
@@ -27,6 +27,7 @@ import { CognitoAuthService } from '../auth/cognito-auth.service';
   imports: [
     ConfigModule,
     PrismaModule,
+    forwardRef(() => RAGModule),
   ],
   controllers: [TenantUserController, AuditController],
   providers: [
@@ -36,7 +37,6 @@ import { CognitoAuthService } from '../auth/cognito-auth.service';
     TenantAwareRAGService,
     TenantUserService,
     AuditService,
-    BedrockService,
     CognitoAuthService,
     // Register TenantGuard globally - all routes require auth by default
     // Use @Public() decorator to opt-out specific routes

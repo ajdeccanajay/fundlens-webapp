@@ -118,35 +118,49 @@ This implementation plan breaks down the RAG competitive intelligence extraction
 **Risk Level**: MEDIUM
 **Estimated Time**: 2-3 weeks
 
-- [ ] 6. Enhance Intent Detector for subsection targeting
-  - [ ] 6.1 Implement competitive intelligence intent detection
-    - Add keyword patterns: "competitors", "competitive landscape", "competition", "peer comparison"
-    - Set target section: item_1, subsection: Competition
-    - Extract ticker from query
+**CRITICAL CLARIFICATION**: Phase 2 enhances the EXISTING intent detector (which already handles structured queries, semantic queries, hybrid queries, metrics, periods, document types, sections, comparisons, trends, etc.) by ADDING subsection identification. It does NOT replace the existing system with a narrow competitive-intelligence-only detector.
+
+- [-] 6. Enhance Intent Detector with subsection identification for ALL query types
+  - [x] 6.1 Add subsection identification for Item 1 (Business) queries
+    - Add subsection patterns: "competitors" → "Competition", "products" → "Products", "customers" → "Customers", etc.
+    - Enhance existing extractSectionTypes() to also identify subsection_name
+    - Preserve existing query type classification (structured, semantic, hybrid)
     - _Requirements: 2.1, 2.2, 2.3_
   
-  - [ ] 6.2 Implement MD&A intelligence intent detection
-    - Add keyword patterns: "growth drivers", "trends", "outlook", "guidance", "management discussion"
-    - Set target section: item_7
-    - Map specific MD&A topics to subsections
-    - _Requirements: 3.1, 3.2, 3.3, 3.4_
+  - [x] 6.2 Add subsection identification for Item 7 (MD&A) queries
+    - Add subsection patterns: "results of operations" → "Results of Operations", "liquidity" → "Liquidity and Capital Resources", etc.
+    - Enhance existing extractSectionTypes() to also identify subsection_name
+    - Preserve existing query type classification
+    - _Requirements: 3.1, 3.2_
   
-  - [ ] 6.3 Implement footnote intent detection
-    - Add keyword patterns: "footnote", "accounting policy", "revenue recognition", "note [number]"
-    - Set target section: item_8
-    - Extract note number if specified
+  - [x] 6.3 Add subsection identification for Item 8 (Financial Statements) queries
+    - Add subsection patterns: "revenue recognition" → "Revenue Recognition", "leases" → "Leases", etc.
+    - Extract note numbers when specified (e.g., "Note 3")
+    - Preserve existing query type classification
     - _Requirements: 4.1, 4.2, 4.3_
   
-  - [ ] 6.4 Implement intent prioritization logic
-    - When multiple intents match, prioritize most specific
-    - Distinguish competitive queries from general business queries
-    - _Requirements: 2.4, 2.5_
+  - [x] 6.4 Add subsection identification for Item 1A (Risk Factors) queries
+    - Add subsection patterns: "operational risk" → "Operational Risks", "financial risk" → "Financial Risks", etc.
+    - Preserve existing query type classification
+    - _Requirements: 4.4_
   
-  - [ ]* 6.5 Write property test for competitive intelligence classification
-    - **Property 5: Competitive Intelligence Intent Classification**
-    - **Validates: Requirements 2.1, 2.2**
-    - Generate random queries with competitive keywords
-    - Verify classification and subsection targeting
+  - [x] 6.5 Implement subsection prioritization logic
+    - When multiple subsection patterns match, prioritize most specific
+    - When no subsection pattern matches, leave subsectionName undefined (existing behavior)
+    - _Requirements: 2.6, 2.7_
+  
+  - [ ]* 6.6 Write property test for subsection identification across ALL query types
+    - **Property 5: Subsection Identification for ALL Query Types**
+    - **Validates: Requirements 2.1**
+    - Generate random queries with section keywords
+    - Verify subsection identification when keywords match
+    - Verify existing query type classification is preserved
+  
+  - [ ]* 6.7 Write property test for subsection prioritization
+    - **Property 6: Subsection Prioritization**
+    - **Validates: Requirements 2.6**
+    - Generate queries with multiple subsection patterns
+    - Verify most specific subsection is selected
   
   - [ ]* 6.6 Write property test for intent prioritization
     - **Property 6: Intent Prioritization**
@@ -165,20 +179,20 @@ This implementation plan breaks down the RAG competitive intelligence extraction
     - Test "What is AMZN's revenue recognition policy?" → footnote
     - _Requirements: 2.1, 3.1, 4.1_
 
-- [ ] 7. Implement subsection-aware retrieval in Semantic Retriever
-  - [ ] 7.1 Add subsection filtering to Bedrock KB retrieval
+- [x] 7. Implement subsection-aware retrieval in Semantic Retriever
+  - [x] 7.1 Add subsection filtering to Bedrock KB retrieval
     - Update metadata filter to include subsection_name
     - Implement filter expression for Bedrock KB API
     - Test retrieval with subsection filters
     - _Requirements: 5.1, 5.2_
   
-  - [ ] 7.2 Add subsection filtering to PostgreSQL fallback
+  - [x] 7.2 Add subsection filtering to PostgreSQL fallback
     - Update WHERE clause to filter by subsection_name
     - Handle null subsection_name gracefully
     - Test PostgreSQL retrieval with subsection filters
     - _Requirements: 5.1, 5.3_
   
-  - [ ] 7.3 Implement fallback chain for retrieval
+  - [x] 7.3 Implement fallback chain for retrieval
     - Try subsection-filtered retrieval first
     - If no results, fallback to section-only filtering
     - If still no results, fallback to broader semantic search
@@ -203,14 +217,14 @@ This implementation plan breaks down the RAG competitive intelligence extraction
     - Test Bedrock KB unavailable → PostgreSQL fallback
     - _Requirements: 12.1, 12.2, 12.3_
 
-- [ ] 8. Implement multi-ticker isolation
-  - [ ] 8.1 Add independent ticker processing
+- [x] 8. Implement multi-ticker isolation
+  - [x] 8.1 Add independent ticker processing
     - Process each ticker in separate retrieval calls
     - Maintain strict ticker-based filtering
     - Merge results with clear ticker separation
     - _Requirements: 10.1, 10.2_
   
-  - [ ] 8.2 Add ticker mixing validation
+  - [x] 8.2 Add ticker mixing validation
     - Validate no chunk from ticker A appears in ticker B's results
     - Return error if mixing detected
     - Log mixing incidents for alerting
@@ -228,41 +242,41 @@ This implementation plan breaks down the RAG competitive intelligence extraction
     - Test ticker mixing detection and error
     - _Requirements: 10.1, 10.2, 10.4_
 
-- [ ] 9. Create Response Generator Service for structured extraction
-  - [ ] 9.1 Implement competitive intelligence extraction
+- [x] 9. Create Response Generator Service for structured extraction
+  - [x] 9.1 Implement competitive intelligence extraction
     - Extract competitor names from chunks
     - Extract market positioning and context
     - Extract competitive advantages and disadvantages
     - Structure as CompetitiveIntelligence interface
     - _Requirements: 6.1, 6.2, 6.3, 6.4_
   
-  - [ ] 9.2 Implement MD&A intelligence extraction
+  - [x] 9.2 Implement MD&A intelligence extraction
     - Extract key trends from chunks
     - Extract and categorize risks
     - Extract forward guidance with timeframes
     - Structure as MDAIntelligence interface
     - _Requirements: 7.1, 7.2, 7.3, 7.4_
   
-  - [ ] 9.3 Implement footnote content extraction
+  - [x] 9.3 Implement footnote content extraction
     - Extract accounting policy text
     - Preserve technical terminology and numerical details
     - Structure as FootnoteContent interface
     - _Requirements: 8.1, 8.2, 8.3, 8.4_
   
-  - [ ] 9.4 Implement confidence scoring
+  - [x] 9.4 Implement confidence scoring
     - Calculate confidence based on chunk relevance, explicit mentions, consistency
     - Assign confidence score (0.0 to 1.0) to all extractions
     - Indicate uncertainty when confidence < 0.7
     - _Requirements: 11.1, 11.2, 11.3, 11.4_
   
-  - [ ] 9.5 Implement response validation
+  - [x] 9.5 Implement response validation
     - Validate all claims are supported by retrieved chunks
     - Verify competitor names appear in source chunks
     - Verify quantitative data matches source chunks
     - Reject responses below minimum confidence thresholds
     - _Requirements: 13.1, 13.2, 13.3, 13.4, 13.5_
   
-  - [ ] 9.6 Implement citation generation
+  - [x] 9.6 Implement citation generation
     - Include section and subsection references
     - Format citations: [Section] - [Subsection] (Filing Type, Filing Date)
     - Cite all contributing chunks
@@ -281,15 +295,15 @@ This implementation plan breaks down the RAG competitive intelligence extraction
     - Test confidence scoring with various chunk qualities
     - _Requirements: 6.1, 7.1, 8.1, 11.1_
 
-- [ ] 10. Implement prompt engineering for extraction
-  - [ ] 10.1 Create prompt templates for each intent type
+- [x] 10. Implement prompt engineering for extraction
+  - [x] 10.1 Create prompt templates for each intent type
     - Competitive intelligence prompt template
     - MD&A intelligence prompt template
     - Footnote prompt template
     - Include explicit instructions for structured extraction
     - _Requirements: 14.1, 14.2, 14.3, 14.4_
   
-  - [ ] 10.2 Implement prompt versioning and management
+  - [x] 10.2 Implement prompt versioning and management
     - Store prompts in prompt library with versions
     - Support prompt updates without code changes
     - Maintain backward compatibility
@@ -301,21 +315,21 @@ This implementation plan breaks down the RAG competitive intelligence extraction
     - Test footnote intent → footnote prompt
     - _Requirements: 14.1, 14.2, 14.3_
 
-- [ ] 11. Add monitoring and observability
-  - [ ] 11.1 Implement extraction attempt logging
+- [x] 11. Add monitoring and observability
+  - [x] 11.1 Implement extraction attempt logging
     - Log intent type, ticker, success/failure status
     - Log failure reasons (no chunks, low confidence, validation failure)
     - Log latency for all operations
     - _Requirements: 17.1, 17.2_
   
-  - [ ] 11.2 Implement success rate metrics
+  - [x] 11.2 Implement success rate metrics
     - Track competitive intelligence success rate
     - Track MD&A success rate
     - Track footnote success rate
     - Track average confidence scores by intent type
     - _Requirements: 17.3, 17.4_
   
-  - [ ] 11.3 Implement alerting
+  - [x] 11.3 Implement alerting
     - Alert when competitive intelligence success rate < 95%
     - Alert when MD&A success rate < 90%
     - Alert on any multi-ticker mixing incident
@@ -326,7 +340,7 @@ This implementation plan breaks down the RAG competitive intelligence extraction
     - **Validates: Requirements 17.1, 37.1**
     - Test that all extraction attempts are logged
 
-- [ ] 12. Phase 2 checkpoint and git tag
+- [x] 12. Phase 2 checkpoint and git tag
   - Run all Phase 2 tests (unit + property + integration)
   - Verify extraction success rates meet targets (>95% for competitive intelligence)
   - Test end-to-end competitive intelligence query
