@@ -8,6 +8,70 @@
 
 ---
 
+## Phase 3: Advanced Retrieval Techniques (NEW)
+
+### Services Implemented
+
+1. **Reranker Service** (`src/rag/reranker.service.ts`)
+   - Integrates Cohere Rerank 3.5 via AWS Bedrock Rerank API
+   - Re-scores retrieved chunks for improved relevance (0.0 to 1.0)
+   - Sorts chunks by reranked scores descending
+   - Fallback to original scores on failure
+   - Feature flag: `ENABLE_RERANKING`
+
+2. **HyDE Service** (`src/rag/hyde.service.ts`)
+   - Hypothetical Document Embeddings for better retrieval
+   - Generates hypothetical answer using Claude 3 Haiku
+   - Retrieves using both hypothetical and original query embeddings
+   - Merges and deduplicates results
+   - Feature flag: `ENABLE_HYDE`
+
+3. **Query Decomposition Service** (`src/rag/query-decomposition.service.ts`)
+   - Breaks complex multi-faceted queries into sub-queries
+   - Uses Claude to decompose queries intelligently
+   - Executes each sub-query independently
+   - Merges results with source tracking
+   - Feature flag: `ENABLE_QUERY_DECOMPOSITION`
+
+4. **Contextual Expansion Service** (`src/rag/contextual-expansion.service.ts`)
+   - Expands retrieved chunks with adjacent context
+   - Fetches chunks with chunk_index ± 1
+   - Enforces token budget (default 4000 tokens)
+   - Preserves chunk boundaries for citations
+   - Feature flag: `ENABLE_CONTEXTUAL_EXPANSION`
+
+5. **Iterative Retrieval Service** (`src/rag/iterative-retrieval.service.ts`)
+   - Detects low-confidence results
+   - Generates follow-up queries to fill gaps
+   - Maximum 2 iterations
+   - Tracks which iteration contributed to results
+   - Feature flag: `ENABLE_ITERATIVE_RETRIEVAL`
+
+6. **Advanced Retrieval Service** (`src/rag/advanced-retrieval.service.ts`)
+   - Orchestrates all advanced techniques
+   - Feature flags for each technique
+   - Performance monitoring (p95 < 5s SLA)
+   - Graceful fallback on failures
+
+### Environment Variables
+
+```bash
+# Feature Flags (all default to true)
+ENABLE_RERANKING=true
+ENABLE_HYDE=true
+ENABLE_QUERY_DECOMPOSITION=true
+ENABLE_CONTEXTUAL_EXPANSION=true
+ENABLE_ITERATIVE_RETRIEVAL=true
+
+# Configuration
+BEDROCK_RERANK_MODEL_ARN=arn:aws:bedrock:us-east-1::foundation-model/cohere.rerank-v3-5:0
+CONTEXT_TOKEN_BUDGET=4000
+MAX_RETRIEVAL_ITERATIONS=2
+RETRIEVAL_CONFIDENCE_THRESHOLD=0.5
+```
+
+---
+
 ## Critical Fixes
 
 ### 1. Claude Opus 4.5 Model Access Restored
@@ -73,7 +137,7 @@ Ticker: NVDA (correctly identified by Claude 3.5 Haiku)
 |-------|--------|-------------|
 | Phase 1 | ✅ Complete | Core subsection extraction and storage |
 | Phase 2 | ✅ Complete | Intent detection and subsection-aware retrieval |
-| Phase 3 | 🔄 Not Started | Advanced retrieval techniques (HyDE, reranking) |
+| Phase 3 | ✅ Complete | Advanced retrieval techniques (HyDE, reranking) |
 | Phase 4 | ⏳ Not Started | Dynamic calculations and multi-modal responses |
 
 ---
@@ -83,6 +147,18 @@ Ticker: NVDA (correctly identified by Claude 3.5 Haiku)
 ```
 src/rag/intent-detector.service.ts
 src/rag/bedrock.service.ts
+src/rag/rag.module.ts
+```
+
+## Files Created (Phase 3)
+
+```
+src/rag/reranker.service.ts
+src/rag/hyde.service.ts
+src/rag/query-decomposition.service.ts
+src/rag/contextual-expansion.service.ts
+src/rag/iterative-retrieval.service.ts
+src/rag/advanced-retrieval.service.ts
 ```
 
 ## Deployment Commands
@@ -106,9 +182,7 @@ aws ecs update-service \
 
 ## Next Steps
 
-1. Proceed with Phase 3: Advanced Retrieval Techniques
-   - Reranker Service (Mistral via Bedrock)
-   - HyDE (Hypothetical Document Embeddings)
-   - Query Decomposition
-   - Contextual Chunk Expansion
-   - Iterative Retrieval
+1. ~~Proceed with Phase 3: Advanced Retrieval Techniques~~ ✅ Complete
+2. Deploy Phase 3 services to production
+3. Test advanced retrieval with real queries
+4. Phase 4: Dynamic Calculations and Multi-Modal Responses (future)

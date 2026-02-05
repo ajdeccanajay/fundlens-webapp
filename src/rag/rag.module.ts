@@ -17,6 +17,13 @@ import { KBSyncService } from './kb-sync.service';
 import { KBSyncController } from './kb-sync.controller';
 import { SectionExporterService } from './section-exporter.service';
 import { SectionExportController } from './section-export.controller';
+// Phase 3: Advanced Retrieval Techniques
+import { RerankerService } from './reranker.service';
+import { HyDEService } from './hyde.service';
+import { QueryDecompositionService } from './query-decomposition.service';
+import { ContextualExpansionService } from './contextual-expansion.service';
+import { IterativeRetrievalService } from './iterative-retrieval.service';
+import { AdvancedRetrievalService } from './advanced-retrieval.service';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { SecModule } from '../dataSources/sec/sec.module';
 import { S3Module } from '../s3/s3.module';
@@ -38,6 +45,13 @@ import { S3Module } from '../s3/s3.module';
     ChunkExporterService,
     KBSyncService,
     SectionExporterService,
+    // Phase 3: Advanced Retrieval Techniques
+    RerankerService,
+    HyDEService,
+    QueryDecompositionService,
+    ContextualExpansionService,
+    IterativeRetrievalService,
+    AdvancedRetrievalService,
   ],
   exports: [
     RAGService,
@@ -52,6 +66,13 @@ import { S3Module } from '../s3/s3.module';
     ChunkExporterService,
     KBSyncService,
     SectionExporterService,
+    // Phase 3: Advanced Retrieval Techniques
+    RerankerService,
+    HyDEService,
+    QueryDecompositionService,
+    ContextualExpansionService,
+    IterativeRetrievalService,
+    AdvancedRetrievalService,
   ],
 })
 export class RAGModule {}
