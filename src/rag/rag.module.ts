@@ -9,6 +9,8 @@ import { StructuredRetrieverService } from './structured-retriever.service';
 import { SemanticRetrieverService } from './semantic-retriever.service';
 import { BedrockService } from './bedrock.service';
 import { PromptLibraryService } from './prompt-library.service';
+import { MetricMappingService } from './metric-mapping.service';
+import { MetricLearningService } from './metric-learning.service';
 import { DocumentRAGService } from './document-rag.service';
 import { CitationService } from './citation.service';
 import { ChunkExporterService } from './chunk-exporter.service';
@@ -17,6 +19,8 @@ import { KBSyncService } from './kb-sync.service';
 import { KBSyncController } from './kb-sync.controller';
 import { SectionExporterService } from './section-exporter.service';
 import { SectionExportController } from './section-export.controller';
+import { PerformanceMonitorService } from './performance-monitor.service';
+import { PerformanceOptimizerService } from './performance-optimizer.service';
 // Phase 3: Advanced Retrieval Techniques
 import { RerankerService } from './reranker.service';
 import { HyDEService } from './hyde.service';
@@ -40,11 +44,15 @@ import { S3Module } from '../s3/s3.module';
     SemanticRetrieverService,
     BedrockService,
     PromptLibraryService,
+    MetricMappingService,
+    MetricLearningService,
     DocumentRAGService,
     CitationService,
     ChunkExporterService,
     KBSyncService,
     SectionExporterService,
+    PerformanceMonitorService,
+    PerformanceOptimizerService,
     // Phase 3: Advanced Retrieval Techniques
     RerankerService,
     HyDEService,
@@ -61,11 +69,15 @@ import { S3Module } from '../s3/s3.module';
     SemanticRetrieverService,
     BedrockService,
     PromptLibraryService,
+    MetricMappingService,
+    MetricLearningService,
     DocumentRAGService,
     CitationService,
     ChunkExporterService,
     KBSyncService,
     SectionExporterService,
+    PerformanceMonitorService,
+    PerformanceOptimizerService,
     // Phase 3: Advanced Retrieval Techniques
     RerankerService,
     HyDEService,

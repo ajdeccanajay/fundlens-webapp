@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Citation Debug Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        .citation-link {
+            color: #2563eb;
+            text-decoration: none;
+            font-weight: 600;
+            padding: 0 2px;
+        }
+        .citation-link:hover {
+            text-decoration: underline;
+        }
+        .message {
+            padding: 20px;
+            margin: 20px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 10px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <h1>Citation Debug Test</h1>
+    
+    <div id="test-area"></div>
+    
+    <script>
+        // Configure marked
+        marked.setOptions({
+            breaks: true,
+            gfm: true,
+            tables: true,
+            headerIds: false,
+            mangle: false,
+            sanitize: false,
+            smartLists: true,
+            smartypants: true,
+            pedantic: false
+        });
+        
+        // Test data
+        const testContent = `## Revenue Analysis
+
+NVDA's revenue growth has been exceptional [1]. Here's the breakdown:
+
+| Period | Revenue | YoY Growth | Filing |
+|--------|---------|------------|--------|
+| Q4 2025 | $57.01B | +62.5% | 10-Q |
+| Q4 2024 | $35.08B | +93.6% | 10-Q |
+| Q4 2023 | $18.12B | +205.5% | 10-Q |
+
+The company shows strong momentum [2] and [3].`;
+
+        const testCitations = [
+            {
+                number: 1,
+                ticker: 'NVDA',
+                filingType: '10-Q',
+                fiscalPeriod: 'Q4 2025',
+                section: 'Revenue',
+                excerpt: 'Revenue for Q4 2025 was $57.01B...',
+                relevanceScore: 0.95
+            },
+            {
+                number: 2,
+                ticker: 'NVDA',
+                filingType: '10-K',
+                fiscalPeriod: 'FY 2024',
+                section: 'Business Overview',
+                excerpt: 'Strong market position...',
+                relevanceScore: 0.92
+            },
+            {
+                number: 3,
+                ticker: 'NVDA',
+                filingType: '10-Q',
+                fiscalPeriod: 'Q3 2025',
+                section: 'Market Analysis',
+                excerpt: 'Continued growth trajectory...',
+                relevanceScore: 0.88
+            }
+        ];
+        
+        // Store citations globally
+        let currentCitations = testCitations;
+        
+        // Render function
+        function renderMarkdownWithCitations(content, citations) {
+            console.log('🎨 renderMarkdownWithCitations called');
+            console.log('  - Content length:', content?.length);
+            console.log('  - Citations:', citations);
+            
+            if (!citations || citations.length === 0) {
+                console.log('  ⚠️ No citations, using regular markdown');
+                return marked.parse(content);
+            }
+            
+            // First render markdown
+            let html = marked.parse(content);
+            console.log('  📝 Markdown rendered, HTML length:', html.length);
+            console.log('  📝 HTML preview:', html.substring(0, 500));
+            
+            // Then make citations clickable
+            citations.forEach(citation => {
+                const citationNum = citation.number || citation.citationNumber;
+                console.log('  🔢 Processing citation:', citationNum, citation);
+                
+                if (!citationNum) {
+                    console.log('    ⚠️ No citation number, skipping');
+                    return;
+                }
+                
+                const regex = new RegExp(`\\[${citationNum}\\]`, 'g');
+                const matches = html.match(regex);
+                console.log(`    🔍 Looking for [${citationNum}], found ${matches ? matches.length : 0} matches`);
+                
+                const replacement = `<a href="#" class="citation-link" data-citation-num="${citationNum}">[${citationNum}]</a>`;
+                html = html.replace(regex, replacement);
+                console.log(`    ✅ Replaced with clickable link`);
+            });
+            
+            console.log('  ✅ Final HTML length:', html.length);
+            return html;
+        }
+        
+        // Handle citation click
+        function handleCitationClick(citationNum) {
+            console.log('🖱️ Citation clicked:', citationNum);
+            const citation = currentCitations.find(c => c.number === citationNum);
+            console.log('  - Found citation:', citation);
+            
+            if (citation) {
+                alert(`Citation ${citationNum}:\n\nTicker: ${citation.ticker}\nFiling: ${citation.filingType}\nPeriod: ${citation.fiscalPeriod}\nSection: ${citation.section}\n\nExcerpt: ${citation.excerpt}`);
+            } else {
+                alert('Citation not found!');
+            }
+        }
+        
+        // Set up event delegation
+        document.addEventListener('click', (event) => {
+            const citationLink = event.target.closest('.citation-link');
+            if (citationLink) {
+                event.preventDefault();
+                const citationNum = parseInt(citationLink.getAttribute('data-citation-num'));
+                console.log('🔗 Citation link clicked:', citationNum);
+                if (citationNum) {
+                    handleCitationClick(citationNum);
+                }
+            }
+        });
+        
+        // Render test
+        const html = renderMarkdownWithCitations(testContent, testCitations);
+        document.getElementById('test-area').innerHTML = `<div class="message">${html}</div>`;
+        
+        console.log('✅ Test page loaded');
+    </script>
+</body>
+</html>

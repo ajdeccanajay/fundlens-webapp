@@ -41,6 +41,13 @@ export interface QueryIntent {
   // Confidence
   confidence: number; // 0-1
   
+  // Ambiguity detection (Phase 2)
+  needsClarification?: boolean; // True if query is ambiguous and needs clarification
+  ambiguityReason?: string; // Reason for ambiguity (for debugging)
+  
+  // Peer comparison (Multi-Ticker Peer Comparison feature)
+  needsPeerComparison?: boolean; // True when query asks about peers/competitors
+  
   // Original query
   originalQuery: string;
 }
@@ -124,6 +131,11 @@ export interface RAGResponse {
     usedBedrockKB: boolean;
     usedClaudeGeneration: boolean;
     hybridProcessing: boolean;
+    fromCache?: boolean; // Whether response was from cache
+    modelTier?: string; // Model tier used (haiku/sonnet/opus)
+    parallelExecution?: boolean; // Whether parallel execution was used
+    optimizationDecisions?: string[]; // Optimization reasoning
+    needsClarification?: boolean; // Whether clarification prompt was generated
   };
 }
 

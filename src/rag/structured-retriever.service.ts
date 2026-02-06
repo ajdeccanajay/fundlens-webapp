@@ -32,7 +32,8 @@ export class StructuredRetrieverService {
       byMetric: Record<string, number>;
     };
   }> {
-    this.logger.log(`Retrieving metrics: ${JSON.stringify(query)}`);
+    this.logger.log(`🔍 STRUCTURED RETRIEVER: Retrieving metrics: ${JSON.stringify(query)}`);
+    this.logger.log(`🔍 STRUCTURED RETRIEVER: Tickers: ${JSON.stringify(query.tickers)}, Metrics: ${JSON.stringify(query.metrics)}`);
 
     // Handle "latest" queries specially
     if (query.periodType === 'latest') {
@@ -50,6 +51,7 @@ export class StructuredRetrieverService {
       // Metric name translation: Intent detector names → Database names
       const metricTranslation: Record<string, string[]> = {
         'cash_and_cash_equivalents': ['cash', 'cash_and_equivalents'],
+        'revenue': ['revenue', 'total_revenue'], // CRITICAL: Database stores as "total_revenue"
       };
       
       // For metrics, use case-insensitive matching with OR conditions
@@ -57,7 +59,9 @@ export class StructuredRetrieverService {
       const metricConditions: any[] = [];
       
       for (const m of query.metrics) {
+        // Convert to lowercase for database query (database stores lowercase)
         const lowerMetric = m.toLowerCase();
+        
         // Check if we have a translation for this metric
         const translations = metricTranslation[lowerMetric];
         if (translations) {
@@ -68,7 +72,7 @@ export class StructuredRetrieverService {
             });
           }
         } else {
-          // Use the original metric name
+          // Use lowercase with case-insensitive mode for maximum compatibility
           metricConditions.push({
             normalizedMetric: { equals: lowerMetric, mode: 'insensitive' as const }
           });
@@ -76,6 +80,12 @@ export class StructuredRetrieverService {
       }
       
       where.OR = metricConditions;
+      
+      // DEBUG: Log the query conditions
+      this.logger.log(`🔍 STRUCTURED RETRIEVER: Metric Query Conditions:`);
+      this.logger.log(`   Searching for metrics: ${JSON.stringify(query.metrics)}`);
+      this.logger.log(`   Generated ${metricConditions.length} OR conditions`);
+      this.logger.log(`   Sample condition: ${JSON.stringify(metricConditions[0])}`);
     }
 
     if (query.period) {
@@ -99,7 +109,16 @@ export class StructuredRetrieverService {
       take: 100, // Reasonable limit
     });
 
-    this.logger.log(`Retrieved ${metrics.length} metrics`);
+    this.logger.log(`🔍 STRUCTURED RETRIEVER: Retrieved ${metrics.length} metrics from database`);
+    if (metrics.length > 0) {
+      this.logger.log(`🔍 STRUCTURED RETRIEVER: Sample metric: ${JSON.stringify({
+        ticker: metrics[0].ticker,
+        normalizedMetric: metrics[0].normalizedMetric,
+        rawLabel: metrics[0].rawLabel,
+        value: metrics[0].value,
+        fiscalPeriod: metrics[0].fiscalPeriod
+      })}`);
+    }
 
     // Deduplicate and filter by quality
     const deduplicated = this.deduplicateMetrics(metrics);
@@ -189,22 +208,63 @@ export class StructuredRetrieverService {
    * 
    * CRITICAL: We need 99.99999% accuracy for structured metrics
    * Better to return no data than wrong data
+   * 
+   * HOWEVER: Don't filter out valid XBRL tags like "us-gaap:Revenues"
    */
   private validateMetricQuality(metric: any): boolean {
     const rawLabel = metric.rawLabel?.toLowerCase() || '';
     const normalizedMetric = metric.normalizedMetric?.toLowerCase() || '';
 
-    // Rule 1: Raw label must semantically match normalized metric
+    // Rule 1: If confidence score is 1.0 and it's a standard XBRL tag, trust it
+    if (metric.confidenceScore === 1.0 && rawLabel.startsWith('us-gaap:')) {
+      // For XBRL tags, do a simpler check
+      return this.xbrlTagMatches(rawLabel, normalizedMetric);
+    }
+
+    // Rule 2: Raw label must semantically match normalized metric
     if (!this.semanticMatch(rawLabel, normalizedMetric)) {
       return false;
     }
 
-    // Rule 2: Confidence score must be reasonable
-    if (metric.confidenceScore < 0.8) {
+    // Rule 3: Confidence score must be reasonable (but not too strict)
+    if (metric.confidenceScore < 0.7) {
       return false;
     }
 
     return true;
+  }
+
+  /**
+   * Check if XBRL tag matches the normalized metric
+   * More lenient than semanticMatch for standard XBRL tags
+   */
+  private xbrlTagMatches(xbrlTag: string, normalizedMetric: string): boolean {
+    const tag = xbrlTag.toLowerCase().replace('us-gaap:', '');
+    const metric = normalizedMetric.toLowerCase().replace(/_/g, '');
+
+    // Direct XBRL tag mappings
+    const xbrlMappings: Record<string, string[]> = {
+      'revenues': ['revenue', 'totalrevenue'],
+      'salesrevenuenet': ['revenue', 'totalrevenue'],
+      'revenuefromcontractwithcustomerexcludingassessedtax': ['revenue', 'totalrevenue'],
+      'netincomeloss': ['netincome'],
+      'grossprofit': ['grossprofit'],
+      'operatingincomeloss': ['operatingincome'],
+      'costofrevenue': ['costofrevenue'],
+      'assets': ['totalassets'],
+      'liabilities': ['totalliabilities'],
+      'stockholdersequity': ['totalequity', 'equity'],
+      'cashandcashequivalentsatcarryingvalue': ['cash', 'cashandcashequivalents'],
+    };
+
+    // Check if tag matches any of the metric aliases
+    const aliases = xbrlMappings[tag];
+    if (aliases) {
+      return aliases.some(alias => metric.includes(alias) || alias.includes(metric));
+    }
+
+    // Fallback: check if tag contains the metric name
+    return tag.includes(metric) || metric.includes(tag);
   }
 
   /**
@@ -223,7 +283,8 @@ export class StructuredRetrieverService {
 
     // Special mappings for common financial metrics (aliases)
     const specialMappings: Record<string, string[]> = {
-      'revenue': ['total net sales', 'net sales', 'sales', 'revenues', 'total revenue', 'net revenue', 'revenue'],
+      'revenue': ['total net sales', 'net sales', 'sales', 'revenues', 'total revenue', 'net revenue', 'revenue', 'us-gaap:revenues'],
+      'total revenue': ['total net sales', 'net sales', 'sales', 'revenues', 'total revenue', 'net revenue', 'revenue', 'us-gaap:revenues'],
       'net income': ['net income', 'net earnings', 'profit', 'net profit', 'netincome'],
       'total assets': ['total assets', 'totalassets'],
       'cash': ['cash and cash equivalents', 'cash equivalents', 'cashandcashequivalents', 'cash'],

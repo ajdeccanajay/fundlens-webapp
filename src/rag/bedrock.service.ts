@@ -119,6 +119,8 @@ export class BedrockService {
       systemPrompt?: string; // Custom system prompt from user
       intentType?: string; // Intent type for prompt selection (Phase 2)
       promptVersion?: number; // Optional specific prompt version
+      modelId?: string; // Optional model ID for tier selection
+      isPeerComparison?: boolean; // Multi-ticker peer comparison mode
     },
   ): Promise<{
     answer: string;
@@ -126,6 +128,7 @@ export class BedrockService {
       inputTokens: number;
       outputTokens: number;
     };
+    citations: any[]; // NEW: Citations extracted from response
     promptVersion?: number; // Track which prompt version was used
   }> {
     try {
@@ -153,13 +156,16 @@ export class BedrockService {
       }
 
       const userMessage = this.buildUserMessage(query, context);
+      
+      // Use provided modelId or default to Claude Opus 4.5
+      const selectedModelId = context.modelId || this.modelId;
 
       this.logger.log(
-        `Generating response with Claude Opus 4.5${context.intentType ? ` (${context.intentType})` : ''}`,
+        `Generating response with ${selectedModelId}${context.intentType ? ` (${context.intentType})` : ''}`,
       );
 
       const command = new ConverseCommand({
-        modelId: this.modelId,
+        modelId: selectedModelId,
         messages: [
           {
             role: 'user',
@@ -184,11 +190,14 @@ export class BedrockService {
         outputTokens: response.usage?.outputTokens || 0,
       };
 
+      // NEW: Parse citations from response
+      const citations = this.parseCitations(answer, context.narratives || []);
+
       this.logger.log(
-        `Generated response: ${usage.inputTokens} input tokens, ${usage.outputTokens} output tokens`,
+        `Generated response: ${usage.inputTokens} input tokens, ${usage.outputTokens} output tokens, ${citations.length} citations`,
       );
 
-      return { answer, usage, promptVersion };
+      return { answer, usage, citations, promptVersion };
     } catch (error) {
       this.logger.error(`Claude generation error: ${error.message}`);
       throw error;
@@ -493,85 +502,236 @@ export class BedrockService {
 
   /**
    * Build system prompt for Claude Opus 4.5
+   * INVESTMENT-GRADE SYNTHESIS: Professional, analytical, trustworthy
    */
   private buildSystemPrompt(): string {
-    return `You are a financial analyst assistant specializing in SEC filings analysis.
+    return `You are a senior equity research analyst at a top-tier investment bank (Goldman Sachs, Morgan Stanley, JP Morgan).
 
-Your role:
-- Provide accurate, data-driven answers to financial questions
-- Cite specific metrics and narrative context from SEC filings
-- Explain financial trends and relationships clearly
-- Maintain professional, objective tone
+YOUR MANDATE:
+Write professional investment-grade analysis for institutional investors (hedge funds, asset managers, CIOs).
 
-CRITICAL ACCURACY RULES:
-1. ONLY use information from the provided context - never mix companies
-2. If asked about Apple (AAPL), ONLY use AAPL data - never include Microsoft, Meta, etc.
-3. If asked about Microsoft (MSFT), ONLY use MSFT data - never include Apple, Google, etc.
-4. VERIFY ticker symbols in all data before using it in your response
-5. If context contains mixed company data, explicitly filter to only the requested company
+CRITICAL RULES - READ CAREFULLY:
+1. SYNTHESIZE - Analyze and summarize. NEVER EVER copy-paste raw filing text. Transform the information into professional analyst prose.
+2. ORGANIZE BY THEME - Group by insight (e.g., "Supply Chain Risks", "Competitive Pressures"), NOT by source document.
+3. USE PROPER HEADERS - Use ## markdown syntax for section headers. NEVER use **bold text** as headers.
+4. CITE EVERYTHING - Use [1], [2], [3] inline after EVERY factual claim. No fact without a citation.
+5. NO REPETITION - Each insight stated once, clearly. Combine related information from multiple sources.
+6. PROFESSIONAL LANGUAGE - Write like a Goldman Sachs analyst, not like an SEC filing.
 
-Guidelines:
-1. ACCURACY: Only use information from provided context for the specific company requested
-2. CITATIONS: Reference specific filings and sections with ticker symbols
-3. CLARITY: Explain complex financial concepts simply
-4. COMPLETENESS: Address all parts of the question for the requested company only
-5. HONESTY: Say "I don't have that information" if context is insufficient for the specific company
+FORMATTING RULES:
+- Use ## for section headers (e.g., "## Supply Chain Risks")
+- Use proper markdown headers, NOT **bold text** for section titles
+- Headers must be on their own line with blank lines before and after
+- Use [1], [2], [3] inline immediately after facts
+- CRITICAL TABLE FORMATTING:
+  * Use proper markdown table syntax with pipes and alignment
+  * First row: | Header 1 | Header 2 | Header 3 |
+  * Second row: |----------|----------|----------|
+  * Data rows: | Data 1   | Data 2   | Data 3   |
+  * NEVER mix dashes and pipes in the same line (except separator row)
+  * NEVER use raw text tables like "| Metric | FY2020 | FY2023 |---------|--------|"
+  * Ensure blank lines before and after tables
+- End response with "## Sources" header followed by citation list
+- Format: "[1] TICKER FILING PERIOD, Section, p. XX"
+- Every citation number must map to a source
 
-Format:
-- Start with direct answer for the specific company requested
-- Support with specific data points from that company only
-- Provide relevant context from narratives for that company only
-- End with sources/citations including ticker symbols`;
+EXAMPLE GOOD TABLE:
+| Metric | FY2020 | FY2023 | FY2024 |
+|--------|--------|--------|--------|
+| Revenue | $10.9B | $26.9B | $60.9B |
+| Net Income | $2.8B | $4.3B | $29.7B |
+
+EXAMPLE BAD TABLE (DO NOT DO THIS):
+| Metric | FY2020 | FY2023 | FY2024 | FY2025 (Projected) ||--------|--------|--------|--------|-------------------|| Net Income | $2.80B | $4.37B | $29.76B | $72.88B |
+^ This is malformed. DO NOT DO THIS.
+
+EXAMPLE GOOD RESPONSE:
+"NVIDIA faces several material risks that could impact its market leadership in AI accelerators.
+
+## Supply Chain Concentration
+
+NVIDIA's production is heavily concentrated at TSMC, with over 80% of advanced chips manufactured in Taiwan [1]. Any disruption could significantly impact supply [2].
+
+## Competitive Pressures
+
+The AI accelerator market is intensifying with hyperscaler custom chips [3]. While NVIDIA maintains advantages in CUDA ecosystem, market share erosion is a key risk [4].
+
+## Sources
+
+[1] NVDA 10-K FY2024, Item 1A - Risk Factors, p. 23
+[2] NVDA 10-K FY2024, Item 1 - Business, p. 8
+[3] NVDA 10-Q Q3 2024, MD&A, p. 45
+[4] NVDA 10-K FY2024, Item 1A - Risk Factors, p. 28"
+
+EXAMPLE BAD RESPONSE (DO NOT DO THIS):
+"The Company faces risks related to supply chain. The Company's products are manufactured by third parties. Any disruption could impact the Company's ability to meet demand."
+^ This is copy-paste from filing. DO NOT DO THIS.
+
+Now generate your investment-grade analysis.`;
   }
 
   /**
    * Build user message with context
+   * Numbers sources [Source 1], [Source 2] for citation mapping
    */
   private buildUserMessage(
     query: string,
     context: {
       metrics?: any[];
       narratives?: ChunkResult[];
+      isPeerComparison?: boolean;
     },
   ): string {
     const parts: string[] = [];
 
-    parts.push(`Question: ${query}\n`);
+    parts.push(`ANALYST QUERY: ${query}\n`);
+    parts.push('AVAILABLE SOURCES:');
+    parts.push('(Synthesize across these sources - do NOT copy-paste)\n');
 
-    // Add metrics context
+    // Add metrics context with source numbering
     if (context.metrics && context.metrics.length > 0) {
-      parts.push('\n=== STRUCTURED METRICS ===');
-      for (const metric of context.metrics) {
-        const value = this.formatMetricValue(
-          metric.value,
-          metric.normalizedMetric,
-        );
+      parts.push('📊 FINANCIAL METRICS:');
+      const metricsBySource = this.groupMetricsBySource(context.metrics);
+      
+      Object.entries(metricsBySource).forEach(([sourceKey, metrics]: [string, any[]]) => {
+        const firstMetric = metrics[0];
         parts.push(
-          `${metric.ticker} - ${metric.normalizedMetric}: ${value} (${metric.fiscalPeriod}, ${metric.filingType})`,
+          `\n[Source] ${firstMetric.ticker} ${firstMetric.filingType} ${firstMetric.fiscalPeriod}:`,
         );
-        if (metric.formula) {
-          parts.push(`  Formula: ${metric.formula}`);
-        }
-      }
+        metrics.forEach((metric) => {
+          const value = this.formatMetricValue(
+            metric.value,
+            metric.normalizedMetric,
+          );
+          parts.push(`• ${metric.normalizedMetric}: ${value}`);
+        });
+      });
+      parts.push('');
     }
 
-    // Add narrative context
+    // Add narrative context with clear source numbering for citations
     if (context.narratives && context.narratives.length > 0) {
-      parts.push('\n=== NARRATIVE CONTEXT ===');
-      for (let i = 0; i < context.narratives.length; i++) {
-        const narrative = context.narratives[i];
+      parts.push('📄 NARRATIVE EXCERPTS FROM SEC FILINGS:');
+      parts.push('(Read these carefully and synthesize the key insights)\n');
+      
+      // Deduplicate similar narratives
+      const uniqueNarratives = this.deduplicateNarratives(context.narratives);
+      
+      uniqueNarratives.forEach((narrative, idx) => {
+        const meta = narrative.metadata;
         parts.push(
-          `\n[Source ${i + 1}: ${narrative.metadata.ticker} ${narrative.metadata.filingType} - ${narrative.metadata.sectionType}]`,
+          `[${idx + 1}] ${meta.ticker || 'Unknown'} ${meta.filingType || ''} ${meta.fiscalPeriod || ''}${meta.sectionType ? ' - ' + meta.sectionType : ''}:`,
         );
-        parts.push(narrative.content);
-      }
+        parts.push(`"${narrative.content}"\n`);
+      });
     }
 
-    parts.push(
-      '\n\nBased on the above context, please provide a comprehensive answer to the question.',
-    );
+    parts.push('---');
+    parts.push('INSTRUCTIONS:');
+    parts.push('1. Synthesize the above sources into investment-grade analysis');
+    parts.push('2. Organize by theme/insight, not by source');
+    parts.push('3. Use ## markdown headers for sections (NOT **bold text**)');
+    parts.push('4. CRITICAL: For tables, you MUST use proper markdown table syntax:');
+    parts.push('   - First row: | Header 1 | Header 2 | Header 3 |');
+    parts.push('   - Second row: |----------|----------|----------|');
+    parts.push('   - Data rows: | Data 1   | Data 2   | Data 3   |');
+    parts.push('   - NEVER use raw text tables with dashes and pipes mixed together');
+    parts.push('5. Use professional, analytical language');
+    parts.push('6. Include inline citations [1], [2] for every fact');
+    parts.push('7. End with "## Sources" header followed by citation list');
+    parts.push('8. NO repetition - each point stated once\n');
+
+    if (context.isPeerComparison) {
+      parts.push('9. PEER COMPARISON FORMAT:');
+      parts.push('   - Present financial metrics in a comparison table across all companies');
+      parts.push('   - Organize qualitative insights (risks, strategy) by company with cross-company commentary');
+      parts.push('   - Note any data gaps explicitly (e.g., "No FY2024 data available for AMZN")');
+      parts.push('   - End with a comparative summary highlighting key differences\n');
+    }
+
+    parts.push('Generate your analysis now:');
 
     return parts.join('\n');
+  }
+
+  /**
+   * Group metrics by source for cleaner presentation
+   */
+  private groupMetricsBySource(metrics: any[]): Record<string, any[]> {
+    const grouped: Record<string, any[]> = {};
+    
+    metrics.forEach(metric => {
+      const key = `${metric.ticker}-${metric.filingType}-${metric.fiscalPeriod}`;
+      if (!grouped[key]) {
+        grouped[key] = [];
+      }
+      grouped[key].push(metric);
+    });
+    
+    return grouped;
+  }
+
+  /**
+   * Deduplicate similar narrative chunks to reduce repetition
+   */
+  private deduplicateNarratives(narratives: ChunkResult[]): ChunkResult[] {
+    const seen = new Set<string>();
+    const unique: ChunkResult[] = [];
+    
+    for (const narrative of narratives) {
+      // Create a fingerprint of the content (first 100 chars)
+      const fingerprint = narrative.content.substring(0, 100).toLowerCase().trim();
+      
+      if (!seen.has(fingerprint)) {
+        seen.add(fingerprint);
+        unique.push(narrative);
+      }
+    }
+    
+    return unique;
+  }
+
+  /**
+   * Parse citations from Claude response and map to source chunks
+   * Extracts [1], [2], [3] and builds citation objects with metadata
+   */
+  private parseCitations(response: string, sourceChunks: ChunkResult[]): any[] {
+    const citations: any[] = [];
+    
+    // Extract citation numbers from response [1], [2], etc.
+    const citationMatches = response.matchAll(/\[(\d+)\]/g);
+    const citationNumbers = new Set<number>();
+    
+    for (const match of citationMatches) {
+      citationNumbers.add(parseInt(match[1]));
+    }
+    
+    this.logger.log(`Found ${citationNumbers.size} unique citations in response`);
+    
+    // Map citation numbers to source chunks
+    for (const num of citationNumbers) {
+      const chunkIndex = num - 1; // [1] maps to chunks[0]
+      if (chunkIndex >= 0 && chunkIndex < sourceChunks.length) {
+        const chunk = sourceChunks[chunkIndex];
+        citations.push({
+          number: num,
+          ticker: chunk.metadata.ticker,
+          filingType: chunk.metadata.filingType,
+          fiscalPeriod: chunk.metadata.fiscalPeriod,
+          section: chunk.metadata.sectionType,
+          pageNumber: chunk.metadata.chunkIndex, // Use chunk index as page proxy
+          excerpt: chunk.content.substring(0, 500), // First 500 chars
+          chunkId: `chunk-${chunkIndex}`,
+          relevanceScore: chunk.score,
+        });
+      } else {
+        this.logger.warn(`Citation [${num}] references invalid chunk index ${chunkIndex}`);
+      }
+    }
+    
+    this.logger.log(`Mapped ${citations.length} citations to source chunks`);
+    
+    return citations;
   }
 
   /**

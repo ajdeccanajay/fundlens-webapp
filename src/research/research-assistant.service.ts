@@ -24,6 +24,7 @@ import type { Request } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RAGService } from '../rag/rag.service';
 import { CitationService } from '../rag/citation.service';
+import { BedrockService } from '../rag/bedrock.service';
 import { TenantContext, TENANT_CONTEXT_KEY } from '../tenant/tenant-context';
 
 export interface CreateConversationDto {
@@ -65,8 +66,26 @@ export interface Message {
 }
 
 export interface StreamChunk {
-  type: 'token' | 'source' | 'done' | 'error' | 'citations';
+  type: 'token' | 'source' | 'done' | 'error' | 'citations' | 'peerComparison';
   data: any;
+}
+
+/**
+ * Peer identification result from LLM
+ */
+export interface PeerIdentificationResult {
+  found: string[];      // Peers found in tenant's deals
+  missing: string[];    // Suggested peers not in tenant's deals
+  rationale: string;    // Brief explanation of peer selection
+}
+
+/**
+ * Peer comparison metadata for response
+ */
+export interface PeerComparisonMetadata {
+  primaryTicker: string;
+  peersIncluded: string[];
+  missingPeers: { ticker: string; reason: string }[];
 }
 
 /**
@@ -81,6 +100,7 @@ export class ResearchAssistantService {
     private readonly prisma: PrismaService,
     private readonly ragService: RAGService,
     private readonly citationService: CitationService,
+    private readonly bedrockService: BedrockService,
     @Inject(REQUEST) private readonly request: Request,
   ) {}
 
@@ -317,6 +337,7 @@ export class ResearchAssistantService {
    * SECURITY: Verifies conversation ownership
    * Uses FULL HYBRID RAG SYSTEM with intent detection and query routing
    * Stores citations for user-uploaded documents
+   * Supports PEER COMPARISON queries with multi-ticker RAG
    */
   async *sendMessage(
     conversationId: string,
@@ -338,10 +359,44 @@ export class ResearchAssistantService {
       });
 
       // Extract tickers from context or query
-      const tickers = this.extractTickers(dto.content, dto.context?.tickers);
+      let tickers = this.extractTickers(dto.content, dto.context?.tickers);
+      const primaryTicker = tickers[0] || undefined;
       
       this.logger.log(`🔍 Query: "${dto.content}"`);
-      this.logger.log(`📊 Tickers: ${tickers.join(', ') || 'auto-detect'}`);
+      this.logger.log(`📊 Primary Ticker: ${primaryTicker || 'auto-detect'}`);
+
+      // Check for peer comparison intent
+      let peerComparisonMetadata: PeerComparisonMetadata | undefined;
+      const isPeerComparisonQuery = this.detectPeerComparisonIntent(dto.content);
+      
+      if (isPeerComparisonQuery && primaryTicker) {
+        this.logger.log(`🔄 Peer comparison detected, identifying peers for ${primaryTicker}`);
+        
+        try {
+          const peerResult = await this.identifyPeersFromDeals(primaryTicker);
+          
+          // Expand tickers with found peers (max 5 total)
+          const peerTickers = peerResult.found.slice(0, 4); // Leave room for primary
+          tickers = [primaryTicker, ...peerTickers].slice(0, 5);
+          
+          this.logger.log(`📊 Expanded tickers for peer comparison: ${tickers.join(', ')}`);
+          
+          // Build peer comparison metadata for response
+          peerComparisonMetadata = {
+            primaryTicker,
+            peersIncluded: peerTickers,
+            missingPeers: peerResult.missing.map(ticker => ({
+              ticker,
+              reason: peerResult.rationale,
+            })),
+          };
+          
+          this.logger.log(`✅ Peer comparison metadata: ${JSON.stringify(peerComparisonMetadata)}`);
+        } catch (error) {
+          this.logger.error(`❌ Peer identification failed: ${error.message}`);
+          // Continue with single ticker if peer identification fails
+        }
+      }
 
       // Enhance query with ticker context if provided
       let enhancedQuery = dto.content;
@@ -352,12 +407,14 @@ export class ResearchAssistantService {
       }
 
       // Use FULL HYBRID RAG SYSTEM with intent detection, query routing, and user documents
+      // Pass all tickers (including peers) for multi-ticker retrieval
       const ragResult = await this.ragService.query(enhancedQuery, {
         includeNarrative: true,
         includeCitations: true,
         systemPrompt: dto.systemPrompt, // Pass custom system prompt from user
         tenantId, // Enable user document search
-        ticker: tickers[0] || undefined, // Scope to first ticker if provided
+        ticker: primaryTicker, // Primary ticker for scoping
+        tickers: tickers.length > 1 ? tickers : undefined, // Pass peer tickers for multi-ticker retrieval
       });
 
       this.logger.log(`✅ RAG Result: ${ragResult.intent.type} query`);
@@ -371,13 +428,19 @@ export class ResearchAssistantService {
       const sources: any[] = ragResult.sources || [];
       const citations: any[] = ragResult.citations || [];
 
-      // Yield sources first
-      for (const source of sources) {
+      // Yield sources first - only yield valid sources with proper data
+      const validSources = sources.filter(s => s.ticker && s.filingType);
+      for (const source of validSources) {
+        const title = `${source.ticker} ${source.filingType}`;
+        
         yield {
           type: 'source',
           data: {
-            title: `${source.ticker} ${source.filingType}`,
+            title,
             type: source.type,
+            ticker: source.ticker,
+            filingType: source.filingType,
+            fiscalPeriod: source.fiscalPeriod,
             metadata: source,
           },
         };
@@ -389,11 +452,20 @@ export class ResearchAssistantService {
           type: 'citations',
           data: {
             citations: citations.map((c) => ({
-              citationNumber: c.citationNumber,
+              // Support both formats: Bedrock citations (number) and user doc citations (citationNumber)
+              number: c.number || c.citationNumber,
+              citationNumber: c.citationNumber || c.number,
+              // SEC filing metadata (from Bedrock)
+              ticker: c.ticker,
+              filingType: c.filingType,
+              fiscalPeriod: c.fiscalPeriod,
+              section: c.section,
+              excerpt: c.excerpt,
+              relevanceScore: c.relevanceScore || c.score,
+              // User document metadata
               documentId: c.documentId,
               chunkId: c.chunkId,
               filename: c.filename,
-              ticker: c.ticker,
               pageNumber: c.pageNumber,
               snippet: c.snippet,
               score: c.score,
@@ -402,13 +474,16 @@ export class ResearchAssistantService {
         };
       }
 
-      // Stream tokens (simulate streaming for now - can be enhanced with real streaming)
-      const words = fullResponse.split(' ');
-      for (const word of words) {
+      // Stream tokens with sentence-boundary awareness
+      // This prevents cutting off mid-sentence and breaking markdown formatting
+      const sentences = this.splitIntoSentences(fullResponse);
+      for (const sentence of sentences) {
         yield {
           type: 'token',
-          data: { text: word + ' ' },
+          data: { text: sentence },
         };
+        // Small delay to simulate streaming (can be removed for instant display)
+        await new Promise(resolve => setTimeout(resolve, 50));
       }
 
       // Save assistant message with full context
@@ -424,22 +499,48 @@ export class ResearchAssistantService {
         tokensUsed: (ragResult.usage?.inputTokens || 0) + (ragResult.usage?.outputTokens || 0),
       });
 
-      // Store citations for user documents
+      // Store citations for user documents ONLY
+      // SEC filing citations (from Bedrock) don't have documentId/chunkId in our DB
+      // They are passed to frontend for display but not stored
       if (citations.length > 0) {
-        this.logger.log(`📎 Storing ${citations.length} citations for message ${assistantMessage.id}`);
+        // Filter to only user document citations (have valid documentId and chunkId UUIDs)
+        const userDocCitations = citations.filter(c => 
+          c.documentId && 
+          c.chunkId && 
+          // Check if it looks like a UUID (not "chunk-0" or similar)
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(c.chunkId)
+        );
         
-        const citationDtos = citations.map((citation) => ({
-          tenantId,
-          messageId: assistantMessage.id,
-          documentId: citation.documentId,
-          chunkId: citation.chunkId,
-          quote: citation.snippet,
-          pageNumber: citation.pageNumber,
-          relevanceScore: citation.score,
-        }));
+        if (userDocCitations.length > 0) {
+          this.logger.log(`📎 Storing ${userDocCitations.length} user document citations for message ${assistantMessage.id}`);
+          
+          const citationDtos = userDocCitations.map((citation) => ({
+            tenantId,
+            messageId: assistantMessage.id,
+            documentId: citation.documentId,
+            chunkId: citation.chunkId,
+            quote: citation.excerpt || citation.snippet || '', // Handle both excerpt and snippet
+            pageNumber: citation.pageNumber,
+            relevanceScore: citation.relevanceScore || citation.score,
+          }));
 
-        await this.citationService.createCitations(citationDtos);
-        this.logger.log(`✅ Stored ${citations.length} citations successfully`);
+          await this.citationService.createCitations(citationDtos);
+          this.logger.log(`✅ Stored ${userDocCitations.length} user document citations successfully`);
+        }
+        
+        const secFilingCitations = citations.length - userDocCitations.length;
+        if (secFilingCitations > 0) {
+          this.logger.log(`ℹ️ Skipped storing ${secFilingCitations} SEC filing citations (passed to frontend only)`);
+        }
+      }
+
+      // Yield peer comparison metadata if available
+      if (peerComparisonMetadata) {
+        this.logger.log(`📤 Yielding peer comparison metadata`);
+        yield {
+          type: 'peerComparison',
+          data: peerComparisonMetadata,
+        };
       }
 
       // Done
@@ -579,6 +680,49 @@ export class ResearchAssistantService {
   }
 
   /**
+   * Detect if query is asking for peer comparison
+   * Checks for keywords indicating peer/competitor comparison intent
+   */
+  private detectPeerComparisonIntent(query: string): boolean {
+    const lowerQuery = query.toLowerCase();
+    
+    const peerKeywords = [
+      'peers',
+      'peer group',
+      'peer companies',
+      'competitors',
+      'competitor',
+      'competition',
+      'comparable',
+      'comparables',
+      'comps',
+      'industry peers',
+      'similar companies',
+      'compare to peers',
+      'compare with peers',
+      'vs peers',
+      'versus peers',
+      'against peers',
+      'relative to peers',
+      'benchmark',
+      'benchmarking',
+    ];
+
+    // Check for exact keyword matches
+    const hasKeyword = peerKeywords.some(kw => lowerQuery.includes(kw));
+    
+    // Also check for pattern "how does X compare"
+    const hasComparePattern = /how does.*compare/i.test(query);
+
+    if (hasKeyword || hasComparePattern) {
+      this.logger.log(`🔍 Peer comparison intent detected in query: "${query}"`);
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
    * Build fallback response when Claude is unavailable
    */
   private buildFallbackResponse(ragResult: any): string {
@@ -603,5 +747,257 @@ export class ResearchAssistantService {
     }
 
     return lines.join('\n');
+  }
+
+  /**
+   * Split text into sentences while preserving markdown formatting
+   * This prevents cutting off mid-sentence and breaking markdown syntax
+   */
+  private splitIntoSentences(text: string): string[] {
+    const chunks: string[] = [];
+    let currentChunk = '';
+    let inCodeBlock = false;
+    let inList = false;
+
+    const lines = text.split('\n');
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      // Detect code blocks
+      if (line.trim().startsWith('```')) {
+        inCodeBlock = !inCodeBlock;
+        currentChunk += line + '\n';
+        continue;
+      }
+
+      // If in code block, don't split
+      if (inCodeBlock) {
+        currentChunk += line + '\n';
+        continue;
+      }
+
+      // Detect lists
+      if (line.trim().match(/^[-*+]\s/) || line.trim().match(/^\d+\.\s/)) {
+        inList = true;
+        currentChunk += line + '\n';
+        continue;
+      }
+
+      // If in list and line is empty, end list
+      if (inList && line.trim() === '') {
+        inList = false;
+        if (currentChunk.trim()) {
+          chunks.push(currentChunk);
+          currentChunk = '';
+        }
+        continue;
+      }
+
+      // If in list, continue adding
+      if (inList) {
+        currentChunk += line + '\n';
+        continue;
+      }
+
+      // Regular text - split by sentences
+      if (line.trim()) {
+        // Split by sentence boundaries (. ! ?)
+        const sentences = line.split(/([.!?]+\s+)/);
+        for (const sentence of sentences) {
+          if (sentence.trim()) {
+            currentChunk += sentence;
+            // If sentence ends with punctuation, yield chunk
+            if (sentence.match(/[.!?]+\s*$/)) {
+              if (currentChunk.trim()) {
+                chunks.push(currentChunk);
+                currentChunk = '';
+              }
+            }
+          }
+        }
+      } else {
+        // Empty line - yield current chunk and add newline
+        if (currentChunk.trim()) {
+          chunks.push(currentChunk);
+          currentChunk = '';
+        }
+        chunks.push('\n');
+      }
+    }
+
+    // Add remaining chunk
+    if (currentChunk.trim()) {
+      chunks.push(currentChunk);
+    }
+
+    return chunks.filter(c => c.trim() || c === '\n');
+  }
+
+  /**
+   * Get available tickers from tenant's deals
+   * Returns list of tickers that have data available for comparison
+   */
+  async getAvailableTickers(): Promise<string[]> {
+    const tenantId = this.getTenantId();
+    
+    this.logger.log(`📊 Fetching available tickers for tenant ${tenantId}`);
+    
+    // Use Prisma's typed query - tenant_id is a text column, not UUID
+    const deals = await this.prisma.$queryRawUnsafe<{ ticker: string; status: string }[]>(`
+      SELECT DISTINCT ticker, status
+      FROM deals
+      WHERE tenant_id = $1
+        AND ticker IS NOT NULL
+        AND ticker != ''
+        AND status NOT IN ('error', 'processing')
+      ORDER BY ticker
+    `, tenantId);
+    
+    const tickers = deals.map(d => d.ticker.toUpperCase());
+    this.logger.log(`📊 Found ${tickers.length} available tickers: ${tickers.join(', ')}`);
+    
+    return tickers;
+  }
+
+  /**
+   * Identify relevant peers for a company from tenant's available deals
+   * Uses LLM to determine which tickers are relevant peers
+   * 
+   * @param primaryTicker The main company ticker to find peers for
+   * @returns Object with found peers (in tenant deals), missing peers (suggested), and rationale
+   */
+  async identifyPeersFromDeals(primaryTicker: string): Promise<PeerIdentificationResult> {
+    const tenantId = this.getTenantId();
+    
+    this.logger.log(`🔍 Identifying peers for ${primaryTicker} from tenant ${tenantId} deals`);
+    
+    // Get available tickers from tenant's deals
+    const availableTickers = await this.getAvailableTickers();
+    
+    // Filter out the primary ticker
+    const otherTickers = availableTickers.filter(t => t !== primaryTicker.toUpperCase());
+    
+    if (otherTickers.length === 0) {
+      this.logger.log(`⚠️ No other tickers available in tenant deals for peer comparison`);
+      // Use LLM to suggest peers even when none are available
+      return this.suggestPeersWithLLM(primaryTicker, []);
+    }
+    
+    // Use LLM to identify which tickers are relevant peers
+    const prompt = `You are a financial analyst. Given the company ${primaryTicker}, identify which of these tickers are relevant peer companies for comparison:
+
+Available tickers in the user's portfolio: ${otherTickers.join(', ')}
+
+Also suggest 2-3 additional peer companies that are NOT in the list above but would be valuable for comparison.
+
+Consider:
+- Same industry/sector
+- Similar market cap
+- Similar business model
+- Direct competitors
+
+Return ONLY valid JSON in this exact format:
+{
+  "found": ["TICKER1", "TICKER2"],
+  "missing": ["TICKER3", "TICKER4"],
+  "rationale": "Brief explanation of why these are relevant peers"
+}
+
+Rules:
+- "found" must ONLY contain tickers from the available list: ${otherTickers.join(', ')}
+- "missing" should contain 2-3 suggested tickers NOT in the available list
+- Keep rationale under 100 words
+- Return ONLY the JSON, no other text`;
+
+    try {
+      const response = await this.bedrockService.invokeClaude({
+        prompt,
+        modelId: 'us.anthropic.claude-3-5-haiku-20241022-v1:0',
+        max_tokens: 500,
+      });
+
+      // Parse JSON response
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('No JSON found in LLM response');
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]);
+      
+      // Validate that "found" only contains tickers from available list
+      const validFound = (parsed.found || []).filter((t: string) => 
+        otherTickers.includes(t.toUpperCase())
+      ).map((t: string) => t.toUpperCase());
+      
+      // Validate that "missing" doesn't contain tickers from available list
+      const validMissing = (parsed.missing || []).filter((t: string) => 
+        !availableTickers.includes(t.toUpperCase())
+      ).map((t: string) => t.toUpperCase());
+
+      const result: PeerIdentificationResult = {
+        found: validFound,
+        missing: validMissing.slice(0, 3), // Limit to 3 suggestions
+        rationale: parsed.rationale || 'Peers identified based on industry and business model similarity.',
+      };
+
+      this.logger.log(`✅ Peer identification complete:`);
+      this.logger.log(`   - Found in deals: ${result.found.join(', ') || 'none'}`);
+      this.logger.log(`   - Suggested to add: ${result.missing.join(', ') || 'none'}`);
+      this.logger.log(`   - Rationale: ${result.rationale}`);
+
+      return result;
+    } catch (error) {
+      this.logger.error(`❌ Peer identification failed: ${error.message}`);
+      // Fallback: return empty found and suggest common peers
+      return this.suggestPeersWithLLM(primaryTicker, otherTickers);
+    }
+  }
+
+  /**
+   * Suggest peers using LLM when no peers are available in tenant deals
+   */
+  private async suggestPeersWithLLM(primaryTicker: string, availableTickers: string[]): Promise<PeerIdentificationResult> {
+    const prompt = `You are a financial analyst. Suggest 3 peer companies for ${primaryTicker} that would be valuable for comparison.
+
+Consider:
+- Same industry/sector
+- Similar market cap
+- Similar business model
+- Direct competitors
+
+Return ONLY valid JSON:
+{
+  "found": [],
+  "missing": ["TICKER1", "TICKER2", "TICKER3"],
+  "rationale": "Brief explanation"
+}`;
+
+    try {
+      const response = await this.bedrockService.invokeClaude({
+        prompt,
+        modelId: 'us.anthropic.claude-3-5-haiku-20241022-v1:0',
+        max_tokens: 300,
+      });
+
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        return {
+          found: [],
+          missing: (parsed.missing || []).slice(0, 3).map((t: string) => t.toUpperCase()),
+          rationale: parsed.rationale || 'Suggested peers based on industry analysis.',
+        };
+      }
+    } catch (error) {
+      this.logger.error(`LLM peer suggestion failed: ${error.message}`);
+    }
+
+    // Ultimate fallback
+    return {
+      found: [],
+      missing: [],
+      rationale: 'Unable to identify peers. Please add competitor deals manually.',
+    };
   }
 }

@@ -309,6 +309,6 @@ data: {"complete":true}
     
     // Check if interface is still usable
     await expect(page.locator('textarea[placeholder*="Ask about"]')).toBeVisible();
-    await expect(page.locator('button:has(i.fa-paper-plane)').click();
+    await expect(page.locator('button:has(i.fa-paper-plane)')).toBeVisible();
   });
 });

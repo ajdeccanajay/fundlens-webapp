@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { IntentDetectorService } from './intent-detector.service';
+import { MetricMappingService } from './metric-mapping.service';
 import {
   QueryIntent,
   RetrievalPlan,
@@ -15,36 +16,45 @@ import {
 export class QueryRouterService {
   private readonly logger = new Logger(QueryRouterService.name);
 
-  constructor(private readonly intentDetector: IntentDetectorService) {}
+  constructor(
+    private readonly intentDetector: IntentDetectorService,
+    private readonly metricMapping: MetricMappingService,
+  ) {}
 
   /**
    * Route a query to appropriate retrieval strategy
+   * 
+   * @param query The natural language query
+   * @param tenantId Optional tenant ID for analytics
+   * @param contextTicker Optional ticker from workspace context
    */
-  async route(query: string, tenantId?: string): Promise<RetrievalPlan> {
+  async route(query: string, tenantId?: string, contextTicker?: string): Promise<RetrievalPlan> {
     // Detect intent
-    const intent = await this.intentDetector.detectIntent(query, tenantId);
+    const intent = await this.intentDetector.detectIntent(query, tenantId, contextTicker);
 
-    this.logger.log(`Routing query type: ${intent.type}`);
+    this.logger.log(`🔍 QUERY ROUTER: Routing query type: ${intent.type}`);
+    this.logger.log(`🔍 QUERY ROUTER: Intent detected - ticker: ${intent.ticker}, metrics: ${JSON.stringify(intent.metrics)}`);
 
     // Build retrieval plan based on intent type
     if (intent.type === 'structured') {
-      return this.buildStructuredPlan(intent);
+      return await this.buildStructuredPlan(intent);
     } else if (intent.type === 'semantic') {
       return this.buildSemanticPlan(intent);
     } else {
-      return this.buildHybridPlan(intent);
+      return await this.buildHybridPlan(intent);
     }
   }
 
   /**
    * Build structured retrieval plan (PostgreSQL only)
    */
-  private buildStructuredPlan(intent: QueryIntent): RetrievalPlan {
+  private async buildStructuredPlan(intent: QueryIntent): Promise<RetrievalPlan> {
     const tickers = this.normalizeTickers(intent.ticker);
+    const normalizedMetrics = await this.normalizeMetrics(intent.metrics || [], tickers[0]);
 
     const structuredQuery: StructuredQuery = {
       tickers,
-      metrics: intent.metrics || [],
+      metrics: normalizedMetrics,
       period: intent.period,
       periodType: intent.periodType,
       filingTypes: this.determineFilingTypes(intent),
@@ -83,12 +93,13 @@ export class QueryRouterService {
   /**
    * Build hybrid retrieval plan (Both PostgreSQL + Bedrock KB)
    */
-  private buildHybridPlan(intent: QueryIntent): RetrievalPlan {
+  private async buildHybridPlan(intent: QueryIntent): Promise<RetrievalPlan> {
     const tickers = this.normalizeTickers(intent.ticker);
+    const normalizedMetrics = await this.normalizeMetrics(intent.metrics || [], tickers[0]);
 
     const structuredQuery: StructuredQuery = {
       tickers,
-      metrics: intent.metrics || [],
+      metrics: normalizedMetrics,
       period: intent.period,
       periodType: intent.periodType,
       filingTypes: this.determineFilingTypes(intent),
@@ -110,6 +121,42 @@ export class QueryRouterService {
       structuredQuery,
       semanticQuery,
     };
+  }
+
+  /**
+   * Normalize metrics using MetricMappingService
+   * Maps user-friendly names (e.g., "Revenue") to database names (e.g., "total_revenue")
+   */
+  private async normalizeMetrics(metrics: string[], ticker?: string): Promise<string[]> {
+    this.logger.log(`🔍 METRIC NORMALIZATION: Starting normalization for ${metrics.length} metrics: ${JSON.stringify(metrics)}`);
+    
+    const normalized: string[] = [];
+
+    for (const metric of metrics) {
+      try {
+        // Try to resolve the metric using the mapping service
+        const match = await this.metricMapping.resolve(metric, ticker);
+        
+        if (match) {
+          // Use the canonical name from the mapping
+          normalized.push(match.canonicalName);
+          this.logger.log(
+            `✅ METRIC NORMALIZATION: "${metric}" → "${match.canonicalName}" (${match.method}, confidence: ${match.confidence.toFixed(2)})`
+          );
+        } else {
+          // Fallback: use the original metric name
+          this.logger.warn(`⚠️ METRIC NORMALIZATION: No mapping found for metric "${metric}", using as-is`);
+          normalized.push(metric);
+        }
+      } catch (error) {
+        this.logger.error(`❌ METRIC NORMALIZATION: Error normalizing metric "${metric}": ${error.message}`);
+        // Fallback: use the original metric name
+        normalized.push(metric);
+      }
+    }
+
+    this.logger.log(`🔍 METRIC NORMALIZATION: Completed - normalized metrics: ${JSON.stringify(normalized)}`);
+    return normalized;
   }
 
   /**
@@ -164,8 +211,12 @@ export class QueryRouterService {
 
   /**
    * Get intent without routing (for testing)
+   * 
+   * @param query The natural language query
+   * @param tenantId Optional tenant ID for analytics
+   * @param contextTicker Optional ticker from workspace context
    */
-  async getIntent(query: string, tenantId?: string): Promise<QueryIntent> {
-    return this.intentDetector.detectIntent(query, tenantId);
+  async getIntent(query: string, tenantId?: string, contextTicker?: string): Promise<QueryIntent> {
+    return this.intentDetector.detectIntent(query, tenantId, contextTicker);
   }
 }

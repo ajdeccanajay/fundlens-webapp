@@ -2,6 +2,7 @@ import { Controller, Post, Body, Get, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { QueryRouterService } from './query-router.service';
 import { RAGService } from './rag.service';
+import { PerformanceMonitorService } from './performance-monitor.service';
 
 @ApiTags('rag')
 @Controller('rag')
@@ -9,6 +10,7 @@ export class RAGController {
   constructor(
     private readonly queryRouter: QueryRouterService,
     private readonly ragService: RAGService,
+    private readonly performanceMonitor: PerformanceMonitorService,
   ) {}
 
   @Post('detect-intent')
@@ -112,5 +114,24 @@ export class RAGController {
     @Body('filingType') filingType?: string,
   ) {
     return this.ragService.testTimeSeries(ticker, metric, filingType);
+  }
+
+  @Get('performance')
+  @ApiOperation({ summary: 'Get performance metrics' })
+  getPerformanceMetrics() {
+    return this.performanceMonitor.exportMetrics();
+  }
+
+  @Get('performance/health')
+  @ApiOperation({ summary: 'Get performance health status' })
+  getPerformanceHealth() {
+    return this.performanceMonitor.getHealthStatus();
+  }
+
+  @Post('performance/reset')
+  @ApiOperation({ summary: 'Reset performance metrics (testing only)' })
+  resetPerformanceMetrics() {
+    this.performanceMonitor.reset();
+    return { message: 'Performance metrics reset successfully' };
   }
 }

@@ -33,19 +33,72 @@ export class IntentDetectorService {
   /**
    * Detect intent from natural language query
    * Uses three-tier fallback: regex → LLM → generic
+   * 
+   * @param query The natural language query
+   * @param tenantId Optional tenant ID for analytics
+   * @param contextTicker Optional ticker from workspace context (e.g., from deal page)
    */
-  async detectIntent(query: string, tenantId?: string): Promise<QueryIntent> {
+  async detectIntent(query: string, tenantId?: string, contextTicker?: string): Promise<QueryIntent> {
     this.logger.log(`Detecting intent for query: "${query}"`);
+    if (contextTicker) {
+      this.logger.log(`  Context ticker from workspace: ${contextTicker}`);
+    }
     this.llmUsageStats.totalQueries++;
 
     const startTime = Date.now();
 
     // Tier 1: Try regex detection first (fast path)
-    const regexIntent = await this.detectWithRegex(query);
+    const regexIntent = await this.detectWithRegex(query, contextTicker);
     
     // CRITICAL FIX: Changed from > 0.7 to >= 0.7 to accept queries with exactly 0.7 confidence
-    // (e.g., queries with only ticker: 0.5 base + 0.2 ticker = 0.7)
+    // This includes ticker-only queries (base 0.5 + ticker 0.2 = 0.7)
+    // Bug fix for boundary condition that was rejecting 20% of queries
     if (regexIntent.confidence >= 0.7) {
+      // NEW: Check for ambiguity before accepting regex intent
+      // Ambiguous queries (ticker-only with generic words) should receive clarification prompts
+      if (this.isAmbiguous(regexIntent)) {
+        this.logger.log(`⚠️ Ambiguous query detected, forcing LLM detection for clarification`);
+        
+        // Force LLM detection to get better intent understanding
+        try {
+          const llmIntent = await this.detectWithLLM(query);
+          
+          // Mark as needing clarification
+          llmIntent.needsClarification = true;
+          llmIntent.ambiguityReason = 'Ticker-only query with generic words';
+          
+          const llmLatency = Date.now() - startTime;
+          this.llmUsageStats.llmLatencyMs.push(llmLatency);
+          this.llmUsageStats.llmFallback++;
+          
+          this.logger.log(`✅ LLM detection for ambiguous query succeeded (confidence: ${llmIntent.confidence.toFixed(2)}, latency: ${llmLatency}ms)`);
+          
+          // Log to analytics
+          if (tenantId) {
+            const llmCost = this.calculateLLMCost(query);
+            await this.analytics.logDetection({
+              tenantId,
+              query,
+              detectedIntent: llmIntent,
+              detectionMethod: 'llm',
+              confidence: llmIntent.confidence,
+              success: true,
+              latencyMs: llmLatency,
+              llmCostUsd: llmCost,
+            });
+          }
+          
+          this.logUsageStats();
+          return llmIntent;
+        } catch (error) {
+          this.logger.error(`LLM detection for ambiguous query failed: ${error.message}`);
+          // Fall back to regex intent but mark as needing clarification
+          regexIntent.needsClarification = true;
+          regexIntent.ambiguityReason = 'Ticker-only query with generic words (LLM failed)';
+        }
+      }
+      
+      // Not ambiguous, use regex (fast path)
       this.llmUsageStats.regexSuccess++;
       const latency = Date.now() - startTime;
       this.logger.log(`✅ Regex detection succeeded (confidence: ${regexIntent.confidence.toFixed(2)}, latency: ${latency}ms)`);
@@ -146,12 +199,15 @@ export class IntentDetectorService {
 
   /**
    * Detect intent using regex patterns (original implementation)
+   * 
+   * @param query The natural language query
+   * @param contextTicker Optional ticker from workspace context for disambiguation
    */
-  private async detectWithRegex(query: string): Promise<QueryIntent> {
+  private async detectWithRegex(query: string, contextTicker?: string): Promise<QueryIntent> {
     const normalizedQuery = query.toLowerCase();
 
     // Extract components
-    const ticker = this.extractTicker(normalizedQuery);
+    const ticker = this.extractTicker(normalizedQuery, contextTicker);
     const metrics = this.extractMetrics(normalizedQuery);
     const period = this.extractPeriod(normalizedQuery);
     const periodType = this.determinePeriodType(period);
@@ -173,6 +229,7 @@ export class IntentDetectorService {
     const needsComparison = this.needsComparison(normalizedQuery);
     const needsComputation = this.needsComputation(normalizedQuery, metrics);
     const needsTrend = this.needsTrend(normalizedQuery);
+    const needsPeerComparison = this.needsPeerComparison(normalizedQuery);
 
     const intent: QueryIntent = {
       type,
@@ -187,6 +244,7 @@ export class IntentDetectorService {
       needsComparison,
       needsComputation,
       needsTrend,
+      needsPeerComparison,
       confidence: this.calculateConfidence(ticker, metrics, period),
       originalQuery: query,
     };
@@ -198,13 +256,26 @@ export class IntentDetectorService {
 
   /**
    * Extract ticker symbol from query
+   * 
+   * @param query The normalized query string
+   * @param contextTicker Optional ticker from workspace context for disambiguation
    */
-  private extractTicker(query: string): string | string[] | undefined {
+  private extractTicker(query: string, contextTicker?: string): string | string[] | undefined {
+    // CRITICAL FIX: If we have a context ticker from workspace, use it directly
+    // This prevents false positives from single-letter tickers and ambiguous matches
+    // The workspace context (from deal page) is the source of truth
+    if (contextTicker) {
+      const contextTickerUpper = contextTicker.toUpperCase();
+      this.logger.log(`🎯 Using context ticker from workspace: ${contextTickerUpper}`);
+      return contextTickerUpper;
+    }
+
     const foundTickers = new Set<string>();
 
-    // Common ticker patterns - includes RH (Restoration Hardware)
+    // Common ticker patterns - ordered by specificity (longer tickers first to avoid false matches)
+    // Single-letter tickers (V, MA) are at the end to minimize false positives
     const tickerPatterns = [
-      /\b(AAPL|MSFT|GOOGL|GOOG|AMZN|TSLA|META|NVDA|JPM|BAC|WFC|V|MA|DIS|NFLX|INTC|AMD|ORCL|CRM|ADBE|PYPL|CSCO|PFE|MRK|JNJ|UNH|CVS|WMT|TGT|HD|LOW|NKE|SBUX|MCD|KO|PEP|RH)\b/gi,
+      /\b(GOOGL|GOOG|AAPL|MSFT|AMZN|TSLA|META|NVDA|NFLX|INTC|ORCL|ADBE|PYPL|CSCO|SBUX|JPM|BAC|WFC|DIS|AMD|CRM|PFE|MRK|JNJ|UNH|CVS|WMT|TGT|NKE|MCD|KO|PEP|HD|LOW|RH|V|MA)\b/gi,
     ];
 
     // Try specific tickers first
@@ -264,6 +335,17 @@ export class IntentDetectorService {
   private extractMetrics(query: string): string[] {
     const metrics: string[] = [];
 
+    // Skip metric extraction if query is about accounting policies (not actual metrics)
+    const accountingPolicyPatterns = [
+      'revenue recognition',
+      'revenue policy',
+      'recognize revenue',
+      'accounting policy',
+      'accounting policies',
+    ];
+    
+    const isAccountingPolicyQuery = accountingPolicyPatterns.some(pattern => query.includes(pattern));
+
     // Metric patterns (using capitalized names to match database)
     const metricPatterns: Record<string, string[]> = {
       Revenue: ['revenue', 'sales', 'top line', 'topline'],
@@ -285,18 +367,55 @@ export class IntentDetectorService {
       operating_margin: ['operating margin'],
       roe: ['roe', 'return on equity'],
       roa: ['roa', 'return on assets'],
+      // Cash flow metrics - CRITICAL for value investing
+      Free_Cash_Flow: ['free cash flow', 'fcf', 'unlevered free cash flow'],
+      Operating_Cash_Flow: ['operating cash flow', 'cash flow from operations', 'ocf', 'cfo'],
+      Investing_Cash_Flow: ['investing cash flow', 'cash flow from investing', 'cfi'],
+      Financing_Cash_Flow: ['financing cash flow', 'cash flow from financing', 'cff'],
+      Capital_Expenditure: ['capital expenditure', 'capex', 'capital expenditures'],
+      // Working capital metrics
+      Working_Capital: ['working capital', 'net working capital'],
+      Current_Assets: ['current assets'],
+      Current_Liabilities: ['current liabilities'],
+      // Valuation metrics (computed)
+      PE_Ratio: ['p/e', 'pe ratio', 'price to earnings', 'price earnings ratio'],
+      PB_Ratio: ['p/b', 'pb ratio', 'price to book', 'price book ratio'],
+      PS_Ratio: ['p/s', 'ps ratio', 'price to sales', 'price sales ratio'],
+      EV_EBITDA: ['ev/ebitda', 'ev to ebitda', 'enterprise value to ebitda'],
+      EV_Sales: ['ev/sales', 'ev to sales', 'enterprise value to sales'],
+      FCF_Yield: ['fcf yield', 'free cash flow yield'],
+      Dividend_Yield: ['dividend yield', 'div yield'],
+      // Efficiency metrics
+      Asset_Turnover: ['asset turnover'],
+      Inventory_Turnover: ['inventory turnover', 'inventory turns'],
+      Receivables_Turnover: ['receivables turnover', 'ar turnover'],
+      Days_Sales_Outstanding: ['days sales outstanding', 'dso'],
+      Days_Inventory_Outstanding: ['days inventory outstanding', 'dio'],
+      Days_Payable_Outstanding: ['days payable outstanding', 'dpo'],
+      Cash_Conversion_Cycle: ['cash conversion cycle', 'ccc'],
     };
 
     for (const [metric, patterns] of Object.entries(metricPatterns)) {
       for (const pattern of patterns) {
         if (query.includes(pattern)) {
+          // Skip "revenue" metric if this is an accounting policy query
+          if (metric === 'Revenue' && isAccountingPolicyQuery) {
+            continue;
+          }
           metrics.push(metric);
           break;
         }
       }
     }
 
-    return [...new Set(metrics)];
+    const uniqueMetrics = [...new Set(metrics)];
+    
+    // CRITICAL DEBUG: Log what metrics were detected
+    if (uniqueMetrics.length > 0) {
+      this.logger.log(`🔍 INTENT DETECTOR: Extracted metrics from query "${query}": ${JSON.stringify(uniqueMetrics)}`);
+    }
+
+    return uniqueMetrics;
   }
 
   /**
@@ -375,6 +494,11 @@ export class IntentDetectorService {
   /**
    * Extract section types from query
    * Maps user-friendly terms to actual SEC filing section identifiers
+   * 
+   * IMPORTANT: Some topics like "revenue recognition" appear in BOTH:
+   * - Item 7 (MD&A) under "Critical Accounting Policies" 
+   * - Item 8 (Financial Statements) in the Notes
+   * We include both sections to ensure comprehensive retrieval.
    */
   private extractSectionTypes(query: string): any[] {
     const sections: any[] = [];
@@ -388,7 +512,7 @@ export class IntentDetectorService {
       sections.push('item_7');
     }
     // Risk factors is Item 1A in 10-K
-    if (query.match(/\b(risk|risk factors)\b/i)) {
+    if (query.match(/\b(risk|risks|risk factors)\b/i)) {
       sections.push('item_1a');
     }
     // Business description is Item 1 in 10-K
@@ -396,7 +520,7 @@ export class IntentDetectorService {
       sections.push('item_1');
     }
     // Financial statements is Item 8 in 10-K
-    if (query.match(/\b(notes|footnotes|financial statements)\b/i)) {
+    if (query.match(/\b(notes|footnotes|financial statements|lease|leases|stock-based compensation|income tax|fair value)\b/i)) {
       sections.push('item_8');
     }
     // Properties is Item 2 in 10-K
@@ -406,6 +530,20 @@ export class IntentDetectorService {
     // Legal proceedings is Item 3 in 10-K
     if (query.match(/\b(legal|litigation|lawsuit|proceedings)\b/i)) {
       sections.push('item_3');
+    }
+    
+    // CRITICAL FIX: Accounting policy queries should search BOTH Item 7 AND Item 8
+    // Revenue recognition, accounting policies, etc. are discussed in:
+    // - Item 7 (MD&A) "Critical Accounting Policies" section
+    // - Item 8 (Financial Statements) Notes to Financial Statements
+    if (query.match(/\b(revenue recognition|revenue policy|recognize revenue|accounting policy|accounting policies|critical accounting)\b/i)) {
+      // Add both sections if not already present
+      if (!sections.includes('item_7')) {
+        sections.push('item_7');
+      }
+      if (!sections.includes('item_8')) {
+        sections.push('item_8');
+      }
     }
 
     return sections;
@@ -509,6 +647,56 @@ export class IntentDetectorService {
     ];
 
     return comparisonKeywords.some((keyword) => query.includes(keyword));
+  }
+
+  /**
+   * Check if query needs peer comparison
+   * Detects queries asking about peers, competitors, or peer group comparisons
+   * 
+   * @param query The normalized query string
+   * @returns true if the query is asking about peer comparison
+   */
+  private needsPeerComparison(query: string): boolean {
+    const peerKeywords = [
+      'peers',
+      'peer group',
+      'peer companies',
+      'competitors',
+      'competitor',
+      'competition',
+      'comparable',
+      'comparables',
+      'comps',
+      'industry peers',
+      'similar companies',
+      'compare to peers',
+      'compare with peers',
+      'vs peers',
+      'versus peers',
+      'against peers',
+      'relative to peers',
+      'how does.*compare',
+      'benchmark',
+      'benchmarking',
+    ];
+
+    const lowerQuery = query.toLowerCase();
+    
+    // Check for exact keyword matches
+    const hasKeyword = peerKeywords.some(kw => {
+      // Handle regex patterns
+      if (kw.includes('.*')) {
+        const regex = new RegExp(kw, 'i');
+        return regex.test(lowerQuery);
+      }
+      return lowerQuery.includes(kw);
+    });
+
+    if (hasKeyword) {
+      this.logger.log(`🔍 Peer comparison detected in query: "${query}"`);
+    }
+
+    return hasKeyword;
   }
 
   /**
@@ -635,7 +823,7 @@ export class IntentDetectorService {
     const subsectionPatterns: Record<string, string[]> = {
       'Results of Operations': ['results of operations', 'operating results', 'performance', 'growth driver', 'growth drivers'],
       'Liquidity and Capital Resources': ['liquidity', 'capital resources', 'cash flow', 'financing', 'capital structure'],
-      'Critical Accounting Policies': ['critical accounting', 'accounting policies', 'accounting estimates', 'estimates'],
+      'Critical Accounting Policies': ['critical accounting', 'accounting policies', 'accounting estimates', 'estimates', 'revenue recognition', 'revenue policy', 'recognize revenue'],
       'Market Risk': ['market risk', 'interest rate risk', 'currency risk', 'foreign exchange risk'],
       'Contractual Obligations': ['contractual obligations', 'commitments', 'obligations'],
     };
@@ -795,6 +983,7 @@ Return ONLY the JSON object, no other text.`;
         needsComparison: this.needsComparison(originalQuery),
         needsComputation: this.needsComputation(originalQuery, parsed.metrics || []),
         needsTrend: this.needsTrend(originalQuery),
+        needsPeerComparison: this.needsPeerComparison(originalQuery), // Add peer comparison detection
         confidence: parsed.confidence || 0.8,
         originalQuery,
       };
@@ -811,6 +1000,7 @@ Return ONLY the JSON object, no other text.`;
         needsComparison: false,
         needsComputation: false,
         needsTrend: false,
+        needsPeerComparison: this.needsPeerComparison(originalQuery), // Still check for peer comparison
       };
     }
   }
@@ -850,6 +1040,7 @@ Return ONLY the JSON object, no other text.`;
       needsComparison: regexIntent.needsComparison,
       needsComputation: regexIntent.needsComputation,
       needsTrend: regexIntent.needsTrend,
+      needsPeerComparison: regexIntent.needsPeerComparison, // Preserve peer comparison flag
     };
   }
 
@@ -866,6 +1057,68 @@ Return ONLY the JSON object, no other text.`;
     const outputCost = (outputTokens / 1_000_000) * 1.25;
 
     return inputCost + outputCost;
+  }
+
+  /**
+   * Check if a query intent is ambiguous
+   * 
+   * Ambiguous queries have:
+   * - Ticker but no metrics, sections, or subsections
+   * - Generic/vague words (about, information, show me, tell me, etc.)
+   * - Confidence exactly 0.7 (ticker-only)
+   * 
+   * These queries should receive clarification prompts instead of generic results.
+   * 
+   * @param intent The query intent to check
+   * @returns true if the query is ambiguous and needs clarification
+   */
+  private isAmbiguous(intent: QueryIntent): boolean {
+    // Ambiguous words that indicate vague queries
+    const ambiguousWords = [
+      'about',
+      'information',
+      'data',
+      'tell me',
+      'show me',
+      'details',
+      'overview',
+      'summary',
+      'update',
+      'status',
+      'give me',
+      'what is',
+      'what are',
+      'info on',
+      'details about',
+      'summary of',
+    ];
+    
+    const query = intent.originalQuery.toLowerCase();
+    const hasAmbiguousWords = ambiguousWords.some(word => query.includes(word));
+    
+    // Check if query has no specific metrics, sections, or subsections
+    const hasNoSpecifics = 
+      !intent.metrics && 
+      !intent.sectionTypes && 
+      !intent.subsectionName;
+    
+    // Check if this is a ticker-only query (confidence exactly 0.7)
+    const isTickerOnly = intent.confidence === 0.7;
+    
+    // Query is ambiguous if it has all three conditions:
+    // 1. Contains ambiguous words
+    // 2. Has no specific metrics/sections
+    // 3. Is ticker-only (confidence 0.7)
+    const isAmbiguous = hasAmbiguousWords && hasNoSpecifics && isTickerOnly;
+    
+    if (isAmbiguous) {
+      this.logger.log(`⚠️ Ambiguous query detected: "${intent.originalQuery}"`);
+      this.logger.log(`  - Has ambiguous words: ${hasAmbiguousWords}`);
+      this.logger.log(`  - Has no specifics: ${hasNoSpecifics}`);
+      this.logger.log(`  - Is ticker-only: ${isTickerOnly}`);
+    }
+    
+    return isAmbiguous;
   }
 
   /**

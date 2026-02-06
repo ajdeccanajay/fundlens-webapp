@@ -373,17 +373,17 @@ This implementation plan breaks down the RAG competitive intelligence extraction
     - Log reranking failures for monitoring
     - _Requirements: 5A.3, 5A.5_
   
-  - [ ]* 13.3 Write property test for reranking score improvement
+  - [x]* 13.3 Write property test for reranking score improvement
     - **Property 12: Reranking Score Improvement**
     - **Validates: Requirements 5A.1, 5A.2**
     - Test that top-ranked chunks have higher or equal scores after reranking
   
-  - [ ]* 13.4 Write property test for reranking fallback safety
+  - [x]* 13.4 Write property test for reranking fallback safety
     - **Property 13: Reranking Fallback Safety**
     - **Validates: Requirements 5A.3**
     - Test that reranking failures preserve original scores
   
-  - [ ]* 13.5 Write unit tests for reranking
+  - [x]* 13.5 Write unit tests for reranking
     - Test reranking with known chunks
     - Test reranking failure fallback
     - Test reranking with empty chunk list
@@ -408,12 +408,12 @@ This implementation plan breaks down the RAG competitive intelligence extraction
     - Log HyDE failures for monitoring
     - _Requirements: 23.5_
   
-  - [ ]* 14.4 Write property test for HyDE deduplication
+  - [x]* 14.4 Write property test for HyDE deduplication
     - **Property 15: HyDE Deduplication**
     - **Validates: Requirements 23.4**
     - Test that chunks retrieved by both methods are deduplicated
   
-  - [ ]* 14.5 Write unit tests for HyDE
+  - [x]* 14.5 Write unit tests for HyDE
     - Test hypothetical answer generation
     - Test HyDE-based retrieval
     - Test deduplication logic
@@ -439,13 +439,13 @@ This implementation plan breaks down the RAG competitive intelligence extraction
     - Prioritize most recent or most relevant information
     - _Requirements: 22.3, 22.5_
   
-  - [ ]* 15.4 Write property test for query decomposition completeness
+  - [x]* 15.4 Write property test for query decomposition completeness
     - **Property 16: Query Decomposition Completeness**
     - **Validates: Requirements 22.2, 22.4**
     - Test that all sub-queries are executed
     - Test that each part of response is traceable to sub-query
   
-  - [ ]* 15.5 Write unit tests for query decomposition
+  - [x]* 15.5 Write unit tests for query decomposition
     - Test multi-faceted query detection
     - Test sub-query execution
     - Test unified response synthesis
@@ -464,12 +464,12 @@ This implementation plan breaks down the RAG competitive intelligence extraction
     - Prioritize chunks with highest relevance scores
     - _Requirements: 21.4, 21.5_
   
-  - [ ]* 16.3 Write property test for token budget enforcement
+  - [x]* 16.3 Write property test for token budget enforcement
     - **Property 14: Contextual Expansion Token Budget**
     - **Validates: Requirements 21.4**
     - Test that expanded context never exceeds token budget
   
-  - [ ]* 16.4 Write unit tests for contextual expansion
+  - [x]* 16.4 Write unit tests for contextual expansion
     - Test adjacent chunk retrieval
     - Test chunk merging
     - Test token budget enforcement
@@ -493,12 +493,12 @@ This implementation plan breaks down the RAG competitive intelligence extraction
     - Stop if iterative retrieval does not improve results
     - _Requirements: 26.3, 26.5_
   
-  - [ ]* 17.4 Write property test for iterative retrieval termination
+  - [x]* 17.4 Write property test for iterative retrieval termination
     - **Property 17: Iterative Retrieval Termination**
     - **Validates: Requirements 26.3**
     - Test that iterative retrieval terminates after 2 iterations
   
-  - [ ]* 17.5 Write unit tests for iterative retrieval
+  - [x]* 17.5 Write unit tests for iterative retrieval
     - Test low-confidence detection
     - Test follow-up query generation
     - Test iteration limit enforcement
@@ -517,7 +517,7 @@ This implementation plan breaks down the RAG competitive intelligence extraction
     - Cache intermediate results
     - _Requirements: 38.1_
   
-  - [ ]* 18.3 Write integration tests for advanced retrieval
+  - [x]* 18.3 Write integration tests for advanced retrieval
     - Test end-to-end retrieval with all techniques enabled
     - Test feature flag disabling for each technique
     - Compare Phase 2 vs Phase 3 retrieval quality

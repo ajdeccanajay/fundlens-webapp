@@ -682,6 +682,82 @@
                 </div>
             </div>
         </div>
+        
+        <!-- Source Modal (NEW - for SEC filing citations) -->
+        <div x-show="showSourceModal" 
+             class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+             @click.self="showSourceModal = false"
+             @keydown.escape.window="showSourceModal = false"
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100">
+            <div class="bg-white rounded-xl max-w-2xl w-full mx-4 shadow-2xl max-h-[80vh] flex flex-col"
+                 @click.stop
+                 x-transition:enter="transition ease-out duration-200"
+                 x-transition:enter-start="opacity-0 transform scale-95"
+                 x-transition:enter-end="opacity-100 transform scale-100">
+                
+                <!-- Header -->
+                <div class="p-6 border-b border-gray-200">
+                    <div class="flex items-start justify-between">
+                        <div class="flex-1">
+                            <h3 class="text-xl font-bold text-gray-900 mb-1" 
+                                x-text="`${sourceModal.ticker} ${sourceModal.filingType} ${sourceModal.fiscalPeriod}`">
+                            </h3>
+                            <p class="text-sm text-gray-600" x-text="sourceModal.section"></p>
+                        </div>
+                        <button @click="showSourceModal = false" 
+                                class="text-gray-400 hover:text-gray-600 ml-4">
+                            <i class="fas fa-times text-xl"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Metadata -->
+                <div class="px-6 py-3 bg-gray-50 border-b border-gray-200">
+                    <div class="flex items-center gap-4 text-sm text-gray-600">
+                        <template x-if="sourceModal.pageNumber">
+                            <span class="flex items-center gap-1">
+                                <i class="fas fa-file-alt"></i>
+                                Page <span x-text="sourceModal.pageNumber"></span>
+                            </span>
+                        </template>
+                        <span class="flex items-center gap-1">
+                            <i class="fas fa-star text-yellow-500"></i>
+                            <span x-text="Math.round(sourceModal.relevanceScore * 100)"></span>% relevant
+                        </span>
+                    </div>
+                </div>
+                
+                <!-- Excerpt -->
+                <div class="flex-1 overflow-y-auto p-6">
+                    <div class="prose prose-sm max-w-none">
+                        <div class="bg-blue-50 border-l-4 border-blue-400 p-4">
+                            <p class="text-sm font-medium text-blue-800 mb-2">
+                                <i class="fas fa-quote-left mr-2"></i>
+                                Source Excerpt
+                            </p>
+                            <p class="text-sm text-blue-900 leading-relaxed whitespace-pre-wrap" x-text="sourceModal.excerpt"></p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Actions -->
+                <div class="p-6 border-t border-gray-200 bg-gray-50">
+                    <div class="flex items-center justify-between gap-3">
+                        <button @click="showSourceModal = false" 
+                                class="px-4 py-2 text-gray-700 hover:text-gray-900 font-medium">
+                            Close
+                        </button>
+                        <button @click="copySourceCitation()" 
+                                class="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 flex items-center gap-2">
+                            <i class="fas fa-copy"></i>
+                            Copy Citation
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="/js/config.js"></script>
@@ -723,6 +799,18 @@
                     snippet: '',
                     fullContent: '',
                     score: null,
+                },
+                
+                // Source modal state (NEW - for SEC filing citations)
+                showSourceModal: false,
+                sourceModal: {
+                    ticker: '',
+                    filingType: '',
+                    fiscalPeriod: '',
+                    section: '',
+                    pageNumber: null,
+                    excerpt: '',
+                    relevanceScore: 0,
                 },
                 
                 // Initialize
@@ -1078,29 +1166,65 @@
                     // First render markdown
                     let html = this.renderMarkdown(content);
                     
-                    // Then add citation links
+                    // Then add citation links - handle both SEC citations (number) and user doc citations (citationNumber)
                     citations.forEach((citation) => {
-                        const marker = `[${citation.citationNumber}]`;
-                        const link = `<sup class="citation-link" onclick="window.dispatchEvent(new CustomEvent('preview-citation', { detail: ${JSON.stringify(citation)} }))">${marker}</sup>`;
-                        html = html.replace(new RegExp(`\\[${citation.citationNumber}\\]`, 'g'), link);
+                        const citNum = citation.number || citation.citationNumber;
+                        if (!citNum) return;
+                        
+                        const marker = `[${citNum}]`;
+                        // Create clickable citation link
+                        const link = `<a href="#" class="citation-link" onclick="event.preventDefault(); window.dispatchEvent(new CustomEvent('preview-citation', { detail: ${JSON.stringify(citation).replace(/"/g, '&quot;')} }))">${marker}</a>`;
+                        html = html.replace(new RegExp(`\\[${citNum}\\]`, 'g'), link);
                     });
                     
                     return html;
                 },
                 
-                // Preview citation (NEW)
+                // Preview citation (NEW) - handles both user docs and SEC filings
                 previewCitation(citation) {
-                    this.previewDocument = {
-                        documentId: citation.documentId,
-                        chunkId: citation.chunkId,
-                        filename: citation.filename,
-                        ticker: citation.ticker,
-                        pageNumber: citation.pageNumber,
-                        snippet: citation.snippet,
-                        fullContent: '', // Will be loaded if needed
-                        score: citation.score,
+                    // Check if this is an SEC filing citation (has ticker, filingType, etc.)
+                    if (citation.ticker && citation.filingType) {
+                        this.handleSecFilingCitation(citation);
+                    } else {
+                        // User document citation
+                        this.previewDocument = {
+                            documentId: citation.documentId,
+                            chunkId: citation.chunkId,
+                            filename: citation.filename,
+                            ticker: citation.ticker,
+                            pageNumber: citation.pageNumber,
+                            snippet: citation.snippet,
+                            fullContent: '', // Will be loaded if needed
+                            score: citation.score,
+                        };
+                        this.showDocumentPreview = true;
+                    }
+                },
+                
+                // Handle SEC filing citation click (NEW)
+                handleSecFilingCitation(citation) {
+                    this.sourceModal = {
+                        ticker: citation.ticker || '',
+                        filingType: citation.filingType || '',
+                        fiscalPeriod: citation.fiscalPeriod || '',
+                        section: citation.section || '',
+                        pageNumber: citation.pageNumber || null,
+                        excerpt: citation.excerpt || '',
+                        relevanceScore: citation.relevanceScore || 0.9,
                     };
-                    this.showDocumentPreview = true;
+                    this.showSourceModal = true;
+                },
+                
+                // Copy source citation to clipboard (NEW)
+                copySourceCitation() {
+                    const citation = `${this.sourceModal.ticker} ${this.sourceModal.filingType} ${this.sourceModal.fiscalPeriod}, ${this.sourceModal.section}${this.sourceModal.pageNumber ? `, p. ${this.sourceModal.pageNumber}` : ''}`;
+                    navigator.clipboard.writeText(citation).then(() => {
+                        this.showToast('Citation copied to clipboard');
+                        this.showSourceModal = false;
+                    }).catch(err => {
+                        console.error('Failed to copy citation:', err);
+                        this.showError('Failed to copy citation');
+                    });
                 },
                 
                 // Highlight text (NEW)

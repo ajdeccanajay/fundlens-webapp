@@ -89,7 +89,7 @@ export class CitationService {
     const values = citations
       .map(
         (c) =>
-          `('${c.tenantId}'::uuid, '${c.messageId}'::uuid, '${c.documentId}'::uuid, '${c.chunkId}'::uuid, '${c.quote.replace(/'/g, "''")}', ${c.pageNumber || null}, ${c.relevanceScore || null})`,
+          `('${c.tenantId}'::uuid, '${c.messageId}'::uuid, ${c.documentId ? `'${c.documentId}'::uuid` : 'NULL'}, '${c.chunkId}'::uuid, '${(c.quote || '').replace(/'/g, "''")}', ${c.pageNumber || 'NULL'}, ${c.relevanceScore || 'NULL'})`,
       )
       .join(', ');
 

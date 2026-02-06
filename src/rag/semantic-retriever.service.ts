@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { BedrockService, ChunkResult, MetadataFilter } from './bedrock.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StructuredRetrieverService } from './structured-retriever.service';
+import { AdvancedRetrievalService, AdvancedRetrievalConfig } from './advanced-retrieval.service';
 import { DocumentType } from './types/query-intent';
 
 export interface SemanticQuery {
@@ -32,18 +33,28 @@ export interface EnhancedSemanticResult {
  * Handles narrative retrieval from:
  * 1. AWS Bedrock Knowledge Base (when configured)
  * 2. PostgreSQL fallback (when Bedrock not available)
+ * 
+ * Phase 3: Now integrates with AdvancedRetrievalService for:
+ * - HyDE (Hypothetical Document Embeddings)
+ * - Query Decomposition
+ * - Contextual Expansion
+ * - Iterative Retrieval
+ * - Reranking (when available)
  */
 @Injectable()
 export class SemanticRetrieverService {
   private readonly logger = new Logger(SemanticRetrieverService.name);
   private readonly useBedrockKB: boolean;
+  private readonly useAdvancedRetrieval: boolean;
 
   constructor(
     private readonly bedrock: BedrockService,
     private readonly prisma: PrismaService,
     private readonly structuredRetriever: StructuredRetrieverService,
+    private readonly advancedRetrieval: AdvancedRetrievalService,
   ) {
     this.useBedrockKB = !!process.env.BEDROCK_KB_ID;
+    this.useAdvancedRetrieval = process.env.ENABLE_ADVANCED_RETRIEVAL !== 'false';
 
     if (this.useBedrockKB) {
       this.logger.log('Using AWS Bedrock Knowledge Base for semantic retrieval');
@@ -51,6 +62,18 @@ export class SemanticRetrieverService {
       this.logger.log(
         'Using PostgreSQL fallback for semantic retrieval (Bedrock KB not configured)',
       );
+    }
+    
+    if (this.useAdvancedRetrieval) {
+      this.logger.log('🚀 Phase 3 Advanced Retrieval ENABLED');
+      const status = this.advancedRetrieval.getStatus();
+      this.logger.log(`   HyDE: ${status.hyde ? '✅' : '❌'}`);
+      this.logger.log(`   Query Decomposition: ${status.queryDecomposition ? '✅' : '❌'}`);
+      this.logger.log(`   Contextual Expansion: ${status.contextualExpansion ? '✅' : '❌'}`);
+      this.logger.log(`   Iterative Retrieval: ${status.iterativeRetrieval ? '✅' : '❌'}`);
+      this.logger.log(`   Reranking: ${status.reranking ? '✅' : '❌'}`);
+    } else {
+      this.logger.log('Phase 3 Advanced Retrieval DISABLED');
     }
   }
 
@@ -167,6 +190,9 @@ export class SemanticRetrieverService {
   /**
    * Retrieve from AWS Bedrock Knowledge Base
    * Phase 2: Now supports subsection filtering with fallback chain
+   * Phase 3: Now uses AdvancedRetrievalService for HyDE, decomposition, expansion, etc.
+   * 
+   * ENHANCED: Now handles multiple section types by searching each and merging results
    */
   private async retrieveFromBedrock(
     query: SemanticQuery,
@@ -174,42 +200,146 @@ export class SemanticRetrieverService {
     // CRITICAL: Always filter by ticker to prevent company mix-ups
     const primaryTicker = query.tickers?.[0];
     const primarySubsection = query.subsectionNames?.[0];
+    const sectionTypes = query.sectionTypes || [];
     
-    const filter: MetadataFilter = {
-      ticker: primaryTicker, // ALWAYS filter by primary ticker
-      sectionType: query.sectionTypes?.[0],
-      subsectionName: primarySubsection, // Phase 2: Subsection filtering
-      filingType: query.documentTypes?.[0],
-      fiscalPeriod: query.fiscalPeriod,
-    };
-
     const numberOfResults = query.numberOfResults || 5;
 
     this.logger.log(`🔍 Bedrock retrieval with STRICT ticker filtering`);
     this.logger.log(`   Query: "${query.query}"`);
     this.logger.log(`   Primary Ticker: ${primaryTicker || 'NONE - WARNING!'}`);
+    this.logger.log(`   Section Types: ${sectionTypes.join(', ') || 'NONE'}`);
     if (primarySubsection) {
       this.logger.log(`   Subsection: ${primarySubsection}`);
     }
-    this.logger.log(`   Filter: ${JSON.stringify(filter)}`);
 
     if (!primaryTicker) {
       this.logger.warn('⚠️ NO TICKER FILTER - This may return mixed company results!');
     }
 
-    // Phase 2: Implement fallback chain for subsection filtering
-    let results = await this.bedrock.retrieve(query.query, filter, numberOfResults);
-    
-    // Fallback 1: If subsection filtering returns no results, try section-only
-    if (results.length === 0 && primarySubsection) {
-      this.logger.log(`⚠️ No results with subsection filter, falling back to section-only`);
-      const sectionOnlyFilter: MetadataFilter = {
+    let results: ChunkResult[] = [];
+
+    // ENHANCED: If multiple section types, search each and merge results
+    if (sectionTypes.length > 1) {
+      this.logger.log(`🔄 Multiple section types detected, searching each separately`);
+      const allResults: ChunkResult[] = [];
+      const resultsPerSection = Math.ceil(numberOfResults / sectionTypes.length);
+      
+      for (const sectionType of sectionTypes) {
+        const filter: MetadataFilter = {
+          ticker: primaryTicker,
+          sectionType: sectionType,
+          filingType: query.documentTypes?.[0],
+          fiscalPeriod: query.fiscalPeriod,
+        };
+        
+        this.logger.log(`   Searching section: ${sectionType}`);
+        
+        let sectionResults: ChunkResult[] = [];
+        
+        if (this.useAdvancedRetrieval && this.useBedrockKB) {
+          const advancedConfig: AdvancedRetrievalConfig = {
+            numberOfResults: resultsPerSection,
+            maxTokens: parseInt(process.env.CONTEXT_TOKEN_BUDGET || '4000', 10),
+          };
+          
+          const advancedResult = await this.advancedRetrieval.retrieve(
+            query.query,
+            filter,
+            advancedConfig,
+          );
+          
+          sectionResults = advancedResult.chunks.map(chunk => {
+            if ('expandedContent' in chunk) {
+              return {
+                content: chunk.expandedContent || chunk.content,
+                score: chunk.score,
+                metadata: chunk.metadata,
+                source: chunk.source,
+              };
+            }
+            return chunk as ChunkResult;
+          });
+        } else {
+          sectionResults = await this.bedrock.retrieve(query.query, filter, resultsPerSection);
+        }
+        
+        this.logger.log(`   Found ${sectionResults.length} results in ${sectionType}`);
+        allResults.push(...sectionResults);
+      }
+      
+      // Sort by score and take top results
+      results = allResults
+        .sort((a, b) => b.score - a.score)
+        .slice(0, numberOfResults);
+      
+      this.logger.log(`🔄 Merged ${allResults.length} results from ${sectionTypes.length} sections, returning top ${results.length}`);
+    } else {
+      // Single section type (original logic)
+      const filter: MetadataFilter = {
         ticker: primaryTicker,
-        sectionType: query.sectionTypes?.[0],
+        sectionType: sectionTypes[0],
+        subsectionName: primarySubsection,
         filingType: query.documentTypes?.[0],
         fiscalPeriod: query.fiscalPeriod,
       };
-      results = await this.bedrock.retrieve(query.query, sectionOnlyFilter, numberOfResults);
+
+      this.logger.log(`   Filter: ${JSON.stringify(filter)}`);
+
+      // Phase 3: Use Advanced Retrieval Service if enabled
+      if (this.useAdvancedRetrieval && this.useBedrockKB) {
+        this.logger.log(`🚀 Using Phase 3 Advanced Retrieval techniques`);
+        
+        const advancedConfig: AdvancedRetrievalConfig = {
+          numberOfResults,
+          maxTokens: parseInt(process.env.CONTEXT_TOKEN_BUDGET || '4000', 10),
+        };
+        
+        const advancedResult = await this.advancedRetrieval.retrieve(
+          query.query,
+          filter,
+          advancedConfig,
+        );
+        
+        // Log which techniques were used
+        if (advancedResult.metrics.techniquesUsed.length > 0) {
+          this.logger.log(`   Techniques used: ${advancedResult.metrics.techniquesUsed.join(', ')}`);
+          this.logger.log(`   Total latency: ${advancedResult.metrics.totalLatencyMs}ms`);
+        }
+        
+        if (advancedResult.errors.length > 0) {
+          this.logger.warn(`   Errors: ${advancedResult.errors.join(', ')}`);
+        }
+        
+        // Convert ExpandedChunk[] to ChunkResult[] if needed
+        results = advancedResult.chunks.map(chunk => {
+          // Check if it's an ExpandedChunk (has expandedContent)
+          if ('expandedContent' in chunk) {
+            return {
+              content: chunk.expandedContent || chunk.content,
+              score: chunk.score,
+              metadata: chunk.metadata,
+              source: chunk.source,
+            };
+          }
+          return chunk as ChunkResult;
+        });
+      } else {
+        // Standard retrieval without advanced techniques
+        results = await this.bedrock.retrieve(query.query, filter, numberOfResults);
+      }
+      
+      // Phase 2: Implement fallback chain for subsection filtering
+      // Fallback 1: If subsection filtering returns no results, try section-only
+      if (results.length === 0 && primarySubsection) {
+        this.logger.log(`⚠️ No results with subsection filter, falling back to section-only`);
+        const sectionOnlyFilter: MetadataFilter = {
+          ticker: primaryTicker,
+          sectionType: sectionTypes[0],
+          filingType: query.documentTypes?.[0],
+          fiscalPeriod: query.fiscalPeriod,
+        };
+        results = await this.bedrock.retrieve(query.query, sectionOnlyFilter, numberOfResults);
+      }
     }
     
     // Fallback 2: If section filtering returns no results, try broader search (ticker only)
@@ -639,12 +769,22 @@ export class SemanticRetrieverService {
       const metrics: string[] = [];
 
       // Map query terms to relevant metrics
-      if (queryLower.includes('revenue') || queryLower.includes('sales') || queryLower.includes('income')) {
-        metrics.push('revenue', 'total_revenue', 'net_income');
+      // CRITICAL FIX: Be more precise - don't add multiple metrics for a single query term
+      if ((queryLower.includes('revenue') || queryLower.includes('sales') || queryLower.includes('top line')) 
+          && !queryLower.includes('net income') && !queryLower.includes('income statement')) {
+        metrics.push('revenue', 'total_revenue');
       }
       
-      if (queryLower.includes('profit') || queryLower.includes('earnings') || queryLower.includes('income')) {
-        metrics.push('net_income', 'gross_profit', 'operating_income');
+      if (queryLower.includes('net income') || queryLower.includes('profit') || queryLower.includes('earnings') || queryLower.includes('bottom line')) {
+        metrics.push('net_income');
+      }
+      
+      if (queryLower.includes('gross profit') || queryLower.includes('gross margin')) {
+        metrics.push('gross_profit');
+      }
+      
+      if (queryLower.includes('operating income') || queryLower.includes('operating profit') || queryLower.includes('ebit')) {
+        metrics.push('operating_income');
       }
       
       if (queryLower.includes('cash') || queryLower.includes('flow')) {

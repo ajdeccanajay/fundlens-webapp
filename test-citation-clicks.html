@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Citation Click Test</title>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <style>
+        .citation-link {
+            color: #2563eb;
+            text-decoration: none;
+            font-weight: 600;
+            padding: 0 2px;
+            border-radius: 2px;
+            transition: all 0.15s ease;
+        }
+        
+        .citation-link:hover {
+            background-color: #dbeafe;
+            color: #1e40af;
+        }
+        
+        .modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 0.5rem;
+            max-width: 600px;
+        }
+    </style>
+</head>
+<body x-data="testApp()">
+    <div style="padding: 2rem;">
+        <h1>Citation Click Test</h1>
+        
+        <div style="margin: 2rem 0; padding: 1rem; border: 1px solid #ccc; border-radius: 0.5rem;">
+            <p>NVIDIA's revenue growth has been exceptional <a href="#" class="citation-link" data-citation-num="1">[1]</a>, driven by strong demand for AI chips <a href="#" class="citation-link" data-citation-num="2">[2]</a>.</p>
+        </div>
+        
+        <div x-show="showModal" class="modal" @click.self="showModal = false">
+            <div class="modal-content" @click.stop>
+                <h2 x-text="`${modal.ticker} ${modal.filingType} ${modal.fiscalPeriod}`"></h2>
+                <p><strong>Section:</strong> <span x-text="modal.section"></span></p>
+                <p><strong>Excerpt:</strong> <span x-text="modal.excerpt"></span></p>
+                <button @click="showModal = false">Close</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function testApp() {
+            return {
+                showModal: false,
+                modal: {},
+                currentCitations: [
+                    {
+                        number: 1,
+                        ticker: 'NVDA',
+                        filingType: '10-K',
+                        fiscalPeriod: 'FY2024',
+                        section: 'Item 1. Business',
+                        excerpt: 'Our revenue increased 126% year-over-year...',
+                        relevanceScore: 0.95
+                    },
+                    {
+                        number: 2,
+                        ticker: 'NVDA',
+                        filingType: '10-Q',
+                        fiscalPeriod: 'Q3 2024',
+                        section: 'Item 2. Management Discussion',
+                        excerpt: 'Data center revenue reached record levels...',
+                        relevanceScore: 0.92
+                    }
+                ],
+                
+                init() {
+                    // Set up click event delegation
+                    document.addEventListener('click', (event) => {
+                        const citationLink = event.target.closest('.citation-link');
+                        if (citationLink) {
+                            event.preventDefault();
+                            const citationNum = parseInt(citationLink.getAttribute('data-citation-num'));
+                            console.log('Citation clicked:', citationNum);
+                            this.handleCitationClick(citationNum);
+                        }
+                    });
+                },
+                
+                handleCitationClick(citationNum) {
+                    const citation = this.currentCitations.find(c => c.number === citationNum);
+                    if (citation) {
+                        this.modal = citation;
+                        this.showModal = true;
+                        console.log('Opening modal for citation:', citation);
+                    } else {
+                        console.error('Citation not found:', citationNum);
+                    }
+                }
+            };
+        }
+    </script>
+</body>
+</html>

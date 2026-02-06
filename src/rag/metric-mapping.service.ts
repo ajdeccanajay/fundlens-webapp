@@ -66,16 +66,16 @@ export class MetricMappingService implements OnModuleInit {
   // LRU cache for learned queries (1000 entries max)
   private learnedCache: LRUCache<string, MetricMatch>;
   
-  // Path to YAML configuration
+  // Path to YAML configuration (use process.cwd() to get workspace root)
   private readonly yamlPath = path.join(
-    __dirname,
-    '../../python_parser/xbrl_parsing/metric_mapping_enhanced.yaml'
+    process.cwd(),
+    'python_parser/xbrl_parsing/metric_mapping_enhanced.yaml'
   );
   
   // Path to Python semantic matcher
   private readonly pythonMatcherPath = path.join(
-    __dirname,
-    '../../python_parser/xbrl_parsing/semantic_matcher.py'
+    process.cwd(),
+    'python_parser/xbrl_parsing/semantic_matcher.py'
   );
   
   // Semantic matcher configuration

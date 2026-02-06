@@ -88,7 +88,8 @@ export class IntentAnalyticsService {
       `;
 
       // If detection failed, track the pattern
-      if (!params.success || params.confidence < 0.6) {
+      // CRITICAL FIX: Changed from < 0.6 to <= 0.6 for consistency with failure threshold
+      if (!params.success || params.confidence <= 0.6) {
         await this.trackFailedPattern(params.tenantId, params.query);
       }
     } catch (error) {
@@ -163,13 +164,14 @@ export class IntentAnalyticsService {
       const metric = metrics[0];
 
       // Get top failed patterns
+      // CRITICAL FIX: Changed from < 0.6 to <= 0.6 for consistency with failure threshold
       const failedPatterns = await this.prisma.$queryRaw<any[]>`
         SELECT query, COUNT(*) as count
         FROM intent_detection_logs
         WHERE tenant_id = ${tenantId}
           AND created_at >= ${periodStart}
           AND created_at < ${periodEnd}
-          AND (success = false OR confidence < 0.6)
+          AND (success = false OR confidence <= 0.6)
         GROUP BY query
         ORDER BY count DESC
         LIMIT 10
