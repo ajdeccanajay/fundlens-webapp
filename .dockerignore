@@ -52,8 +52,10 @@ rebuild-specs/
 # Scripts (deployment scripts not needed in container)
 scripts/
 
-# Python parser (built separately)
+# Python parser (built separately, but keep config files needed by backend)
 python_parser/
+!python_parser/xbrl_parsing/
+!python_parser/xbrl_parsing/metric_mapping_enhanced.yaml
 
 # Misc
 .DS_Store

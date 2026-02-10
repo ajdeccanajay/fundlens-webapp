@@ -47,6 +47,67 @@
     border-color: var(--color-teal-500, #1E5A7A) !important;
 }
 
+/* Markdown Tables in Chat Messages */
+.message-assistant table,
+.markdown-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 14px;
+    border: 1px solid var(--border-subtle, #E2E8F0);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.message-assistant table thead,
+.markdown-table thead {
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+.message-assistant table th,
+.markdown-table th {
+    padding: 12px 16px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-primary, #0B1829);
+    border-bottom: 2px solid var(--border-default, #CBD5E1);
+    white-space: nowrap;
+}
+
+.message-assistant table td,
+.markdown-table td {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border-subtle, #E2E8F0);
+    color: var(--text-secondary, #475569);
+}
+
+.message-assistant table tbody tr:last-child td,
+.markdown-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.message-assistant table tbody tr:nth-child(even),
+.markdown-table tbody tr:nth-child(even) {
+    background: #fafbfc;
+}
+
+.message-assistant table tbody tr:hover,
+.markdown-table tbody tr:hover {
+    background: rgba(30, 90, 122, 0.05);
+}
+
+/* Numeric columns - right align */
+.message-assistant table td:not(:first-child),
+.markdown-table td:not(:first-child) {
+    text-align: right;
+    font-family: var(--font-mono, 'JetBrains Mono', monospace);
+}
+
+.message-assistant table th:not(:first-child),
+.markdown-table th:not(:first-child) {
+    text-align: right;
+}
+
 /* Message Actions */
 .message__actions {
     display: flex;

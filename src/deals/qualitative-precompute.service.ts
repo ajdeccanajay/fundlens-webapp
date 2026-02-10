@@ -59,12 +59,13 @@ export interface PrecomputeResult {
  * Pre-generates and caches qualitative analysis during pipeline execution
  * so users get instant results when viewing the Qualitative Analysis tab.
  * 
- * Cache expires after 7 days or when new filings are ingested.
+ * Cache persists indefinitely until:
+ * - Deal is deleted
+ * - New SEC filings are downloaded and parsed (invalidateCache called)
  */
 @Injectable()
 export class QualitativePrecomputeService {
   private readonly logger = new Logger(QualitativePrecomputeService.name);
-  private readonly CACHE_TTL_DAYS = 7;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -489,7 +490,7 @@ export class QualitativePrecomputeService {
   }
 
   /**
-   * Cache an answer
+   * Cache an answer (no expiration - persists until deal deleted or new SEC data)
    */
   private async cacheAnswer(
     ticker: string,
@@ -497,8 +498,11 @@ export class QualitativePrecomputeService {
     question: string,
     data: { answer: string; sources: any[]; confidence: string; narrativeCount: number },
   ): Promise<void> {
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + this.CACHE_TTL_DAYS);
+    // Set expires_at to far future (year 2099) to effectively never expire
+    // Cache is only invalidated when:
+    // 1. Deal is deleted (CASCADE delete)
+    // 2. New SEC filings are parsed (explicit invalidateCache call)
+    const expiresAt = new Date('2099-12-31');
 
     await this.prisma.$executeRaw`
       INSERT INTO qualitative_cache (id, ticker, category, question, answer, sources, confidence, narrative_count, expires_at, generated_at, created_at, updated_at)

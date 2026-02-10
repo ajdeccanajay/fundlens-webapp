@@ -69,6 +69,9 @@ COPY --from=builder /app/dist ./dist
 # Copy public assets for static serving
 COPY --from=builder /app/public ./public
 
+# Copy Python parser config files needed by backend
+COPY --from=builder /app/python_parser/xbrl_parsing/metric_mapping_enhanced.yaml ./python_parser/xbrl_parsing/
+
 # Set ownership to non-root user
 RUN chown -R nestjs:nodejs /app
 

@@ -1798,3 +1798,245 @@ button:hover .fa-book-open {
 .transition-slow {
   transition: all 0.3s ease;
 }
+
+
+/* ========================================
+   Qualitative Analysis Markdown Styling
+   ======================================== */
+
+/* Container for qualitative answers with markdown */
+.qualitative-answer {
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.qualitative-answer:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* Markdown content styling - enterprise grade */
+.qualitative-content {
+  color: var(--fundlens-gray-700);
+  font-size: 0.9375rem;
+  line-height: 1.7;
+}
+
+/* Headers */
+.qualitative-content h1,
+.qualitative-content h2,
+.qualitative-content h3,
+.qualitative-content h4 {
+  font-weight: 600;
+  margin-top: 1.5em;
+  margin-bottom: 0.75em;
+  color: var(--fundlens-gray-900);
+  line-height: 1.3;
+}
+
+.qualitative-content h1 {
+  font-size: 1.5em;
+  border-bottom: 2px solid var(--fundlens-gray-200);
+  padding-bottom: 0.3em;
+}
+
+.qualitative-content h2 {
+  font-size: 1.3em;
+  border-bottom: 1px solid var(--fundlens-gray-200);
+  padding-bottom: 0.3em;
+}
+
+.qualitative-content h3 {
+  font-size: 1.15em;
+}
+
+.qualitative-content h4 {
+  font-size: 1em;
+}
+
+/* First header has no top margin */
+.qualitative-content h1:first-child,
+.qualitative-content h2:first-child,
+.qualitative-content h3:first-child,
+.qualitative-content h4:first-child {
+  margin-top: 0;
+}
+
+/* Paragraphs */
+.qualitative-content p {
+  margin-bottom: 1em;
+  line-height: 1.7;
+}
+
+.qualitative-content p:last-child {
+  margin-bottom: 0;
+}
+
+/* Lists */
+.qualitative-content ul,
+.qualitative-content ol {
+  margin: 1em 0;
+  padding-left: 2em;
+}
+
+.qualitative-content li {
+  margin-bottom: 0.5em;
+  line-height: 1.6;
+}
+
+.qualitative-content li:last-child {
+  margin-bottom: 0;
+}
+
+/* Nested lists */
+.qualitative-content ul ul,
+.qualitative-content ol ol,
+.qualitative-content ul ol,
+.qualitative-content ol ul {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+
+/* Tables - Investment Grade Styling (matching research assistant) */
+.qualitative-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5em 0;
+  font-size: 0.875rem;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.qualitative-content table th {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  padding: 0.875rem 1rem;
+  text-align: left;
+  font-weight: 600;
+  color: #1e293b;
+  border-bottom: 2px solid #cbd5e1;
+  font-size: 0.8125rem;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.qualitative-content table td {
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid #e2e8f0;
+  color: #334155;
+  vertical-align: top;
+}
+
+.qualitative-content table tr:last-child td {
+  border-bottom: none;
+}
+
+.qualitative-content table tr:hover {
+  background: #f8fafc;
+}
+
+/* Alternating row colors for better readability */
+.qualitative-content table tbody tr:nth-child(even) {
+  background: #fafbfc;
+}
+
+.qualitative-content table tbody tr:nth-child(even):hover {
+  background: #f1f5f9;
+}
+
+/* Blockquotes */
+.qualitative-content blockquote {
+  margin: 1.5em 0;
+  padding: 1em 1.5em;
+  border-left: 4px solid var(--fundlens-primary-500);
+  background: var(--fundlens-gray-50);
+  color: var(--fundlens-gray-700);
+  font-style: italic;
+}
+
+.qualitative-content blockquote p {
+  margin: 0;
+}
+
+/* Code blocks */
+.qualitative-content code {
+  background: var(--fundlens-gray-100);
+  padding: 0.2em 0.4em;
+  border-radius: 3px;
+  font-family: 'Monaco', 'Courier New', monospace;
+  font-size: 0.9em;
+  color: var(--fundlens-gray-800);
+}
+
+.qualitative-content pre {
+  background: var(--fundlens-gray-900);
+  color: var(--fundlens-gray-100);
+  padding: 1em;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 1.5em 0;
+}
+
+.qualitative-content pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+}
+
+/* Horizontal rules */
+.qualitative-content hr {
+  border: none;
+  border-top: 2px solid var(--fundlens-gray-200);
+  margin: 2em 0;
+}
+
+/* Links */
+.qualitative-content a {
+  color: var(--fundlens-primary-600);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.2s;
+}
+
+.qualitative-content a:hover {
+  border-bottom-color: var(--fundlens-primary-600);
+}
+
+/* Strong and emphasis */
+.qualitative-content strong {
+  font-weight: 600;
+  color: var(--fundlens-gray-900);
+}
+
+.qualitative-content em {
+  font-style: italic;
+}
+
+/* Images */
+.qualitative-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: 1.5em 0;
+}
+
+/* Citation links within content */
+.qualitative-content .citation-link {
+  color: #2563eb;
+  text-decoration: none;
+  font-weight: 500;
+  padding: 0 2px;
+  border-radius: 2px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  display: inline-block;
+}
+
+.qualitative-content .citation-link:hover {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+.qualitative-content .citation-link:active {
+  background-color: #bfdbfe;
+}

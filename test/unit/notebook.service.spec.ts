@@ -40,7 +40,7 @@ describe('NotebookService', () => {
 
     // Mock PrismaService
     const mockPrisma = {
-      researchNotebook: {
+      notebook: {
         create: jest.fn(),
         findMany: jest.fn(),
         findFirst: jest.fn(),
@@ -48,7 +48,7 @@ describe('NotebookService', () => {
         delete: jest.fn(),
         count: jest.fn(),
       },
-      researchInsight: {
+      insight: {
         create: jest.fn(),
         findMany: jest.fn(),
         findFirst: jest.fn(),
@@ -90,14 +90,14 @@ describe('NotebookService', () => {
         _count: { insights: 0 },
       };
 
-      (prisma.researchNotebook.create as jest.Mock).mockResolvedValue(mockNotebook);
+      (prisma.notebook.create as jest.Mock).mockResolvedValue(mockNotebook);
 
       const result = await service.createNotebook({
         title: 'My Research',
         description: 'Test notebook',
       });
 
-      expect(prisma.researchNotebook.create).toHaveBeenCalledWith({
+      expect(prisma.notebook.create).toHaveBeenCalledWith({
         data: {
           tenantId,
           userId,
@@ -142,12 +142,12 @@ describe('NotebookService', () => {
         },
       ];
 
-      (prisma.researchNotebook.findMany as jest.Mock).mockResolvedValue(mockNotebooks);
-      (prisma.researchNotebook.count as jest.Mock).mockResolvedValue(2);
+      (prisma.notebook.findMany as jest.Mock).mockResolvedValue(mockNotebooks);
+      (prisma.notebook.count as jest.Mock).mockResolvedValue(2);
 
       const result = await service.listNotebooks();
 
-      expect(prisma.researchNotebook.findMany).toHaveBeenCalledWith({
+      expect(prisma.notebook.findMany).toHaveBeenCalledWith({
         where: { tenantId, userId },
         include: {
           _count: {
@@ -164,12 +164,12 @@ describe('NotebookService', () => {
     });
 
     it('should filter archived notebooks', async () => {
-      (prisma.researchNotebook.findMany as jest.Mock).mockResolvedValue([]);
-      (prisma.researchNotebook.count as jest.Mock).mockResolvedValue(0);
+      (prisma.notebook.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.notebook.count as jest.Mock).mockResolvedValue(0);
 
       await service.listNotebooks({ archived: true });
 
-      expect(prisma.researchNotebook.findMany).toHaveBeenCalledWith(
+      expect(prisma.notebook.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { tenantId, userId, isArchived: true },
         })
@@ -177,12 +177,12 @@ describe('NotebookService', () => {
     });
 
     it('should support pagination', async () => {
-      (prisma.researchNotebook.findMany as jest.Mock).mockResolvedValue([]);
-      (prisma.researchNotebook.count as jest.Mock).mockResolvedValue(100);
+      (prisma.notebook.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.notebook.count as jest.Mock).mockResolvedValue(100);
 
       const result = await service.listNotebooks({ limit: 10, offset: 20 });
 
-      expect(prisma.researchNotebook.findMany).toHaveBeenCalledWith(
+      expect(prisma.notebook.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           take: 10,
           skip: 20,
@@ -219,11 +219,11 @@ describe('NotebookService', () => {
         ],
       };
 
-      (prisma.researchNotebook.findFirst as jest.Mock).mockResolvedValue(mockNotebook);
+      (prisma.notebook.findFirst as jest.Mock).mockResolvedValue(mockNotebook);
 
       const result = await service.getNotebook('notebook-1');
 
-      expect(prisma.researchNotebook.findFirst).toHaveBeenCalledWith({
+      expect(prisma.notebook.findFirst).toHaveBeenCalledWith({
         where: {
           id: 'notebook-1',
           tenantId,
@@ -241,7 +241,7 @@ describe('NotebookService', () => {
     });
 
     it('should throw NotFoundException for non-existent notebook', async () => {
-      (prisma.researchNotebook.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.notebook.findFirst as jest.Mock).mockResolvedValue(null);
 
       await expect(service.getNotebook('non-existent')).rejects.toThrow(
         NotFoundException
@@ -267,8 +267,8 @@ describe('NotebookService', () => {
         _count: { insights: 2 },
       };
 
-      (prisma.researchNotebook.findFirst as jest.Mock).mockResolvedValue(mockExisting);
-      (prisma.researchNotebook.update as jest.Mock).mockResolvedValue(mockUpdated);
+      (prisma.notebook.findFirst as jest.Mock).mockResolvedValue(mockExisting);
+      (prisma.notebook.update as jest.Mock).mockResolvedValue(mockUpdated);
 
       const result = await service.updateNotebook('notebook-1', {
         title: 'Updated Title',
@@ -285,13 +285,13 @@ describe('NotebookService', () => {
         userId,
       };
 
-      (prisma.researchNotebook.findFirst as jest.Mock).mockResolvedValue(mockExisting);
-      (prisma.researchNotebook.delete as jest.Mock).mockResolvedValue(mockExisting);
+      (prisma.notebook.findFirst as jest.Mock).mockResolvedValue(mockExisting);
+      (prisma.notebook.delete as jest.Mock).mockResolvedValue(mockExisting);
 
       const result = await service.deleteNotebook('notebook-1');
 
       expect(result.success).toBe(true);
-      expect(prisma.researchNotebook.delete).toHaveBeenCalledWith({
+      expect(prisma.notebook.delete).toHaveBeenCalledWith({
         where: { id: 'notebook-1' },
       });
     });
@@ -323,10 +323,10 @@ describe('NotebookService', () => {
         updatedAt: new Date(),
       };
 
-      (prisma.researchNotebook.findFirst as jest.Mock).mockResolvedValue(mockNotebook);
-      (prisma.researchInsight.findFirst as jest.Mock).mockResolvedValue(mockMaxPosition);
-      (prisma.researchInsight.create as jest.Mock).mockResolvedValue(mockInsight);
-      (prisma.researchNotebook.update as jest.Mock).mockResolvedValue({});
+      (prisma.notebook.findFirst as jest.Mock).mockResolvedValue(mockNotebook);
+      (prisma.insight.findFirst as jest.Mock).mockResolvedValue(mockMaxPosition);
+      (prisma.insight.create as jest.Mock).mockResolvedValue(mockInsight);
+      (prisma.notebook.update as jest.Mock).mockResolvedValue({});
 
       const result = await service.addInsight('notebook-1', {
         content: 'New insight',
@@ -347,15 +347,15 @@ describe('NotebookService', () => {
         userId,
       };
 
-      (prisma.researchNotebook.findFirst as jest.Mock).mockResolvedValue(mockNotebook);
-      (prisma.researchInsight.findFirst as jest.Mock).mockResolvedValue(null);
-      (prisma.researchInsight.create as jest.Mock).mockResolvedValue({
+      (prisma.notebook.findFirst as jest.Mock).mockResolvedValue(mockNotebook);
+      (prisma.insight.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.insight.create as jest.Mock).mockResolvedValue({
         id: 'insight-1',
         position: 0,
         tags: [],
         companies: [],
       });
-      (prisma.researchNotebook.update as jest.Mock).mockResolvedValue({});
+      (prisma.notebook.update as jest.Mock).mockResolvedValue({});
 
       const result = await service.addInsight('notebook-1', {
         content: 'First insight',
@@ -390,10 +390,10 @@ describe('NotebookService', () => {
         updatedAt: new Date(),
       };
 
-      (prisma.researchNotebook.findFirst as jest.Mock).mockResolvedValue(mockNotebook);
-      (prisma.researchInsight.findFirst as jest.Mock).mockResolvedValue(mockExisting);
-      (prisma.researchInsight.update as jest.Mock).mockResolvedValue(mockUpdated);
-      (prisma.researchNotebook.update as jest.Mock).mockResolvedValue({});
+      (prisma.notebook.findFirst as jest.Mock).mockResolvedValue(mockNotebook);
+      (prisma.insight.findFirst as jest.Mock).mockResolvedValue(mockExisting);
+      (prisma.insight.update as jest.Mock).mockResolvedValue(mockUpdated);
+      (prisma.notebook.update as jest.Mock).mockResolvedValue({});
 
       const result = await service.updateInsight('notebook-1', 'insight-1', {
         content: 'Updated content',
@@ -418,15 +418,15 @@ describe('NotebookService', () => {
         notebookId: 'notebook-1',
       };
 
-      (prisma.researchNotebook.findFirst as jest.Mock).mockResolvedValue(mockNotebook);
-      (prisma.researchInsight.findFirst as jest.Mock).mockResolvedValue(mockExisting);
-      (prisma.researchInsight.delete as jest.Mock).mockResolvedValue(mockExisting);
-      (prisma.researchNotebook.update as jest.Mock).mockResolvedValue({});
+      (prisma.notebook.findFirst as jest.Mock).mockResolvedValue(mockNotebook);
+      (prisma.insight.findFirst as jest.Mock).mockResolvedValue(mockExisting);
+      (prisma.insight.delete as jest.Mock).mockResolvedValue(mockExisting);
+      (prisma.notebook.update as jest.Mock).mockResolvedValue({});
 
       const result = await service.deleteInsight('notebook-1', 'insight-1');
 
       expect(result.success).toBe(true);
-      expect(prisma.researchInsight.delete).toHaveBeenCalledWith({
+      expect(prisma.insight.delete).toHaveBeenCalledWith({
         where: { id: 'insight-1' },
       });
     });
@@ -438,8 +438,8 @@ describe('NotebookService', () => {
         userId,
       };
 
-      (prisma.researchNotebook.findFirst as jest.Mock).mockResolvedValue(mockNotebook);
-      (prisma.researchInsight.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.notebook.findFirst as jest.Mock).mockResolvedValue(mockNotebook);
+      (prisma.insight.findFirst as jest.Mock).mockResolvedValue(null);
 
       await expect(
         service.updateInsight('notebook-1', 'non-existent', { content: 'test' })
@@ -449,12 +449,12 @@ describe('NotebookService', () => {
 
   describe('Tenant Isolation', () => {
     it('should return only current tenant notebooks', async () => {
-      (prisma.researchNotebook.findMany as jest.Mock).mockResolvedValue([]);
-      (prisma.researchNotebook.count as jest.Mock).mockResolvedValue(0);
+      (prisma.notebook.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.notebook.count as jest.Mock).mockResolvedValue(0);
 
       await service.listNotebooks();
 
-      expect(prisma.researchNotebook.findMany).toHaveBeenCalledWith(
+      expect(prisma.notebook.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({ tenantId }),
         })
@@ -462,7 +462,7 @@ describe('NotebookService', () => {
     });
 
     it('should not allow access to other tenant notebook', async () => {
-      (prisma.researchNotebook.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.notebook.findFirst as jest.Mock).mockResolvedValue(null);
 
       await expect(service.getNotebook('other-tenant-notebook')).rejects.toThrow(
         NotFoundException
@@ -470,7 +470,7 @@ describe('NotebookService', () => {
     });
 
     it('should not allow updating other tenant notebook', async () => {
-      (prisma.researchNotebook.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.notebook.findFirst as jest.Mock).mockResolvedValue(null);
 
       await expect(
         service.updateNotebook('other-tenant-notebook', { title: 'Hacked' })
@@ -478,7 +478,7 @@ describe('NotebookService', () => {
     });
 
     it('should not allow deleting other tenant notebook', async () => {
-      (prisma.researchNotebook.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.notebook.findFirst as jest.Mock).mockResolvedValue(null);
 
       await expect(service.deleteNotebook('other-tenant-notebook')).rejects.toThrow(
         NotFoundException
@@ -486,7 +486,7 @@ describe('NotebookService', () => {
     });
 
     it('should not allow adding insight to other tenant notebook', async () => {
-      (prisma.researchNotebook.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.notebook.findFirst as jest.Mock).mockResolvedValue(null);
 
       await expect(
         service.addInsight('other-tenant-notebook', { content: 'test' })
@@ -496,12 +496,12 @@ describe('NotebookService', () => {
 
   describe('User Isolation', () => {
     it('should return only current user notebooks', async () => {
-      (prisma.researchNotebook.findMany as jest.Mock).mockResolvedValue([]);
-      (prisma.researchNotebook.count as jest.Mock).mockResolvedValue(0);
+      (prisma.notebook.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.notebook.count as jest.Mock).mockResolvedValue(0);
 
       await service.listNotebooks();
 
-      expect(prisma.researchNotebook.findMany).toHaveBeenCalledWith(
+      expect(prisma.notebook.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({ userId }),
         })
@@ -509,7 +509,7 @@ describe('NotebookService', () => {
     });
 
     it('should not allow access to other user notebook (same tenant)', async () => {
-      (prisma.researchNotebook.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.notebook.findFirst as jest.Mock).mockResolvedValue(null);
 
       await expect(service.getNotebook('other-user-notebook')).rejects.toThrow(
         NotFoundException
@@ -531,10 +531,10 @@ describe('NotebookService', () => {
         { id: 'insight-3', notebookId: 'notebook-1' },
       ];
 
-      (prisma.researchNotebook.findFirst as jest.Mock).mockResolvedValue(mockNotebook);
-      (prisma.researchInsight.findMany as jest.Mock).mockResolvedValue(mockInsights);
-      (prisma.researchInsight.update as jest.Mock).mockResolvedValue({});
-      (prisma.researchNotebook.update as jest.Mock).mockResolvedValue({});
+      (prisma.notebook.findFirst as jest.Mock).mockResolvedValue(mockNotebook);
+      (prisma.insight.findMany as jest.Mock).mockResolvedValue(mockInsights);
+      (prisma.insight.update as jest.Mock).mockResolvedValue({});
+      (prisma.notebook.update as jest.Mock).mockResolvedValue({});
 
       const result = await service.reorderInsights('notebook-1', [
         'insight-3',
@@ -543,16 +543,16 @@ describe('NotebookService', () => {
       ]);
 
       expect(result.success).toBe(true);
-      expect(prisma.researchInsight.update).toHaveBeenCalledTimes(3);
-      expect(prisma.researchInsight.update).toHaveBeenCalledWith({
+      expect(prisma.insight.update).toHaveBeenCalledTimes(3);
+      expect(prisma.insight.update).toHaveBeenCalledWith({
         where: { id: 'insight-3' },
         data: { position: 0 },
       });
-      expect(prisma.researchInsight.update).toHaveBeenCalledWith({
+      expect(prisma.insight.update).toHaveBeenCalledWith({
         where: { id: 'insight-1' },
         data: { position: 1 },
       });
-      expect(prisma.researchInsight.update).toHaveBeenCalledWith({
+      expect(prisma.insight.update).toHaveBeenCalledWith({
         where: { id: 'insight-2' },
         data: { position: 2 },
       });
@@ -569,8 +569,8 @@ describe('NotebookService', () => {
         { id: 'insight-1', notebookId: 'notebook-1' },
       ];
 
-      (prisma.researchNotebook.findFirst as jest.Mock).mockResolvedValue(mockNotebook);
-      (prisma.researchInsight.findMany as jest.Mock).mockResolvedValue(mockInsights);
+      (prisma.notebook.findFirst as jest.Mock).mockResolvedValue(mockNotebook);
+      (prisma.insight.findMany as jest.Mock).mockResolvedValue(mockInsights);
 
       await expect(
         service.reorderInsights('notebook-1', ['insight-1', 'insight-2'])
@@ -619,7 +619,7 @@ describe('NotebookService', () => {
         ],
       };
 
-      (prisma.researchNotebook.findFirst as jest.Mock).mockResolvedValue(mockNotebook);
+      (prisma.notebook.findFirst as jest.Mock).mockResolvedValue(mockNotebook);
 
       const markdown = await service.exportMarkdown('notebook-1');
 
@@ -646,7 +646,7 @@ describe('NotebookService', () => {
         insights: [],
       };
 
-      (prisma.researchNotebook.findFirst as jest.Mock).mockResolvedValue(mockNotebook);
+      (prisma.notebook.findFirst as jest.Mock).mockResolvedValue(mockNotebook);
 
       const markdown = await service.exportMarkdown('notebook-1');
 

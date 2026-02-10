@@ -1,0 +1,703 @@
+/* IC Memo - Investment-Grade Document Styling */
+/* This is THE KILLER functionality - Premium institutional-grade styling */
+
+.ic-memo-container {
+    background: #ffffff;
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 72px 96px;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08), 0 20px 40px rgba(0, 0, 0, 0.06);
+    border-radius: 12px;
+    font-family: 'Charter', 'Georgia', 'Times New Roman', serif;
+    line-height: 1.75;
+    color: #0a0a0a;
+    position: relative;
+}
+
+/* Print-ready styling */
+@media print {
+    .ic-memo-container {
+        box-shadow: none;
+        padding: 48px;
+        max-width: 100%;
+        border-radius: 0;
+    }
+    
+    /* Ensure sources appear on new page */
+    .sources-section {
+        page-break-before: always;
+    }
+    
+    /* Keep citations visible */
+    .citation {
+        color: #2563eb !important;
+        text-decoration: underline;
+    }
+}
+
+/* Document Header - Premium Investment-Grade */
+.ic-memo-container .memo-header {
+    text-align: center;
+    border-bottom: 4px double #1a56db;
+    padding-bottom: 36px;
+    margin-bottom: 48px;
+    position: relative;
+}
+
+.ic-memo-container .memo-header::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 120px;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #1a56db, transparent);
+}
+
+.ic-memo-container .memo-title {
+    font-size: 36px;
+    font-weight: 800;
+    color: #0a0a0a;
+    margin-bottom: 16px;
+    letter-spacing: -0.8px;
+    text-transform: uppercase;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.ic-memo-container .memo-subtitle {
+    font-size: 20px;
+    color: #475569;
+    font-weight: 600;
+    margin-bottom: 12px;
+    letter-spacing: 0.3px;
+}
+
+.ic-memo-container .memo-date {
+    font-size: 13px;
+    color: #94a3b8;
+    font-style: italic;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 500;
+}
+
+/* Typography - Investment-Grade Hierarchy */
+.ic-memo-container h1 {
+    font-size: 30px;
+    font-weight: 800;
+    color: #0a0a0a;
+    margin-top: 56px;
+    margin-bottom: 28px;
+    padding-bottom: 16px;
+    padding-top: 8px;
+    border-bottom: 3px solid #1a56db;
+    letter-spacing: -0.6px;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    position: relative;
+}
+
+.ic-memo-container h1::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 60px;
+    height: 4px;
+    background: linear-gradient(90deg, #1a56db, #3b82f6);
+    border-radius: 2px;
+}
+
+.ic-memo-container h1:first-of-type {
+    margin-top: 0;
+}
+
+.ic-memo-container h2 {
+    font-size: 24px;
+    font-weight: 700;
+    color: #0f172a;
+    margin-top: 44px;
+    margin-bottom: 20px;
+    letter-spacing: -0.4px;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    padding-left: 16px;
+    border-left: 4px solid #3b82f6;
+}
+
+.ic-memo-container h3 {
+    font-size: 19px;
+    font-weight: 600;
+    color: #1e293b;
+    margin-top: 32px;
+    margin-bottom: 16px;
+    letter-spacing: -0.2px;
+}
+
+.ic-memo-container p {
+    font-size: 16px;
+    line-height: 1.75;
+    margin-bottom: 20px;
+    color: #1e293b;
+    text-align: justify;
+    hyphens: auto;
+}
+
+.ic-memo-container strong {
+    font-weight: 700;
+    color: #0a0a0a;
+}
+
+.ic-memo-container em {
+    font-style: italic;
+    color: #334155;
+}
+
+/* Lists - Professional Formatting */
+.ic-memo-container ul,
+.ic-memo-container ol {
+    margin: 24px 0;
+    padding-left: 40px;
+}
+
+.ic-memo-container li {
+    margin: 14px 0;
+    line-height: 1.7;
+    color: #1e293b;
+    padding-left: 8px;
+}
+
+.ic-memo-container ul li {
+    list-style-type: none;
+    position: relative;
+}
+
+.ic-memo-container ul li::before {
+    content: '▪';
+    position: absolute;
+    left: -24px;
+    color: #3b82f6;
+    font-size: 18px;
+    font-weight: bold;
+}
+
+.ic-memo-container ol li {
+    list-style-type: decimal;
+    font-weight: 500;
+}
+
+/* Tables - Investment-Grade Formatting */
+.ic-memo-container table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin: 40px 0;
+    font-size: 14px;
+    background: #ffffff;
+    border: 2px solid #cbd5e1;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05), 0 10px 15px rgba(0, 0, 0, 0.03);
+}
+
+.ic-memo-container thead {
+    background: linear-gradient(180deg, #1e40af 0%, #1e3a8a 100%);
+}
+
+.ic-memo-container th {
+    padding: 16px 20px;
+    text-align: left;
+    font-weight: 700;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #ffffff;
+    border-bottom: 3px solid #1e3a8a;
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.ic-memo-container th:last-child {
+    border-right: none;
+}
+
+/* Right-align numeric columns */
+.ic-memo-container th:not(:first-child) {
+    text-align: right;
+}
+
+.ic-memo-container td {
+    padding: 14px 20px;
+    border-bottom: 1px solid #e2e8f0;
+    border-right: 1px solid #f1f5f9;
+    color: #1e293b;
+    vertical-align: middle;
+    font-weight: 500;
+}
+
+.ic-memo-container td:last-child {
+    border-right: none;
+}
+
+/* Right-align numeric columns in body */
+.ic-memo-container td:not(:first-child) {
+    text-align: right;
+    font-family: 'SF Mono', 'Monaco', 'Menlo', 'Courier New', monospace;
+    font-size: 14px;
+    font-weight: 600;
+    color: #0f172a;
+}
+
+/* First column (labels) styling */
+.ic-memo-container td:first-child {
+    font-weight: 600;
+    color: #0f172a;
+    background: #f8fafc;
+}
+
+.ic-memo-container tbody tr {
+    transition: background-color 0.15s ease;
+}
+
+.ic-memo-container tbody tr:hover {
+    background: #f1f5f9;
+}
+
+.ic-memo-container tbody tr:nth-child(even) {
+    background: #fafbfc;
+}
+
+.ic-memo-container tbody tr:nth-child(even):hover {
+    background: #f1f5f9;
+}
+
+.ic-memo-container tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* Total/Summary rows in tables */
+.ic-memo-container tbody tr:last-child td {
+    font-weight: 700;
+    background: #f1f5f9;
+    border-top: 2px solid #cbd5e1;
+    color: #0a0a0a;
+}
+
+/* Citations - Clickable Links with Smooth Scroll */
+.ic-memo-container .citation {
+    display: inline-block;
+    color: #2563eb;
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 12px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    vertical-align: super;
+    line-height: 0;
+    position: relative;
+    top: -3px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+}
+
+.ic-memo-container .citation:hover {
+    background-color: #2563eb;
+    color: #ffffff;
+    border-color: #1e40af;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(37, 99, 235, 0.3);
+}
+
+.ic-memo-container .citation:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 2px rgba(37, 99, 235, 0.3);
+}
+
+/* Smooth scroll behavior for citation links */
+html {
+    scroll-behavior: smooth;
+}
+
+/* Sources Section - Always at Bottom */
+.ic-memo-container .sources-section {
+    margin-top: 80px;
+    padding-top: 48px;
+    border-top: 4px double #cbd5e1;
+    position: relative;
+}
+
+.ic-memo-container .sources-section::before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 120px;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #cbd5e1, transparent);
+}
+
+.ic-memo-container .sources-section h2 {
+    font-size: 24px;
+    font-weight: 800;
+    color: #0a0a0a;
+    margin-bottom: 32px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    border-left: 4px solid #1a56db;
+    padding-left: 16px;
+}
+
+.ic-memo-container .source-item {
+    margin-bottom: 20px;
+    padding: 16px 20px 16px 48px;
+    position: relative;
+    font-size: 14px;
+    line-height: 1.7;
+    color: #334155;
+    background: #f8fafc;
+    border-radius: 6px;
+    border-left: 3px solid #3b82f6;
+    transition: all 0.2s ease;
+    scroll-margin-top: 100px; /* Space for fixed headers when scrolling to citation */
+}
+
+.ic-memo-container .source-item:hover {
+    background: #f1f5f9;
+    border-left-color: #1e40af;
+    transform: translateX(4px);
+}
+
+.ic-memo-container .source-item::before {
+    content: attr(data-number);
+    position: absolute;
+    left: 16px;
+    top: 16px;
+    font-weight: 800;
+    color: #2563eb;
+    font-size: 15px;
+    font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+}
+
+.ic-memo-container .source-ticker {
+    font-weight: 700;
+    color: #0a0a0a;
+    font-size: 15px;
+    font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+}
+
+.ic-memo-container .source-filing {
+    color: #475569;
+    font-style: italic;
+    font-weight: 500;
+}
+
+/* Highlight source when navigated to via citation */
+.ic-memo-container .source-item:target {
+    background: #dbeafe;
+    border-left-color: #1e40af;
+    box-shadow: 0 4px 6px rgba(37, 99, 235, 0.1);
+    animation: highlight-pulse 1s ease-out;
+}
+
+@keyframes highlight-pulse {
+    0%, 100% { background: #dbeafe; }
+    50% { background: #bfdbfe; }
+}
+
+/* Blockquotes */
+.ic-memo-container blockquote {
+    border-left: 4px solid #1a56db;
+    padding: 16px 24px;
+    margin: 28px 0;
+    background: #f8fafc;
+    border-radius: 4px;
+    font-style: italic;
+    color: #475569;
+}
+
+/* Code blocks */
+.ic-memo-container code {
+    background: #f1f5f9;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
+    font-size: 14px;
+    color: #e83e8c;
+}
+
+.ic-memo-container pre {
+    background: #1e293b;
+    color: #e2e8f0;
+    padding: 20px;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin: 24px 0;
+    border: 1px solid #334155;
+}
+
+.ic-memo-container pre code {
+    background: transparent;
+    padding: 0;
+    color: inherit;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+/* Horizontal rules */
+.ic-memo-container hr {
+    border: none;
+    border-top: 1px solid #cbd5e1;
+    margin: 40px 0;
+}
+
+/* Links */
+.ic-memo-container a:not(.citation) {
+    color: #2563eb;
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.2s;
+}
+
+.ic-memo-container a:not(.citation):hover {
+    border-bottom-color: #2563eb;
+}
+
+/* Executive Summary Box - Premium Styling */
+.ic-memo-container .executive-summary {
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 50%, #bfdbfe 100%);
+    border-left: 6px solid #2563eb;
+    padding: 32px 36px;
+    margin: 40px 0;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(37, 99, 235, 0.1), 0 10px 15px rgba(37, 99, 235, 0.05);
+    position: relative;
+}
+
+.ic-memo-container .executive-summary::before {
+    content: '📊';
+    position: absolute;
+    top: 24px;
+    right: 24px;
+    font-size: 32px;
+    opacity: 0.3;
+}
+
+.ic-memo-container .executive-summary h2 {
+    margin-top: 0;
+    color: #1e40af;
+    font-size: 22px;
+    font-weight: 800;
+    border-left: none;
+    padding-left: 0;
+}
+
+/* Key Metrics Box - Investment-Grade */
+.ic-memo-container .key-metrics {
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border: 2px solid #cbd5e1;
+    padding: 32px;
+    margin: 36px 0;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+.ic-memo-container .metric-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 24px;
+    margin-top: 20px;
+}
+
+.ic-memo-container .metric-item {
+    text-align: center;
+    padding: 20px;
+    background: white;
+    border-radius: 6px;
+    border: 2px solid #e2e8f0;
+    transition: all 0.2s ease;
+}
+
+.ic-memo-container .metric-item:hover {
+    border-color: #3b82f6;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px rgba(59, 130, 246, 0.1);
+}
+
+.ic-memo-container .metric-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #64748b;
+    margin-bottom: 10px;
+    font-weight: 700;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.ic-memo-container .metric-value {
+    font-size: 28px;
+    font-weight: 800;
+    color: #0a0a0a;
+    font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+    letter-spacing: -0.5px;
+}
+
+/* Risk Callout - Enhanced Warning Style */
+.ic-memo-container .risk-callout {
+    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+    border-left: 6px solid #dc2626;
+    padding: 28px 32px;
+    margin: 36px 0;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(220, 38, 38, 0.1);
+    position: relative;
+}
+
+.ic-memo-container .risk-callout::before {
+    content: '⚠️';
+    position: absolute;
+    top: 24px;
+    right: 24px;
+    font-size: 32px;
+    opacity: 0.3;
+}
+
+.ic-memo-container .risk-callout h3 {
+    color: #991b1b;
+    margin-top: 0;
+    font-weight: 800;
+}
+
+/* Recommendation Box - Investment Decision */
+.ic-memo-container .recommendation {
+    background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 50%, #a7f3d0 100%);
+    border-left: 6px solid #059669;
+    padding: 32px 36px;
+    margin: 40px 0;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(5, 150, 105, 0.1), 0 10px 15px rgba(5, 150, 105, 0.05);
+    position: relative;
+}
+
+.ic-memo-container .recommendation::before {
+    content: '✓';
+    position: absolute;
+    top: 24px;
+    right: 24px;
+    font-size: 48px;
+    font-weight: 800;
+    color: #059669;
+    opacity: 0.2;
+}
+
+.ic-memo-container .recommendation h2 {
+    margin-top: 0;
+    color: #047857;
+    font-size: 22px;
+    font-weight: 800;
+    border-left: none;
+    padding-left: 0;
+}
+
+/* Page break for printing */
+@media print {
+    .ic-memo-container h1 {
+        page-break-after: avoid;
+    }
+    
+    .ic-memo-container table {
+        page-break-inside: avoid;
+    }
+    
+    .ic-memo-container .sources-section {
+        page-break-before: always;
+    }
+    
+    .ic-memo-container .citation {
+        color: #2563eb !important;
+        background: transparent !important;
+        border: none !important;
+    }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .ic-memo-container {
+        padding: 32px 20px;
+    }
+    
+    .ic-memo-container .memo-title {
+        font-size: 26px;
+    }
+    
+    .ic-memo-container h1 {
+        font-size: 24px;
+    }
+    
+    .ic-memo-container h2 {
+        font-size: 20px;
+    }
+    
+    .ic-memo-container table {
+        font-size: 12px;
+    }
+    
+    .ic-memo-container th,
+    .ic-memo-container td {
+        padding: 10px 12px;
+    }
+    
+    .ic-memo-container .metric-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Loading state for memo generation */
+.ic-memo-loading {
+    text-align: center;
+    padding: 60px 20px;
+}
+
+.ic-memo-loading .spinner {
+    width: 48px;
+    height: 48px;
+    border: 4px solid #e2e8f0;
+    border-top-color: #2563eb;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 24px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.ic-memo-loading .status-text {
+    font-size: 16px;
+    color: #64748b;
+    font-weight: 500;
+    margin-top: 16px;
+}
+
+/* Premium watermark for demo/draft versions */
+.ic-memo-container.draft::before {
+    content: 'DRAFT';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-45deg);
+    font-size: 120px;
+    font-weight: 900;
+    color: rgba(0, 0, 0, 0.03);
+    pointer-events: none;
+    z-index: 0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.ic-memo-container > * {
+    position: relative;
+    z-index: 1;
+}

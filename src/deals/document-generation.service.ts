@@ -56,7 +56,80 @@ export class DocumentGenerationService {
   ) {}
 
   /**
-   * Generate investment memorandum
+   * Generate investment memorandum with streaming support
+   */
+  async generateInvestmentMemoStreaming(
+    request: DocumentGenerationRequest,
+    onChunk: (chunk: { type: string; content?: string; status?: string; message?: string; data?: any }) => void
+  ): Promise<void> {
+    this.logger.log(`Generating investment memo (streaming) for ticker: ${request.ticker}`);
+
+    try {
+      const ticker = request.ticker;
+      
+      // Step 1: Get comprehensive data
+      onChunk({ type: 'status', status: 'gathering_data', message: 'Gathering financial metrics...' });
+      
+      const [metrics, marketData, narrativeContext] = await Promise.all([
+        this.getMetricsForMemo(ticker),
+        this.getMarketDataForMemo(ticker),
+        this.getNarrativeContextForMemo(ticker)
+      ]);
+
+      onChunk({ type: 'status', status: 'data_gathered', message: 'Financial data gathered. Building prompt...' });
+
+      // Step 2: Build comprehensive prompt
+      const prompt = this.buildMemoPrompt({
+        ticker,
+        companyName: `${ticker} Inc.`,
+        metrics,
+        marketData,
+        narrativeContext,
+        userContent: request.content,
+        fundCriteria: request.fundCriteria,
+        structure: request.structure,
+        voiceTone: request.voiceTone,
+        customSections: request.customSections
+      });
+
+      onChunk({ type: 'status', status: 'generating', message: 'Generating memo with Claude Opus (this may take 2-5 minutes)...' });
+
+      // Step 3: Generate memo (this is the long-running part)
+      const generatedMemo = await this.generateWithClaudeOpus(prompt, 'investment_memo');
+
+      onChunk({ type: 'status', status: 'saving', message: 'Saving document...' });
+
+      // Step 4: Save generated document
+      const documentId = await this.saveGeneratedDocument({
+        ticker: ticker,
+        dealId: request.dealId || null,
+        type: 'investment_memo',
+        content: generatedMemo.content,
+        metadata: {
+          structure: request.structure,
+          voiceTone: request.voiceTone,
+          wordCount: generatedMemo.content.split(' ').length
+        }
+      });
+
+      // Step 5: Send final result
+      onChunk({ 
+        type: 'result', 
+        status: 'complete',
+        data: {
+          content: generatedMemo.content,
+          downloadUrl: `/api/deals/documents/${documentId}/download`
+        }
+      });
+
+    } catch (error) {
+      this.logger.error(`Failed to generate investment memo: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate investment memorandum (non-streaming, kept for backward compatibility)
    */
   async generateInvestmentMemo(request: DocumentGenerationRequest): Promise<{
     content: string;

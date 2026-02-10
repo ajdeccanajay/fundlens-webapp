@@ -1154,7 +1154,112 @@
                     if (typeof marked === 'undefined') {
                         return content.replace(/\n/g, '<br>');
                     }
-                    return marked.parse(content);
+                    
+                    try {
+                        // Pre-process: Fix malformed tables BEFORE configuring marked
+                        let processedText = content;
+                        
+                        // Step 1: Normalize line endings
+                        processedText = processedText.replace(/\r\n/g, '\n');
+                        
+                        // Step 2: Detect if we have tables and process them specially
+                        const hasTable = processedText.includes('|') && 
+                                        (processedText.includes('---') || processedText.includes('| '));
+                        
+                        if (hasTable) {
+                            // Find and fix table sections
+                            const lines = processedText.split('\n');
+                            const fixedLines = [];
+                            let inTable = false;
+                            let tableLines = [];
+                            
+                            for (let i = 0; i < lines.length; i++) {
+                                const line = lines[i];
+                                const trimmedLine = line.trim();
+                                
+                                // Check if this line looks like a table row
+                                const isTableRow = trimmedLine.includes('|') && 
+                                                  !trimmedLine.startsWith('```') &&
+                                                  !trimmedLine.startsWith('`');
+                                
+                                if (isTableRow) {
+                                    if (!inTable) {
+                                        // Starting a new table - add blank line before if needed
+                                        if (fixedLines.length > 0 && fixedLines[fixedLines.length - 1].trim() !== '') {
+                                            fixedLines.push('');
+                                        }
+                                        inTable = true;
+                                        tableLines = [];
+                                    }
+                                    
+                                    // Fix the table row
+                                    let fixedLine = trimmedLine;
+                                    if (!fixedLine.startsWith('|')) fixedLine = '| ' + fixedLine;
+                                    if (!fixedLine.endsWith('|')) fixedLine = fixedLine + ' |';
+                                    tableLines.push(fixedLine);
+                                } else if (inTable) {
+                                    // Check if this is an empty line or non-table content
+                                    if (trimmedLine === '' || !trimmedLine.includes('|')) {
+                                        // End of table - process and add table lines
+                                        if (tableLines.length >= 2) {
+                                            // Ensure we have a separator row
+                                            let hasSeparator = tableLines.some(l => /^\|[\s\-:|]+\|$/.test(l.trim()));
+                                            if (!hasSeparator && tableLines.length >= 1) {
+                                                // Insert separator after first row
+                                                const headerCells = tableLines[0].split('|').filter(c => c.trim());
+                                                const separator = '|' + headerCells.map(() => '---').join('|') + '|';
+                                                tableLines.splice(1, 0, separator);
+                                            }
+                                            fixedLines.push(...tableLines);
+                                        }
+                                        fixedLines.push(''); // Blank line after table
+                                        inTable = false;
+                                        tableLines = [];
+                                        
+                                        // Add the current non-table line if not empty
+                                        if (trimmedLine !== '') {
+                                            fixedLines.push(line);
+                                        }
+                                    }
+                                } else {
+                                    fixedLines.push(line);
+                                }
+                            }
+                            
+                            // Handle table at end of content
+                            if (inTable && tableLines.length >= 2) {
+                                let hasSeparator = tableLines.some(l => /^\|[\s\-:|]+\|$/.test(l.trim()));
+                                if (!hasSeparator) {
+                                    const headerCells = tableLines[0].split('|').filter(c => c.trim());
+                                    const separator = '|' + headerCells.map(() => '---').join('|') + '|';
+                                    tableLines.splice(1, 0, separator);
+                                }
+                                fixedLines.push(...tableLines);
+                                fixedLines.push('');
+                            }
+                            
+                            processedText = fixedLines.join('\n');
+                        }
+                        
+                        // Configure marked for better rendering
+                        // IMPORTANT: Don't use breaks:true as it interferes with table parsing
+                        marked.use({
+                            breaks: false, // Don't convert \n to <br> - breaks tables!
+                            gfm: true, // GitHub Flavored Markdown (includes tables)
+                            headerIds: false,
+                            mangle: false
+                        });
+                        
+                        let html = marked.parse(processedText);
+                        
+                        // Post-process: Convert single newlines to <br> for non-table content
+                        html = html.replace(/([^>])\n([^<])/g, '$1<br>\n$2');
+                        
+                        return html;
+                    } catch (error) {
+                        console.error('Error rendering markdown:', error);
+                        return content.replace(/\n/g, '<br>');
+                    }
                 },
                 
                 // Render markdown with citation links (NEW)

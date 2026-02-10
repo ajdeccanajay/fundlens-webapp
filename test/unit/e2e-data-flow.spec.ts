@@ -42,7 +42,7 @@ describe('E2E Data Flow Tests', () => {
               create: jest.fn(),
               deleteMany: jest.fn(),
             },
-            scratchPadItem: {
+            scratchpadItem: {
               create: jest.fn(),
               findMany: jest.fn(),
               deleteMany: jest.fn(),
@@ -92,7 +92,7 @@ describe('E2E Data Flow Tests', () => {
       expect(prismaService.narrativeChunk).toBeDefined();
       expect(prismaService.conversation).toBeDefined();
       expect(prismaService.conversationMessage).toBeDefined();
-      expect(prismaService.scratchPadItem).toBeDefined();
+      expect(prismaService.scratchpadItem).toBeDefined();
     });
 
     it('should have CRUD methods on all models', () => {
@@ -100,9 +100,9 @@ describe('E2E Data Flow Tests', () => {
       expect(typeof prismaService.deal.findFirst).toBe('function');
       expect(typeof prismaService.deal.deleteMany).toBe('function');
       
-      expect(typeof prismaService.scratchPadItem.create).toBe('function');
-      expect(typeof prismaService.scratchPadItem.findMany).toBe('function');
-      expect(typeof prismaService.scratchPadItem.deleteMany).toBe('function');
+      expect(typeof prismaService.scratchpadItem.create).toBe('function');
+      expect(typeof prismaService.scratchpadItem.findMany).toBe('function');
+      expect(typeof prismaService.scratchpadItem.deleteMany).toBe('function');
     });
   });
 
@@ -176,9 +176,9 @@ describe('E2E Data Flow Tests', () => {
         createdAt: new Date(),
       };
 
-      jest.spyOn(prismaService.scratchPadItem, 'create').mockResolvedValue(mockItem as any);
+      jest.spyOn(prismaService.scratchpadItem, 'create').mockResolvedValue(mockItem as any);
 
-      const result = await prismaService.scratchPadItem.create({
+      const result = await prismaService.scratchpadItem.create({
         data: {
           content: 'Test content',
           sourceType: 'research_message',
@@ -210,9 +210,9 @@ describe('E2E Data Flow Tests', () => {
         },
       ];
 
-      jest.spyOn(prismaService.scratchPadItem, 'findMany').mockResolvedValue(mockItems as any);
+      jest.spyOn(prismaService.scratchpadItem, 'findMany').mockResolvedValue(mockItems as any);
 
-      const result = await prismaService.scratchPadItem.findMany({
+      const result = await prismaService.scratchpadItem.findMany({
         where: { created_by: TEST_USER_ID },  // ← Query by created_by
       });
 
@@ -309,8 +309,8 @@ describe('E2E Data Flow Tests', () => {
         createdAt: new Date(),
       };
 
-      jest.spyOn(prismaService.scratchPadItem, 'create').mockResolvedValue(mockScratchpadItem as any);
-      const scratchpadItem = await prismaService.scratchPadItem.create({
+      jest.spyOn(prismaService.scratchpadItem, 'create').mockResolvedValue(mockScratchpadItem as any);
+      const scratchpadItem = await prismaService.scratchpadItem.create({
         data: {
           content: 'RAG response content',
           sourceType: 'research_message',
@@ -335,13 +335,13 @@ describe('E2E Data Flow Tests', () => {
 
   describe('Cleanup Operations', () => {
     it('should cleanup test data in correct order', async () => {
-      jest.spyOn(prismaService.scratchPadItem, 'deleteMany').mockResolvedValue({ count: 2 });
+      jest.spyOn(prismaService.scratchpadItem, 'deleteMany').mockResolvedValue({ count: 2 });
       jest.spyOn(prismaService.conversationMessage, 'deleteMany').mockResolvedValue({ count: 5 });
       jest.spyOn(prismaService.conversation, 'deleteMany').mockResolvedValue({ count: 1 });
       jest.spyOn(prismaService.deal, 'deleteMany').mockResolvedValue({ count: 1 });
 
       // Delete in correct order to respect foreign keys
-      const scratchpadResult = await prismaService.scratchPadItem.deleteMany({
+      const scratchpadResult = await prismaService.scratchpadItem.deleteMany({
         where: { created_by: TEST_USER_ID },
       });
 

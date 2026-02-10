@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
-import * as request from 'supertest';
+import request from 'supertest';
 import { IntentDetectorService } from '../../src/rag/intent-detector.service';
 import { IntentAnalyticsService } from '../../src/rag/intent-analytics.service';
 import { PromptLibraryService } from '../../src/rag/prompt-library.service';

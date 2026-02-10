@@ -48,6 +48,7 @@ model NarrativeChunk {
   dataSourceId  String?  @map("data_source_id")
   createdAt     DateTime @default(now()) @map("created_at")
   filingDate    DateTime @map("filing_date") @db.Timestamp(6)
+  contentHash   String?  @map("content_hash") @db.VarChar(64)
 
   @@unique([ticker, filingType, filingDate, sectionType, chunkIndex], map: "narrative_chunks_ticker_filing_type_filing_date_section_type_ch")
   @@index([ticker, filingType, sectionType])
@@ -146,21 +147,22 @@ model DocumentChunk {
 }
 
 model Tenant {
-  id            String             @id @default(uuid())
-  name          String
-  slug          String             @unique
-  tier          String             @default("free")
-  status        String             @default("active")
-  settings      Json               @default("{}")
-  createdAt     DateTime           @default(now()) @map("created_at")
-  updatedAt     DateTime           @updatedAt @map("updated_at")
-  dataSources   DataSource[]
-  deals         Deal[]
-  documents     Document[]
-  subscriptions Subscription[]
-  users         TenantUser[]
-  uploads       UploadedDocument[]
-  usageLogs     UsageLog[]
+  id                   String                @id @default(uuid())
+  name                 String
+  slug                 String                @unique
+  tier                 String                @default("free")
+  status               String                @default("active")
+  settings             Json                  @default("{}")
+  createdAt            DateTime              @default(now()) @map("created_at")
+  updatedAt            DateTime              @updatedAt @map("updated_at")
+  dataSources          DataSource[]
+  deals                Deal[]
+  documents            Document[]
+  subscriptions        Subscription[]
+  users                TenantUser[]
+  uploads              UploadedDocument[]
+  usageLogs            UsageLog[]
+  filingNotifications  FilingNotification[]
 
   @@map("tenants")
 }
@@ -855,4 +857,115 @@ model ScratchpadItem {
   @@index([workspaceId, savedAt(sort: Desc)], map: "idx_scratchpad_items_saved_at")
   @@index([workspaceId, type], map: "idx_scratchpad_items_type")
   @@map("scratchpad_items")
+}
+
+
+// ============================================================
+// PROVOCATIONS ENGINE MODELS
+// Feature: provocations-engine
+// Requirements: 1.5, 10.2, 10.3
+// ============================================================
+
+model SectionDiff {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sourceChunkId   String   @map("source_chunk_id") @db.Uuid
+  targetChunkId   String   @map("target_chunk_id") @db.Uuid
+  diffData        Json     @default("{}") @map("diff_data")
+  similarityScore Float?   @map("similarity_score")
+  computedAt      DateTime @default(now()) @map("computed_at") @db.Timestamp(6)
+
+  @@unique([sourceChunkId, targetChunkId], map: "idx_section_diffs_pair")
+  @@index([sourceChunkId], map: "idx_section_diffs_source")
+  @@index([targetChunkId], map: "idx_section_diffs_target")
+  @@map("section_diffs")
+}
+
+model Provocation {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticker                String    @db.VarChar(20)
+  analysisMode          String    @map("analysis_mode") @db.VarChar(50)
+  title                 String    @db.Text
+  severity              String    @db.VarChar(20)
+  category              String    @db.VarChar(50)
+  observation           String    @db.Text
+  filingReferences      Json      @default("[]") @map("filing_references")
+  crossFilingDelta      String?   @map("cross_filing_delta") @db.Text
+  implication           String    @db.Text
+  challengeQuestion     String    @map("challenge_question") @db.Text
+  sourceClassifications Json?     @default("[]") @map("source_classifications")
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  expiresAt             DateTime? @map("expires_at") @db.Timestamp(6)
+
+  @@index([ticker], map: "idx_provocations_ticker")
+  @@index([ticker, analysisMode], map: "idx_provocations_ticker_mode")
+  @@index([severity], map: "idx_provocations_severity")
+  @@map("provocations")
+}
+
+model ProvocationsCache {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticker          String   @db.VarChar(20)
+  analysisMode    String   @map("analysis_mode") @db.VarChar(50)
+  provocations    Json     @default("[]")
+  sourceDocuments String[] @map("source_documents")
+  computedAt      DateTime @default(now()) @map("computed_at") @db.Timestamp(6)
+  expiresAt       DateTime @map("expires_at") @db.Timestamp(6)
+
+  @@index([ticker, analysisMode], map: "idx_provocations_cache_ticker_mode")
+  @@index([expiresAt], map: "idx_provocations_cache_expires")
+  @@map("provocations_cache")
+}
+
+model ResearchQueryCounter {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticker                String    @unique @db.VarChar(20)
+  queryCount            Int       @default(0) @map("query_count")
+  lastQueryAt           DateTime? @map("last_query_at") @db.Timestamp(6)
+  provocationsGenerated Boolean   @default(false) @map("provocations_generated")
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt             DateTime  @default(now()) @map("updated_at") @db.Timestamp(6)
+
+  @@index([ticker], map: "idx_research_query_counter_ticker")
+  @@map("research_query_counter")
+}
+
+
+// ============================================================
+// AUTOMATIC FILING DETECTION MODELS
+// ============================================================
+
+// Filing detection state (tracks last check per ticker)
+model FilingDetectionState {
+  ticker               String   @id @db.VarChar(20)
+  lastCheckDate        DateTime @map("last_check_date") @db.Timestamp(6)
+  lastFilingDate       DateTime? @map("last_filing_date") @db.Timestamp(6)
+  checkCount           Int      @default(0) @map("check_count")
+  consecutiveFailures  Int      @default(0) @map("consecutive_failures")
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  @@index([lastCheckDate], map: "idx_filing_detection_last_check")
+  @@map("filing_detection_state")
+}
+
+// Filing notifications (tenant-scoped)
+model FilingNotification {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String    @map("tenant_id")
+  ticker           String    @db.VarChar(20)
+  filingType       String    @map("filing_type") @db.VarChar(10)
+  filingDate       DateTime  @map("filing_date") @db.Date
+  reportDate       DateTime? @map("report_date") @db.Date
+  accessionNumber  String    @map("accession_number") @db.VarChar(50)
+  dismissed        Boolean   @default(false)
+  dismissedAt      DateTime? @map("dismissed_at") @db.Timestamp(6)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  tenant           Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, dismissed], map: "idx_filing_notifs_tenant")
+  @@index([ticker], map: "idx_filing_notifs_ticker")
+  @@index([createdAt], map: "idx_filing_notifs_created")
+  @@map("filing_notifications")
 }

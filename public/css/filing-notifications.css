@@ -1,0 +1,243 @@
+/* Filing Notifications - Workspace Header Bell & Dropdown */
+
+/* Notification Bell */
+.filing-notif-bell {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    border: none;
+    background: transparent;
+}
+
+.filing-notif-bell:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.filing-notif-bell i {
+    font-size: 1.1rem;
+}
+
+/* Badge count on bell */
+.filing-notif-badge {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 8px;
+    background: #dc2626;
+    color: #fff !important;
+    font-size: 0.6rem;
+    font-weight: 700;
+    line-height: 16px;
+    text-align: center;
+}
+
+/* Dropdown Panel */
+.filing-notif-dropdown {
+    position: absolute;
+    right: 0;
+    top: 100%;
+    margin-top: 8px;
+    width: 360px;
+    max-height: 480px;
+    background: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 12px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+    z-index: 60;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Dropdown Header */
+.filing-notif-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid #e2e8f0;
+    background: #f8fafc;
+}
+
+.filing-notif-header h3 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #0f172a !important;
+    margin: 0;
+}
+
+.filing-notif-dismiss-all {
+    font-size: 0.75rem;
+    color: #2563eb !important;
+    cursor: pointer;
+    border: none;
+    background: none;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: background 0.15s;
+}
+
+.filing-notif-dismiss-all:hover {
+    background: #eff6ff;
+}
+
+/* Notification List */
+.filing-notif-list {
+    overflow-y: auto;
+    max-height: 380px;
+    flex: 1;
+}
+
+/* Individual Notification Card */
+.filing-notif-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid #f1f5f9;
+    transition: background 0.15s;
+    cursor: default;
+}
+
+.filing-notif-card:hover {
+    background: #f8fafc;
+}
+
+.filing-notif-card:last-child {
+    border-bottom: none;
+}
+
+/* Filing type badge */
+.filing-type-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 48px;
+    height: 24px;
+    padding: 0 8px;
+    border-radius: 6px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.filing-type-10k {
+    background: #dbeafe;
+    color: #1e40af !important;
+}
+
+.filing-type-10q {
+    background: #dcfce7;
+    color: #166534 !important;
+}
+
+.filing-type-8k {
+    background: #fef3c7;
+    color: #92400e !important;
+}
+
+.filing-type-default {
+    background: #f1f5f9;
+    color: #475569 !important;
+}
+
+/* Card content */
+.filing-notif-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.filing-notif-ticker {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #0f172a !important;
+}
+
+.filing-notif-date {
+    font-size: 0.75rem;
+    color: #64748b !important;
+    margin-top: 2px;
+}
+
+/* Dismiss button on card */
+.filing-notif-dismiss {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: none;
+    color: #94a3b8 !important;
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    transition: all 0.15s;
+    opacity: 0;
+}
+
+.filing-notif-card:hover .filing-notif-dismiss {
+    opacity: 1;
+}
+
+.filing-notif-dismiss:hover {
+    background: #fee2e2;
+    color: #dc2626 !important;
+}
+
+/* Empty state */
+.filing-notif-empty {
+    padding: 32px 16px;
+    text-align: center;
+}
+
+.filing-notif-empty i {
+    font-size: 1.5rem;
+    color: #cbd5e1 !important;
+    margin-bottom: 8px;
+}
+
+.filing-notif-empty p {
+    font-size: 0.8125rem;
+    color: #94a3b8 !important;
+    margin: 0;
+}
+
+/* Toast notification */
+.filing-notif-toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: #0f172a;
+    color: #f8fafc;
+    padding: 12px 20px;
+    border-radius: 10px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+    font-size: 0.8125rem;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    animation: slideUp 0.3s ease-out;
+}
+
+.filing-notif-toast i {
+    color: #60a5fa;
+}
+
+@keyframes slideUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+}

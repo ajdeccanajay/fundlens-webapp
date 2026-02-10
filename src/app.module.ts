@@ -15,6 +15,7 @@ import { AuthModule } from './auth/auth.module';
 import { AdminModule } from './admin/admin.module';
 import { TenantModule } from './tenant/tenant.module';
 import { ResearchAssistantModule } from './research/research-assistant.module';
+import { FilingsModule } from './filings/filings.module';
 
 const publicPath = join(process.cwd(), 'public');
 console.log('📁 Serving static files from:', publicPath);
@@ -39,6 +40,7 @@ console.log('📁 Serving static files from:', publicPath);
     S3Module,
     DealsModule,
     ResearchAssistantModule,
+    FilingsModule,
   ],
 })
 export class AppModule {} 

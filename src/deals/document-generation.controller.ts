@@ -16,28 +16,46 @@ export class DocumentGenerationController {
   ) {}
 
   /**
-   * Generate investment memorandum
+   * Generate investment memorandum with streaming
    * POST /api/deals/generate-memo
    */
   @Post('generate-memo')
-  async generateInvestmentMemo(@Body() request: DocumentGenerationRequest) {
+  async generateInvestmentMemo(
+    @Body() request: DocumentGenerationRequest,
+    @Res() res: Response,
+  ) {
     this.logger.log(`Generating investment memo for ticker: ${request.ticker}`);
 
     try {
-      const result = await this.documentGenerationService.generateInvestmentMemo(request);
+      // Set headers for Server-Sent Events (SSE) streaming
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
 
-      return {
-        success: true,
-        data: result,
-        message: 'Investment memo generated successfully',
-      };
+      // Send initial status
+      res.write(`data: ${JSON.stringify({ status: 'started', message: 'Gathering financial data...' })}\n\n`);
+
+      // Stream the memo generation
+      await this.documentGenerationService.generateInvestmentMemoStreaming(
+        request,
+        (chunk: { type: string; content?: string; status?: string; message?: string; data?: any }) => {
+          res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+        }
+      );
+
+      // Send completion event
+      res.write(`data: ${JSON.stringify({ status: 'complete' })}\n\n`);
+      res.end();
+
     } catch (error) {
       this.logger.error(`Failed to generate investment memo: ${error.message}`);
-      return {
-        success: false,
+      res.write(`data: ${JSON.stringify({ 
+        status: 'error', 
         error: error.message,
-        message: 'Failed to generate investment memo',
-      };
+        message: 'Failed to generate investment memo'
+      })}\n\n`);
+      res.end();
     }
   }
 

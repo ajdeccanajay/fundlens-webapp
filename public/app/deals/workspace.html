@@ -8,6 +8,8 @@
     <!-- Design System -->
     <link rel="stylesheet" href="/css/design-system.css">
     <link rel="stylesheet" href="/css/research-scratchpad.css">
+    <link rel="stylesheet" href="/css/ic-memo.css">
+    <link rel="stylesheet" href="/css/filing-notifications.css">
     <script src="/js/theme-toggle.js"></script>
     
     <script src="https://cdn.tailwindcss.com"></script>
@@ -228,25 +230,36 @@
             border: 1px solid var(--fundlens-gray-200);
             border-radius: 8px;
             overflow: hidden;
+            display: table !important;
         }
         
         .message-assistant table th,
         .message-assistant .markdown-table th {
             background: var(--fundlens-gray-50);
-            padding: 0.75em;
+            padding: 0.75em 1em;
             text-align: left;
             font-weight: 600;
             border-bottom: 2px solid var(--fundlens-gray-300);
+            white-space: nowrap;
         }
         
         .message-assistant table td,
         .message-assistant .markdown-table td {
-            padding: 0.75em;
+            padding: 0.75em 1em;
             border-bottom: 1px solid var(--fundlens-gray-200);
+            vertical-align: top;
         }
         
         .message-assistant table tr:hover {
             background: var(--fundlens-gray-50);
+        }
+        
+        .message-assistant table thead {
+            background: var(--fundlens-gray-50);
+        }
+        
+        .message-assistant table tbody tr:last-child td {
+            border-bottom: none;
         }
         
         .message-assistant hr {
@@ -283,6 +296,42 @@
         
         .qa-card.cached {
             border-left-color: #10b981;
+        }
+        
+        /* Severity Badges for Provocations Engine */
+        .severity-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin: 2px 4px 2px 0;
+        }
+        
+        .severity-badge i {
+            font-size: 0.8rem;
+        }
+        
+        .severity-red {
+            background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+            color: #dc2626;
+            border: 1px solid #fca5a5;
+        }
+        
+        .severity-amber {
+            background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+            color: #d97706;
+            border: 1px solid #fcd34d;
+        }
+        
+        .severity-green {
+            background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+            color: #16a34a;
+            border: 1px solid #86efac;
         }
         
         /* Typing Indicator */
@@ -395,6 +444,65 @@
 
                     <!-- User Menu -->
                     <div class="flex items-center space-x-4">
+                        <!-- Filing Notifications Bell -->
+                        <div class="relative">
+                            <button @click="filingNotifOpen = !filingNotifOpen" 
+                                    class="filing-notif-bell"
+                                    aria-label="Filing notifications"
+                                    :aria-expanded="filingNotifOpen">
+                                <i class="fas fa-bell"></i>
+                                <span x-show="filingNotifCount > 0" 
+                                      class="filing-notif-badge" 
+                                      x-text="filingNotifCount > 99 ? '99+' : filingNotifCount"></span>
+                            </button>
+                            
+                            <!-- Notification Dropdown -->
+                            <div x-show="filingNotifOpen" 
+                                 @click.away="filingNotifOpen = false"
+                                 x-transition:enter="transition ease-out duration-150"
+                                 x-transition:enter-start="opacity-0 scale-95"
+                                 x-transition:enter-end="opacity-100 scale-100"
+                                 x-transition:leave="transition ease-in duration-100"
+                                 x-transition:leave-start="opacity-100 scale-100"
+                                 x-transition:leave-end="opacity-0 scale-95"
+                                 class="filing-notif-dropdown">
+                                <!-- Header -->
+                                <div class="filing-notif-header">
+                                    <h3>New Filings</h3>
+                                    <button x-show="filingNotifications.length > 0" 
+                                            @click="dismissAllFilingNotifs()" 
+                                            class="filing-notif-dismiss-all">
+                                        Dismiss All
+                                    </button>
+                                </div>
+                                <!-- List -->
+                                <div class="filing-notif-list">
+                                    <template x-if="filingNotifications.length === 0">
+                                        <div class="filing-notif-empty">
+                                            <i class="fas fa-check-circle"></i>
+                                            <p>No new filings</p>
+                                        </div>
+                                    </template>
+                                    <template x-for="notif in filingNotifications" :key="notif.id">
+                                        <div class="filing-notif-card">
+                                            <span class="filing-type-badge"
+                                                  :class="getFilingTypeBadgeClass(notif.filingType)"
+                                                  x-text="notif.filingType"></span>
+                                            <div class="filing-notif-content">
+                                                <div class="filing-notif-ticker" x-text="notif.ticker"></div>
+                                                <div class="filing-notif-date" x-text="formatFilingDate(notif.filingDate)"></div>
+                                            </div>
+                                            <button @click.stop="dismissFilingNotif(notif.id)" 
+                                                    class="filing-notif-dismiss"
+                                                    aria-label="Dismiss notification">
+                                                <i class="fas fa-times"></i>
+                                            </button>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+                        
                         <div class="relative" x-data="{ open: false }">
                             <button @click="open = !open" class="flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors">
                                 <div class="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center">
@@ -581,6 +689,11 @@
                                     :class="analysisTab === 'export' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white' : 'bg-white text-gray-700 border border-gray-300'"
                                     class="px-4 py-2 rounded-lg font-medium text-sm">
                                 Export
+                            </button>
+                            <button @click="analysisTab = 'provocations'; loadProvocations()" 
+                                    :class="analysisTab === 'provocations' ? 'bg-gradient-to-r from-red-600 to-orange-600 text-white' : 'bg-white text-gray-700 border border-gray-300'"
+                                    class="px-4 py-2 rounded-lg font-medium text-sm">
+                                <i class="fas fa-bolt mr-1"></i>Provocations
                             </button>
                         </div>
                         
@@ -904,10 +1017,23 @@
                                     <i class="fas fa-building text-blue-600 mr-3"></i>Company Description
                                 </h3>
                                 <template x-for="qa in qualitativeData?.companyDescription" :key="qa.question">
-                                    <div class="qa-card" :class="{ 'cached': qa.cached }">
+                                    <div x-data="{ expanded: false }" class="qa-card" :class="{ 'cached': qa.cached }">
                                         <span x-show="qa.cached" class="absolute top-2 right-2 bg-green-500 text-white text-xs px-2 py-1 rounded">⚡ Instant</span>
-                                        <p class="font-semibold text-gray-900 mb-2" x-text="qa.question"></p>
-                                        <p class="text-gray-600 text-sm whitespace-pre-wrap" x-text="qa.answer"></p>
+                                        <div class="flex items-center justify-between cursor-pointer" @click="expanded = !expanded">
+                                            <p class="font-semibold text-gray-900 mb-2" x-text="qa.question"></p>
+                                            <i class="fas transition-transform duration-200" :class="expanded ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                                        </div>
+                                        <div x-show="expanded" x-collapse>
+                                            <div class="text-gray-600 text-sm mt-3" x-html="renderMarkdownWithCitations(qa.answer, qa.sources)"></div>
+                                            <div x-show="qa.sources && qa.sources.length > 0" class="mt-4 flex flex-wrap gap-2">
+                                                <template x-for="source in qa.sources" :key="source.number">
+                                                    <button @click="openCitationModal(source)" class="text-xs px-3 py-1 bg-blue-50 text-blue-700 rounded-full hover:bg-blue-100 transition-colors">
+                                                        <i class="fas fa-file-alt mr-1"></i>
+                                                        <span x-text="`[${source.number}] ${source.section}`"></span>
+                                                    </button>
+                                                </template>
+                                            </div>
+                                        </div>
                                     </div>
                                 </template>
                             </div>
@@ -918,10 +1044,23 @@
                                     <i class="fas fa-chart-pie text-green-600 mr-3"></i>Revenue Breakdown
                                 </h3>
                                 <template x-for="qa in qualitativeData?.revenueBreakdown" :key="qa.question">
-                                    <div class="qa-card" :class="{ 'cached': qa.cached }">
+                                    <div x-data="{ expanded: false }" class="qa-card" :class="{ 'cached': qa.cached }">
                                         <span x-show="qa.cached" class="absolute top-2 right-2 bg-green-500 text-white text-xs px-2 py-1 rounded">⚡ Instant</span>
-                                        <p class="font-semibold text-gray-900 mb-2" x-text="qa.question"></p>
-                                        <p class="text-gray-600 text-sm whitespace-pre-wrap" x-text="qa.answer"></p>
+                                        <div class="flex items-center justify-between cursor-pointer" @click="expanded = !expanded">
+                                            <p class="font-semibold text-gray-900 mb-2" x-text="qa.question"></p>
+                                            <i class="fas transition-transform duration-200" :class="expanded ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                                        </div>
+                                        <div x-show="expanded" x-collapse>
+                                            <div class="text-gray-600 text-sm mt-3" x-html="renderMarkdownWithCitations(qa.answer, qa.sources)"></div>
+                                            <div x-show="qa.sources && qa.sources.length > 0" class="mt-4 flex flex-wrap gap-2">
+                                                <template x-for="source in qa.sources" :key="source.number">
+                                                    <button @click="openCitationModal(source)" class="text-xs px-3 py-1 bg-blue-50 text-blue-700 rounded-full hover:bg-blue-100 transition-colors">
+                                                        <i class="fas fa-file-alt mr-1"></i>
+                                                        <span x-text="`[${source.number}] ${source.section}`"></span>
+                                                    </button>
+                                                </template>
+                                            </div>
+                                        </div>
                                     </div>
                                 </template>
                             </div>
@@ -932,10 +1071,23 @@
                                     <i class="fas fa-rocket text-purple-600 mr-3"></i>Growth Drivers
                                 </h3>
                                 <template x-for="qa in qualitativeData?.growthDrivers" :key="qa.question">
-                                    <div class="qa-card" :class="{ 'cached': qa.cached }">
+                                    <div x-data="{ expanded: false }" class="qa-card" :class="{ 'cached': qa.cached }">
                                         <span x-show="qa.cached" class="absolute top-2 right-2 bg-green-500 text-white text-xs px-2 py-1 rounded">⚡ Instant</span>
-                                        <p class="font-semibold text-gray-900 mb-2" x-text="qa.question"></p>
-                                        <p class="text-gray-600 text-sm whitespace-pre-wrap" x-text="qa.answer"></p>
+                                        <div class="flex items-center justify-between cursor-pointer" @click="expanded = !expanded">
+                                            <p class="font-semibold text-gray-900 mb-2" x-text="qa.question"></p>
+                                            <i class="fas transition-transform duration-200" :class="expanded ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                                        </div>
+                                        <div x-show="expanded" x-collapse>
+                                            <div class="text-gray-600 text-sm mt-3" x-html="renderMarkdownWithCitations(qa.answer, qa.sources)"></div>
+                                            <div x-show="qa.sources && qa.sources.length > 0" class="mt-4 flex flex-wrap gap-2">
+                                                <template x-for="source in qa.sources" :key="source.number">
+                                                    <button @click="openCitationModal(source)" class="text-xs px-3 py-1 bg-blue-50 text-blue-700 rounded-full hover:bg-blue-100 transition-colors">
+                                                        <i class="fas fa-file-alt mr-1"></i>
+                                                        <span x-text="`[${source.number}] ${source.section}`"></span>
+                                                    </button>
+                                                </template>
+                                            </div>
+                                        </div>
                                     </div>
                                 </template>
                             </div>
@@ -946,10 +1098,23 @@
                                     <i class="fas fa-chess text-orange-600 mr-3"></i>Competitive Dynamics
                                 </h3>
                                 <template x-for="qa in qualitativeData?.competitiveDynamics" :key="qa.question">
-                                    <div class="qa-card" :class="{ 'cached': qa.cached }">
+                                    <div x-data="{ expanded: false }" class="qa-card" :class="{ 'cached': qa.cached }">
                                         <span x-show="qa.cached" class="absolute top-2 right-2 bg-green-500 text-white text-xs px-2 py-1 rounded">⚡ Instant</span>
-                                        <p class="font-semibold text-gray-900 mb-2" x-text="qa.question"></p>
-                                        <p class="text-gray-600 text-sm whitespace-pre-wrap" x-text="qa.answer"></p>
+                                        <div class="flex items-center justify-between cursor-pointer" @click="expanded = !expanded">
+                                            <p class="font-semibold text-gray-900 mb-2" x-text="qa.question"></p>
+                                            <i class="fas transition-transform duration-200" :class="expanded ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                                        </div>
+                                        <div x-show="expanded" x-collapse>
+                                            <div class="text-gray-600 text-sm mt-3" x-html="renderMarkdownWithCitations(qa.answer, qa.sources)"></div>
+                                            <div x-show="qa.sources && qa.sources.length > 0" class="mt-4 flex flex-wrap gap-2">
+                                                <template x-for="source in qa.sources" :key="source.number">
+                                                    <button @click="openCitationModal(source)" class="text-xs px-3 py-1 bg-blue-50 text-blue-700 rounded-full hover:bg-blue-100 transition-colors">
+                                                        <i class="fas fa-file-alt mr-1"></i>
+                                                        <span x-text="`[${source.number}] ${source.section}`"></span>
+                                                    </button>
+                                                </template>
+                                            </div>
+                                        </div>
                                     </div>
                                 </template>
                             </div>
@@ -1185,11 +1350,101 @@
                                 </div>
                             </div>
                         </div>
+
+                        <!-- Provocations Tab Content -->
+                        <div x-show="analysisTab === 'provocations'" class="space-y-6">
+                            <!-- Loading -->
+                            <div x-show="provocationsLoading" class="text-center py-12">
+                                <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+                                    <i class="fas fa-bolt text-2xl text-red-600"></i>
+                                </div>
+                                <h3 class="text-lg font-semibold text-gray-900">Generating Provocations...</h3>
+                                <p class="text-gray-500 mt-2">Analyzing SEC filings for risks and contradictions</p>
+                            </div>
+
+                            <!-- No Data -->
+                            <div x-show="!provocationsLoading && provocationsData.length === 0" class="text-center py-12">
+                                <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <i class="fas fa-bolt text-2xl text-gray-400"></i>
+                                </div>
+                                <h3 class="text-lg font-semibold text-gray-900 mb-2">No Provocations Yet</h3>
+                                <p class="text-gray-600 mb-4">Ask 3+ research questions to auto-generate provocations, or click below.</p>
+                                <button @click="loadProvocations(true)" class="px-6 py-2 bg-gradient-to-r from-red-600 to-orange-600 text-white rounded-lg font-medium hover:shadow-lg transition-all">
+                                    <i class="fas fa-bolt mr-2"></i>Generate Now
+                                </button>
+                            </div>
+
+                            <!-- Provocations List -->
+                            <template x-for="(prov, idx) in provocationsData.slice(0, 5)" :key="idx">
+                                <div class="bg-white rounded-xl p-6 border-l-4" 
+                                     :class="{
+                                         'border-red-500': prov.severity === 'RED_FLAG',
+                                         'border-amber-500': prov.severity === 'AMBER',
+                                         'border-green-500': prov.severity === 'GREEN_CHALLENGE'
+                                     }">
+                                    <div class="flex items-start justify-between mb-3">
+                                        <h3 class="text-lg font-bold text-gray-900" x-text="prov.title"></h3>
+                                        <span class="px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap"
+                                              :class="{
+                                                  'bg-red-100 text-red-800': prov.severity === 'RED_FLAG',
+                                                  'bg-amber-100 text-amber-800': prov.severity === 'AMBER',
+                                                  'bg-green-100 text-green-800': prov.severity === 'GREEN_CHALLENGE'
+                                              }"
+                                              x-text="prov.severity.replace('_', ' ')"></span>
+                                    </div>
+                                    <p class="text-gray-700 mb-3" x-text="prov.observation"></p>
+                                    <div x-show="prov.crossFilingDelta || prov.cross_filing_delta" class="bg-gray-50 rounded-lg p-3 mb-3">
+                                        <p class="text-sm text-gray-600"><i class="fas fa-exchange-alt mr-1 text-blue-500"></i><span x-text="prov.crossFilingDelta || prov.cross_filing_delta"></span></p>
+                                    </div>
+                                    <p class="text-gray-600 text-sm mb-3"><strong>Implication:</strong> <span x-text="prov.implication"></span></p>
+                                    <div class="bg-blue-50 rounded-lg p-3 mb-3">
+                                        <p class="text-sm font-medium text-blue-800"><i class="fas fa-question-circle mr-1"></i><span x-text="prov.challengeQuestion || prov.challenge_question"></span></p>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-xs text-gray-400" x-text="prov.category"></span>
+                                        <div class="flex items-center space-x-3">
+                                            <button @click="saveProvocationToScratchpad(prov)" class="text-xs text-green-600 hover:text-green-800">
+                                                <i class="fas fa-bookmark mr-1"></i>Save to Scratchpad
+                                            </button>
+                                            <button @click="askProvocationInResearch(prov)" class="text-xs text-blue-600 hover:text-blue-800">
+                                                <i class="fas fa-comment mr-1"></i>Ask in Research
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+
+                            <!-- Sentiment Sub-section -->
+                            <div x-show="!provocationsLoading && sentimentData" class="bg-white rounded-xl p-6 border border-gray-200">
+                                <h3 class="text-lg font-bold mb-4 flex items-center">
+                                    <i class="fas fa-chart-line text-purple-600 mr-3"></i>Sentiment Trend
+                                </h3>
+                                <template x-if="sentimentData && sentimentData.sentiments">
+                                    <div class="space-y-3">
+                                        <template x-for="(s, i) in sentimentData.sentiments" :key="i">
+                                            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                                <span class="text-sm font-medium" x-text="new Date(s.filingDate).toLocaleDateString()"></span>
+                                                <div class="flex items-center space-x-3">
+                                                    <span class="text-sm" x-text="s.sentiment.label"></span>
+                                                    <div class="w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                                        <div class="h-full rounded-full" 
+                                                             :class="s.sentiment.score > 0 ? 'bg-green-500' : s.sentiment.score < 0 ? 'bg-red-500' : 'bg-gray-400'"
+                                                             :style="'width: ' + ((s.sentiment.score + 1) / 2 * 100) + '%'"></div>
+                                                    </div>
+                                                    <span class="text-xs font-mono" x-text="s.sentiment.score.toFixed(2)"></span>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 
                 <!-- Research View -->
-                <div x-show="currentView === 'research'" class="fade-in h-full flex flex-col">
+                <div x-show="currentView === 'research'" class="fade-in h-full flex flex-col"
+                     :class="{ 'ring-2 ring-red-400': provocationsMode === 'provocations', 'ring-2 ring-purple-400': provocationsMode === 'sentiment' }">
                     <div class="flex-1 overflow-auto p-6 space-y-4" x-ref="researchMessages">
                         <template x-if="researchMessages.length === 0">
                             <div class="text-center py-20">
@@ -1297,14 +1552,39 @@
                     </div>
                     
                     <div class="border-t border-gray-200 p-6 bg-white">
-                        <div class="flex items-center justify-between mb-2">
-                            <p class="text-xs text-gray-500">
-                                <span x-show="conversationId">Conversation active</span>
-                                <span x-show="!conversationId">New conversation will start</span>
-                            </p>
-                            <button x-show="conversationId" @click="clearConversation()" class="text-xs text-gray-500 hover:text-gray-700">
-                                <i class="fas fa-redo mr-1"></i>New Conversation
-                            </button>
+                        <!-- Provocations Mode Toggle -->
+                        <div class="flex items-center justify-between mb-3">
+                            <div class="flex items-center space-x-3">
+                                <button @click="toggleProvocationsMode('provocations')"
+                                        :class="provocationsMode === 'provocations' ? 'bg-red-100 text-red-800 border-red-300' : 'bg-gray-100 text-gray-600 border-gray-200'"
+                                        class="px-3 py-1.5 rounded-lg text-xs font-medium border transition-all hover:shadow-sm">
+                                    <i class="fas fa-bolt mr-1"></i>Provocations
+                                </button>
+                                <button @click="toggleProvocationsMode('sentiment')"
+                                        :class="provocationsMode === 'sentiment' ? 'bg-purple-100 text-purple-800 border-purple-300' : 'bg-gray-100 text-gray-600 border-gray-200'"
+                                        class="px-3 py-1.5 rounded-lg text-xs font-medium border transition-all hover:shadow-sm">
+                                    <i class="fas fa-chart-line mr-1"></i>Sentiment
+                                </button>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <p class="text-xs text-gray-500">
+                                    <span x-show="conversationId">Conversation active</span>
+                                    <span x-show="!conversationId">New conversation</span>
+                                </p>
+                                <button x-show="conversationId" @click="clearConversation()" class="text-xs text-gray-500 hover:text-gray-700">
+                                    <i class="fas fa-redo mr-1"></i>New
+                                </button>
+                            </div>
+                        </div>
+                        <!-- Preset Question Chips -->
+                        <div x-show="provocationsMode && presetQuestions.length > 0" class="flex flex-wrap gap-2 mb-3">
+                            <template x-for="q in presetQuestions.slice(0, 6)" :key="q.id">
+                                <button @click="quickQuery(q.text)" 
+                                        class="px-3 py-1.5 rounded-full text-xs font-medium transition-all hover:shadow-sm"
+                                        :class="provocationsMode === 'provocations' ? 'bg-red-50 text-red-700 border border-red-200 hover:bg-red-100' : 'bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100'"
+                                        x-text="q.text.length > 60 ? q.text.substring(0, 57) + '...' : q.text">
+                                </button>
+                            </template>
                         </div>
                         <div class="flex items-end space-x-3">
                             <textarea x-model="researchInput" 
@@ -1779,6 +2059,19 @@
                 </div>
             </div>
         </div>
+        
+        <!-- Filing Notification Toast -->
+        <div x-show="filingNotifToast" 
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0 translate-y-3"
+             x-transition:enter-end="opacity-100 translate-y-0"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0"
+             class="filing-notif-toast">
+            <i class="fas fa-file-alt"></i>
+            <span x-text="filingNotifToast"></span>
+        </div>
     </div>
 
     <script>
@@ -1882,6 +2175,14 @@
                 researchTyping: false,
                 conversationId: null,
                 
+                // Provocations Engine
+                provocationsMode: null, // null = off, 'provocations', 'sentiment'
+                provocationsData: [],
+                provocationsLoading: false,
+                presetQuestions: [],
+                sentimentData: null,
+                queryCount: 0,
+                
                 // Settings
                 showSettingsModal: false,
                 systemPrompt: localStorage.getItem('fundlens_system_prompt') || '',
@@ -1927,6 +2228,13 @@
                 includeCalculatedMetrics: true,
                 exportLoading: false,
                 exportError: null,
+                
+                // Filing Notifications
+                filingNotifications: [],
+                filingNotifCount: 0,
+                filingNotifOpen: false,
+                filingNotifToast: null,
+                _filingNotifPollTimer: null,
                 
                 // Robustness State
                 retryCount: 0,
@@ -2082,6 +2390,8 @@
                     this.loadFinancialData(ticker);
                     this.loadQualitativeData(ticker);
                     this.loadScratchpad();
+                    this.loadFilingNotifications();
+                    this.startFilingNotifPolling();
                     
                     // Set up online/offline detection
                     window.addEventListener('online', () => {
@@ -2441,6 +2751,115 @@
                     this.researchInput = query;
                     this.sendResearchMessage();
                 },
+
+                // === Provocations Engine Functions ===
+                toggleProvocationsMode(mode) {
+                    if (this.provocationsMode === mode) {
+                        this.provocationsMode = null;
+                        this.presetQuestions = [];
+                    } else {
+                        this.provocationsMode = mode;
+                        this.loadPresetQuestions(mode);
+                    }
+                },
+
+                async loadPresetQuestions(mode) {
+                    try {
+                        const ticker = this.dealInfo?.ticker;
+                        if (!ticker) return;
+                        const res = await fetch(`/api/provocations/${ticker}/modes`);
+                        const data = await res.json();
+                        if (data.success) {
+                            const modeData = data.modes.find(m => m.name === mode);
+                            this.presetQuestions = modeData?.presetQuestions || [];
+                        }
+                    } catch (e) {
+                        console.error('Failed to load preset questions:', e);
+                    }
+                },
+
+                async loadProvocations(force = false) {
+                    const ticker = this.dealInfo?.ticker;
+                    if (!ticker) return;
+                    this.provocationsLoading = true;
+                    try {
+                        // Always try to get value investing provocations first (pre-computed, no waiting)
+                        const valueRes = await fetch(`/api/provocations/${ticker}/value-investing`);
+                        const valueData = await valueRes.json();
+                        
+                        if (valueData.success && valueData.provocations?.length > 0) {
+                            this.provocationsData = valueData.provocations;
+                            console.log(`Loaded ${valueData.count} value investing provocations for ${ticker}`);
+                        } else if (force) {
+                            // Fallback to on-demand generation if force is true
+                            const res = await fetch('/api/provocations/analyze', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ ticker, mode: 'provocations' }),
+                            });
+                            const data = await res.json();
+                            this.provocationsData = data.provocations || [];
+                        } else {
+                            // Try cached provocations
+                            const res = await fetch(`/api/provocations/${ticker}?mode=provocations`);
+                            const data = await res.json();
+                            this.provocationsData = data.provocations || [];
+                        }
+                        
+                        // Also load sentiment
+                        const sentRes = await fetch(`/api/provocations/${ticker}/sentiment`);
+                        const sentData = await sentRes.json();
+                        if (sentData.success) this.sentimentData = sentData;
+                    } catch (e) {
+                        console.error('Failed to load provocations:', e);
+                    } finally {
+                        this.provocationsLoading = false;
+                    }
+                },
+
+                askProvocationInResearch(prov) {
+                    this.currentView = 'research';
+                    this.provocationsMode = 'provocations';
+                    const question = prov.challengeQuestion || prov.challenge_question || prov.title;
+                    this.researchInput = question;
+                    this.sendResearchMessage();
+                },
+
+                async saveProvocationToScratchpad(prov) {
+                    const headers = this.getAuthHeaders();
+                    if (!headers) { window.location.href = '/login.html'; return; }
+                    try {
+                        if (!this.notebookId) await this.createNotebook();
+                        const content = `## ${prov.severity?.replace('_', ' ')} — ${prov.title}\n\n**Observation:** ${prov.observation}\n\n${prov.crossFilingDelta || prov.cross_filing_delta ? '**Cross-Filing Delta:** ' + (prov.crossFilingDelta || prov.cross_filing_delta) + '\n\n' : ''}**Implication:** ${prov.implication}\n\n**Challenge Question:** ${prov.challengeQuestion || prov.challenge_question}\n\n*Category: ${prov.category}*`;
+                        const response = await fetch(`/api/research/notebooks/${this.notebookId}/insights`, {
+                            method: 'POST',
+                            headers: headers,
+                            body: JSON.stringify({
+                                content,
+                                userNotes: `Provocation: ${prov.severity}`,
+                                tags: [this.dealInfo?.ticker, 'provocation', prov.severity, prov.category].filter(Boolean),
+                            }),
+                        });
+                        if (response.ok) {
+                            await this.loadScratchpad();
+                            alert('Provocation saved to scratchpad!');
+                        }
+                    } catch (e) {
+                        console.error('Error saving provocation:', e);
+                        alert('Error saving to scratchpad');
+                    }
+                },
+                // === End Provocations Engine ===
+
+                getEffectiveSystemPrompt() {
+                    if (this.provocationsMode === 'provocations') {
+                        return 'You are the FundLens Provocations Engine — a senior adversarial research analyst. Your job is to stress-test investment theses by surfacing risks, contradictions, and inconvenient truths hidden in SEC filings. Be direct, evidence-based, and challenging. Every finding must reference specific filing sections. Structure each finding with: Observation, Filing Reference, Cross-Filing Delta (if applicable), Implication, and Challenge Question. Classify severity as RED FLAG (material risk), AMBER (noteworthy pattern), or GREEN CHALLENGE (intellectual question).';
+                    }
+                    if (this.provocationsMode === 'sentiment') {
+                        return 'You are a sentiment analysis engine tracking management tone, confidence, and language patterns across SEC filings. Focus on confidence indicators ("will", "expect", "confident" vs "may", "could", "uncertain"), tone shifts, hedging language, commitment levels, and defensive language. Output sentiment scores (-1 to +1) and highlight material tone shifts.';
+                    }
+                    return this.systemPrompt || undefined;
+                },
                 
                 async sendResearchMessage() {
                     if (!this.researchInput.trim()) return;
@@ -2490,9 +2909,10 @@
                             headers: headers,
                             body: JSON.stringify({
                                 content: messageContent,
-                                systemPrompt: this.systemPrompt || undefined, // Include custom system prompt if set
+                                systemPrompt: this.getEffectiveSystemPrompt(),
                                 context: {
-                                    tickers: [this.dealInfo.ticker]
+                                    tickers: [this.dealInfo.ticker],
+                                    provocationsMode: this.provocationsMode || undefined
                                 }
                             })
                         });
@@ -2854,6 +3274,7 @@
                 async generateMemo() {
                     try {
                         this.memoGenerating = true;
+                        this.memoContent = ''; // Clear previous content
                         
                         const headers = this.getAuthHeaders();
                         if (!headers) {
@@ -2911,23 +3332,76 @@
                             return;
                         }
                         
-                        if (response.ok) {
-                            const result = await response.json();
-                            console.log('Memo generation response:', result);
-                            
-                            if (result.success && result.data) {
-                                this.memoContent = this.renderMarkdown(result.data.content);
-                                this.memoGenerated = true;
-                            } else {
-                                const errorMsg = result.error || result.message || 'Failed to generate memo';
-                                console.error('Backend error:', errorMsg);
-                                throw new Error(errorMsg);
-                            }
-                        } else {
+                        if (!response.ok) {
                             const errorText = await response.text();
                             console.error('HTTP error:', response.status, errorText);
                             throw new Error(`HTTP ${response.status}: ${errorText}`);
                         }
+                        
+                        // Handle streaming response (Server-Sent Events)
+                        const reader = response.body.getReader();
+                        const decoder = new TextDecoder();
+                        let buffer = '';
+                        let fullContent = '';
+                        
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            
+                            if (done) {
+                                console.log('Stream complete');
+                                break;
+                            }
+                            
+                            // Decode the chunk and add to buffer
+                            buffer += decoder.decode(value, { stream: true });
+                            
+                            // Process complete SSE messages (separated by \n\n)
+                            const messages = buffer.split('\n\n');
+                            buffer = messages.pop() || ''; // Keep incomplete message in buffer
+                            
+                            for (const message of messages) {
+                                if (!message.trim() || !message.startsWith('data: ')) continue;
+                                
+                                try {
+                                    const jsonStr = message.substring(6); // Remove 'data: ' prefix
+                                    const data = JSON.parse(jsonStr);
+                                    
+                                    console.log('Received chunk:', data);
+                                    
+                                    if (data.status === 'error') {
+                                        throw new Error(data.error || data.message || 'Failed to generate memo');
+                                    }
+                                    
+                                    if (data.type === 'content' && data.content) {
+                                        fullContent += data.content;
+                                        // Render markdown incrementally for better UX
+                                        this.memoContent = this.renderMarkdown(fullContent);
+                                    }
+                                    
+                                    if (data.status === 'complete') {
+                                        console.log('Memo generation complete');
+                                        this.memoGenerated = true;
+                                    }
+                                    
+                                    if (data.data && data.data.content) {
+                                        // Handle complete content in data field
+                                        fullContent = data.data.content;
+                                        this.memoContent = this.renderMarkdown(fullContent);
+                                        this.memoGenerated = true;
+                                    }
+                                } catch (parseError) {
+                                    console.error('Error parsing SSE message:', parseError, message);
+                                }
+                            }
+                        }
+                        
+                        // If we got content, mark as generated
+                        if (fullContent) {
+                            this.memoGenerated = true;
+                        } else {
+                            throw new Error('No content received from memo generation');
+                        }
+                        
                     } catch (error) {
                         console.error('Error generating memo:', error);
                         alert(`Error generating memo: ${error.message}`);
@@ -3271,107 +3745,155 @@
                 renderMarkdown(text) {
                     if (!text) return '';
                     try {
+                        // Pre-process: Fix malformed tables BEFORE configuring marked
+                        let processedText = text;
+                        
+                        // Step 1: Normalize line endings
+                        processedText = processedText.replace(/\r\n/g, '\n');
+                        
+                        // Step 2: Detect if we have tables and process them specially
+                        const hasTable = processedText.includes('|') && 
+                                        (processedText.includes('---') || processedText.includes('| '));
+                        
+                        if (hasTable) {
+                            console.log('📊 Table detected, pre-processing...');
+                            
+                            // Find and fix table sections
+                            const lines = processedText.split('\n');
+                            const fixedLines = [];
+                            let inTable = false;
+                            let tableLines = [];
+                            
+                            for (let i = 0; i < lines.length; i++) {
+                                const line = lines[i];
+                                const trimmedLine = line.trim();
+                                
+                                // Check if this line looks like a table row
+                                const isTableRow = trimmedLine.includes('|') && 
+                                                  !trimmedLine.startsWith('```') &&
+                                                  !trimmedLine.startsWith('`');
+                                const isSeparatorRow = /^\|?[\s\-:|]+\|[\s\-:|]*\|?$/.test(trimmedLine) && 
+                                                      trimmedLine.includes('-');
+                                
+                                if (isTableRow) {
+                                    if (!inTable) {
+                                        // Starting a new table - add blank line before if needed
+                                        if (fixedLines.length > 0 && fixedLines[fixedLines.length - 1].trim() !== '') {
+                                            fixedLines.push('');
+                                        }
+                                        inTable = true;
+                                        tableLines = [];
+                                    }
+                                    
+                                    // Fix the table row
+                                    let fixedLine = trimmedLine;
+                                    if (!fixedLine.startsWith('|')) fixedLine = '| ' + fixedLine;
+                                    if (!fixedLine.endsWith('|')) fixedLine = fixedLine + ' |';
+                                    tableLines.push(fixedLine);
+                                } else if (inTable) {
+                                    // Check if this is an empty line or non-table content
+                                    if (trimmedLine === '' || !trimmedLine.includes('|')) {
+                                        // End of table - process and add table lines
+                                        if (tableLines.length >= 2) {
+                                            // Ensure we have a separator row
+                                            let hasSeparator = tableLines.some(l => /^\|[\s\-:|]+\|$/.test(l.trim()));
+                                            if (!hasSeparator && tableLines.length >= 1) {
+                                                // Insert separator after first row
+                                                const headerCells = tableLines[0].split('|').filter(c => c.trim());
+                                                const separator = '|' + headerCells.map(() => '---').join('|') + '|';
+                                                tableLines.splice(1, 0, separator);
+                                            }
+                                            fixedLines.push(...tableLines);
+                                        }
+                                        fixedLines.push(''); // Blank line after table
+                                        inTable = false;
+                                        tableLines = [];
+                                        
+                                        // Add the current non-table line if not empty
+                                        if (trimmedLine !== '') {
+                                            fixedLines.push(line);
+                                        }
+                                    }
+                                } else {
+                                    fixedLines.push(line);
+                                }
+                            }
+                            
+                            // Handle table at end of content
+                            if (inTable && tableLines.length >= 2) {
+                                let hasSeparator = tableLines.some(l => /^\|[\s\-:|]+\|$/.test(l.trim()));
+                                if (!hasSeparator) {
+                                    const headerCells = tableLines[0].split('|').filter(c => c.trim());
+                                    const separator = '|' + headerCells.map(() => '---').join('|') + '|';
+                                    tableLines.splice(1, 0, separator);
+                                }
+                                fixedLines.push(...tableLines);
+                                fixedLines.push('');
+                            }
+                            
+                            processedText = fixedLines.join('\n');
+                            console.log('📊 Processed table text:', processedText.substring(0, 800));
+                        }
+                        
                         // Configure marked for better rendering (v5+ compatible)
+                        // IMPORTANT: Don't use breaks:true as it interferes with table parsing
                         if (typeof marked !== 'undefined') {
-                            // Use marked.use() for v5+ configuration
                             marked.use({
-                                breaks: true, // Convert \n to <br>
+                                breaks: false, // Don't convert \n to <br> - breaks tables!
                                 gfm: true, // GitHub Flavored Markdown (includes tables)
-                                headerIds: false, // Don't add IDs to headers
-                                mangle: false // Don't escape autolinked email addresses
+                                headerIds: false,
+                                mangle: false
                             });
                         }
                         
-                        // Pre-process: Fix malformed tables
-                        let processedText = text;
-                        
-                        // CRITICAL FIX: Handle collapsed tables (all on one line)
-                        // Pattern: "| Header1 | Header2 |---|---| Data1 | Data2 |"
-                        // This happens when tables are stored without proper newlines
-                        
-                        // First, try to detect and fix collapsed tables
-                        // Look for pattern: |...|---|...|...|
-                        const collapsedTablePattern = /\|[^|]+\|[^|]*\|[\s]*[-:]+[\s]*\|[-:|\s]+\|[^|]+\|/g;
-                        if (collapsedTablePattern.test(processedText)) {
-                            console.log('🔧 Detected collapsed table, attempting to fix...');
-                            
-                            // Split on separator pattern and reconstruct
-                            // Pattern: |---| or |:---:| etc
-                            processedText = processedText.replace(
-                                /(\|[^|\n]+(?:\|[^|\n]+)*\|)\s*((?:\|[\s:-]+)+\|)\s*(\|[^|\n]+(?:\|[^|\n]+)*\|)/g,
-                                (match, header, separator, data) => {
-                                    console.log('  - Header:', header);
-                                    console.log('  - Separator:', separator);
-                                    console.log('  - Data:', data);
-                                    
-                                    // Split data rows by || pattern (double pipe indicates row boundary)
-                                    let dataRows = data;
-                                    // Replace || with newline + |
-                                    dataRows = dataRows.replace(/\|\s*\|/g, '|\n|');
-                                    
-                                    return header + '\n' + separator + '\n' + dataRows;
-                                }
-                            );
-                        }
-                        
-                        // Also handle the specific pattern: |...|--------|--------||...|
-                        // Where || indicates a row break that got collapsed
-                        processedText = processedText.replace(/\|\|/g, '|\n|');
-                        
-                        // Fix separator rows that got merged with data
-                        // Pattern: |---|---| followed immediately by data without newline
-                        processedText = processedText.replace(
-                            /(\|[-:\s]+\|[-:\s|]+\|)([^-\n])/g,
-                            '$1\n$2'
-                        );
-                        
-                        // Ensure proper newlines around table structures
-                        const lines = processedText.split('\n');
-                        const fixedLines = [];
-                        let inTable = false;
-                        let headerSeen = false;
-                        let separatorSeen = false;
-                        
-                        for (let i = 0; i < lines.length; i++) {
-                            let line = lines[i];
-                            
-                            // Check if this looks like a table row (has pipes)
-                            if (line.includes('|')) {
-                                // Check if it's a separator row (only pipes, dashes, colons, spaces)
-                                const isSeparator = /^\|?[\s\-:|]+\|?$/.test(line.trim());
-                                
-                                if (!inTable && !isSeparator) {
-                                    // First non-separator row with pipes = header
-                                    inTable = true;
-                                    headerSeen = true;
-                                }
-                                
-                                if (inTable && isSeparator && headerSeen && !separatorSeen) {
-                                    // This is the separator row after header
-                                    separatorSeen = true;
-                                } else if (inTable && separatorSeen && !isSeparator) {
-                                    // This is a data row - clean up any embedded dashes that aren't part of values
-                                    // Remove patterns like "||" or "| |" that break tables
-                                    line = line.replace(/\|\s*\|/g, '| - |');
-                                }
-                            } else if (inTable && line.trim() === '') {
-                                // Empty line ends table
-                                inTable = false;
-                                headerSeen = false;
-                                separatorSeen = false;
-                            }
-                            
-                            fixedLines.push(line);
-                        }
-                        
-                        processedText = fixedLines.join('\n');
-                        
                         const html = marked.parse(processedText);
                         
-                        // Post-process: If we still have raw pipe characters in the output,
-                        // it means the table didn't parse - try to render it as HTML table
-                        if (html.includes('|') && html.includes('---')) {
-                            console.log('⚠️ Table may not have parsed correctly, raw pipes still present');
+                        // Post-process: If tables weren't parsed (still have raw pipes), convert manually
+                        let finalHtml = html;
+                        
+                        // Check if we have unparsed tables (pipes inside <p> tags or raw text)
+                        if (finalHtml.includes('|') && !finalHtml.includes('<table')) {
+                            console.log('⚠️ Tables not parsed by marked, attempting manual conversion');
+                            
+                            // Collect all table-like content
+                            let tableContent = '';
+                            let inTableSection = false;
+                            
+                            // Extract table-like content from <p> tags
+                            finalHtml = finalHtml.replace(/<p>([^<]*\|[^<]*)<\/p>/g, (match, content) => {
+                                if ((content.match(/\|/g) || []).length >= 2) {
+                                    const tableHtml = this.convertRawTableToHtml(content);
+                                    if (tableHtml) {
+                                        return tableHtml;
+                                    }
+                                }
+                                return match;
+                            });
+                            
+                            // Handle consecutive <p> tags that form a table
+                            // Pattern: multiple <p>|...|</p> in sequence
+                            finalHtml = finalHtml.replace(
+                                /(<p>[^<]*\|[^<]*<\/p>\s*)+/g,
+                                (match) => {
+                                    // Extract content from all p tags
+                                    const rows = [];
+                                    match.replace(/<p>([^<]*)<\/p>/g, (m, content) => {
+                                        if (content.includes('|')) {
+                                            rows.push(content.trim());
+                                        }
+                                        return m;
+                                    });
+                                    
+                                    if (rows.length >= 2) {
+                                        const tableText = rows.join('\n');
+                                        const tableHtml = this.convertRawTableToHtml(tableText);
+                                        if (tableHtml) {
+                                            return tableHtml;
+                                        }
+                                    }
+                                    return match;
+                                }
+                            );
                         }
                         
                         // Post-process: Add syntax highlighting to any remaining code blocks
@@ -3385,26 +3907,13 @@
                             }, 0);
                         }
                         
-                        // Post-process: Convert any remaining raw table text to HTML tables
-                        // This handles cases where marked didn't parse the table correctly
-                        let finalHtml = html;
+                        // Post-process: Convert severity badges to styled HTML
+                        finalHtml = this.convertSeverityBadges(finalHtml);
                         
-                        // Look for patterns like "| text | text |" that weren't converted to tables
-                        // These will appear as plain text with pipes
-                        const rawTablePattern = /(?:^|\n)(\|[^<\n]+\|(?:\n\|[^<\n]+\|)*)/gm;
-                        const matches = finalHtml.match(rawTablePattern);
-                        
-                        if (matches) {
-                            matches.forEach(match => {
-                                // Check if this looks like a table (has separator row with dashes)
-                                if (match.includes('---') || match.includes('|')) {
-                                    const tableHtml = this.convertRawTableToHtml(match.trim());
-                                    if (tableHtml) {
-                                        finalHtml = finalHtml.replace(match, '\n' + tableHtml + '\n');
-                                    }
-                                }
-                            });
-                        }
+                        // Post-process: Convert single newlines to <br> for non-table content
+                        // (since we disabled breaks:true to fix tables)
+                        // But be careful not to add <br> inside tables
+                        finalHtml = finalHtml.replace(/([^>])\n([^<])/g, '$1<br>\n$2');
                         
                         return finalHtml;
                     } catch (error) {
@@ -3414,42 +3923,111 @@
                     }
                 },
                 
+                // Helper: Convert severity text to styled badges for Provocations Engine
+                convertSeverityBadges(html) {
+                    if (!html) return html;
+                    
+                    // Process in order: emoji versions first, then bold, then plain text
+                    // This prevents double-conversion
+                    
+                    // RED FLAG patterns
+                    html = html.replace(/🔴\s*RED FLAG:?\s*/gi, '<span class="severity-badge severity-red"><i class="fas fa-exclamation-circle"></i> RED FLAG</span> ');
+                    html = html.replace(/<strong>RED FLAG<\/strong>:?\s*/gi, '<span class="severity-badge severity-red"><i class="fas fa-exclamation-circle"></i> RED FLAG</span> ');
+                    // Plain text - only if not already converted (check for no preceding span)
+                    html = html.replace(/([^>])RED FLAG:?\s*/gi, '$1<span class="severity-badge severity-red"><i class="fas fa-exclamation-circle"></i> RED FLAG</span> ');
+                    // Handle at start of string or after newline
+                    html = html.replace(/^RED FLAG:?\s*/gim, '<span class="severity-badge severity-red"><i class="fas fa-exclamation-circle"></i> RED FLAG</span> ');
+                    
+                    // AMBER patterns
+                    html = html.replace(/🟠\s*AMBER:?\s*/gi, '<span class="severity-badge severity-amber"><i class="fas fa-exclamation-triangle"></i> AMBER</span> ');
+                    html = html.replace(/<strong>AMBER<\/strong>:?\s*/gi, '<span class="severity-badge severity-amber"><i class="fas fa-exclamation-triangle"></i> AMBER</span> ');
+                    html = html.replace(/([^>])AMBER:?\s*/gi, '$1<span class="severity-badge severity-amber"><i class="fas fa-exclamation-triangle"></i> AMBER</span> ');
+                    html = html.replace(/^AMBER:?\s*/gim, '<span class="severity-badge severity-amber"><i class="fas fa-exclamation-triangle"></i> AMBER</span> ');
+                    
+                    // GREEN CHALLENGE patterns (must come before GREEN to avoid partial matches)
+                    html = html.replace(/🟢\s*GREEN CHALLENGE:?\s*/gi, '<span class="severity-badge severity-green"><i class="fas fa-lightbulb"></i> GREEN CHALLENGE</span> ');
+                    html = html.replace(/<strong>GREEN CHALLENGE<\/strong>:?\s*/gi, '<span class="severity-badge severity-green"><i class="fas fa-lightbulb"></i> GREEN CHALLENGE</span> ');
+                    html = html.replace(/([^>])GREEN CHALLENGE:?\s*/gi, '$1<span class="severity-badge severity-green"><i class="fas fa-lightbulb"></i> GREEN CHALLENGE</span> ');
+                    html = html.replace(/^GREEN CHALLENGE:?\s*/gim, '<span class="severity-badge severity-green"><i class="fas fa-lightbulb"></i> GREEN CHALLENGE</span> ');
+                    
+                    // GREEN patterns (simpler version)
+                    html = html.replace(/🟢\s*GREEN:?\s*/gi, '<span class="severity-badge severity-green"><i class="fas fa-lightbulb"></i> GREEN</span> ');
+                    
+                    return html;
+                },
+                
                 // Helper: Convert raw pipe-delimited table text to HTML table
                 convertRawTableToHtml(rawTable) {
                     try {
+                        console.log('🔧 convertRawTableToHtml input:', rawTable.substring(0, 200));
+                        
+                        // Clean up the input - remove any HTML tags that might have wrapped it
+                        let cleanTable = rawTable
+                            .replace(/<br\s*\/?>/gi, '\n')
+                            .replace(/<\/?p>/gi, '\n')
+                            .replace(/&nbsp;/gi, ' ')
+                            .trim();
+                        
                         // Split into lines
-                        let lines = rawTable.split('\n').filter(l => l.trim());
+                        let lines = cleanTable.split('\n').filter(l => l.trim() && l.includes('|'));
+                        
+                        console.log('  - Lines found:', lines.length);
                         
                         // If all on one line, try to split by || or by detecting row boundaries
                         if (lines.length === 1) {
-                            // Try splitting by ||
                             const singleLine = lines[0];
+                            
+                            // Try splitting by ||
                             if (singleLine.includes('||')) {
                                 lines = singleLine.split('||').map(l => '|' + l.replace(/^\||\|$/g, '') + '|');
-                            } else if (singleLine.includes('|---')) {
-                                // Split around the separator
-                                const parts = singleLine.split(/(\|[-:\s]+\|[-:\s|]*\|)/);
-                                lines = parts.filter(p => p.trim());
+                            } 
+                            // Try splitting around separator pattern |---|
+                            else if (singleLine.includes('|---') || singleLine.includes('---|')) {
+                                // Find the separator section
+                                const sepMatch = singleLine.match(/(\|[-:\s|]+\|)/);
+                                if (sepMatch) {
+                                    const sepIndex = singleLine.indexOf(sepMatch[0]);
+                                    const beforeSep = singleLine.substring(0, sepIndex);
+                                    const sep = sepMatch[0];
+                                    const afterSep = singleLine.substring(sepIndex + sep.length);
+                                    
+                                    lines = [beforeSep, sep];
+                                    // Split remaining content by | | pattern (row boundaries)
+                                    if (afterSep.trim()) {
+                                        // Try to split data rows
+                                        const dataRows = afterSep.split(/\|\s*\|/).filter(r => r.trim());
+                                        dataRows.forEach(row => {
+                                            lines.push('|' + row.replace(/^\||\|$/g, '') + '|');
+                                        });
+                                    }
+                                }
                             }
                         }
                         
-                        if (lines.length < 2) return null; // Need at least header and one row
+                        if (lines.length < 2) {
+                            console.log('  - Not enough lines for a table');
+                            return null;
+                        }
                         
-                        // Find separator row
+                        // Find separator row (contains only |, -, :, and spaces)
                         let separatorIndex = -1;
                         for (let i = 0; i < lines.length; i++) {
-                            if (/^\|?[\s\-:|]+\|?$/.test(lines[i].trim())) {
+                            const line = lines[i].trim();
+                            // Separator row: |---|---| or |:---:|:---:| etc
+                            if (/^\|?[\s\-:|]+\|[\s\-:|]*\|?$/.test(line) && line.includes('-')) {
                                 separatorIndex = i;
+                                console.log('  - Separator found at index:', i);
                                 break;
                             }
                         }
                         
-                        // If no separator found, assume first row is header
+                        // If no separator found, assume first row is header and create one
                         if (separatorIndex === -1) {
-                            separatorIndex = 1;
-                            // Insert a fake separator
+                            console.log('  - No separator found, creating one');
                             const headerCells = lines[0].split('|').filter(c => c.trim());
-                            lines.splice(1, 0, '|' + headerCells.map(() => '---').join('|') + '|');
+                            const separator = '|' + headerCells.map(() => '---').join('|') + '|';
+                            lines.splice(1, 0, separator);
+                            separatorIndex = 1;
                         }
                         
                         // Build HTML table
@@ -3459,6 +4037,7 @@
                         html += '<thead><tr>';
                         const headerLine = lines[0];
                         const headerCells = headerLine.split('|').filter(c => c !== '');
+                        console.log('  - Header cells:', headerCells);
                         headerCells.forEach(cell => {
                             html += `<th>${cell.trim()}</th>`;
                         });
@@ -3481,6 +4060,7 @@
                         }
                         html += '</tbody></table>';
                         
+                        console.log('  - Generated table HTML');
                         return html;
                     } catch (e) {
                         console.error('Error converting raw table:', e);
@@ -3588,6 +4168,11 @@
                         console.error('Failed to copy citation:', err);
                         this.showToast('Failed to copy citation', 'error');
                     });
+                },
+                
+                // Alias for opening citation modal (used by qualitative analysis)
+                openCitationModal(source) {
+                    this.handleSecFilingCitation(source);
                 },
                 
                 // Robustness Functions
@@ -3943,6 +4528,109 @@
                     // Switch to IC Memo view
                     this.switchView('ic-memo');
                     // The IC Memo generation will automatically include scratchpad items
+                },
+                
+                // ==================== FILING NOTIFICATION METHODS ====================
+                
+                async loadFilingNotifications() {
+                    try {
+                        const headers = this.getAuthHeaders();
+                        if (!headers) return;
+                        
+                        const response = await fetch('/api/filings/notifications?dismissed=false&limit=20', {
+                            headers
+                        });
+                        
+                        if (!response.ok) {
+                            // Silently fail - notifications are non-critical
+                            console.warn('Filing notifications unavailable:', response.status);
+                            return;
+                        }
+                        
+                        const data = await response.json();
+                        if (data.success) {
+                            this.filingNotifications = data.notifications || [];
+                            this.filingNotifCount = data.count || 0;
+                        }
+                    } catch (error) {
+                        // Silently fail - don't disrupt the workspace
+                        console.warn('Could not load filing notifications:', error.message);
+                    }
+                },
+                
+                startFilingNotifPolling() {
+                    // Poll every 60 seconds
+                    this._filingNotifPollTimer = setInterval(async () => {
+                        const prevCount = this.filingNotifCount;
+                        await this.loadFilingNotifications();
+                        
+                        // Show toast if new notifications appeared
+                        if (this.filingNotifCount > prevCount) {
+                            const diff = this.filingNotifCount - prevCount;
+                            this.filingNotifToast = `${diff} new filing${diff > 1 ? 's' : ''} detected`;
+                            setTimeout(() => { this.filingNotifToast = null; }, 4000);
+                        }
+                    }, 60000);
+                },
+                
+                async dismissFilingNotif(id) {
+                    try {
+                        const headers = this.getAuthHeaders();
+                        if (!headers) return;
+                        
+                        const response = await fetch(`/api/filings/notifications/${id}`, {
+                            method: 'DELETE',
+                            headers
+                        });
+                        
+                        if (response.ok) {
+                            this.filingNotifications = this.filingNotifications.filter(n => n.id !== id);
+                            this.filingNotifCount = Math.max(0, this.filingNotifCount - 1);
+                        }
+                    } catch (error) {
+                        console.warn('Could not dismiss notification:', error.message);
+                    }
+                },
+                
+                async dismissAllFilingNotifs() {
+                    try {
+                        const headers = this.getAuthHeaders();
+                        if (!headers) return;
+                        
+                        // Dismiss each notification
+                        const ids = this.filingNotifications.map(n => n.id);
+                        await Promise.all(
+                            ids.map(id => 
+                                fetch(`/api/filings/notifications/${id}`, {
+                                    method: 'DELETE',
+                                    headers
+                                })
+                            )
+                        );
+                        
+                        this.filingNotifications = [];
+                        this.filingNotifCount = 0;
+                    } catch (error) {
+                        console.warn('Could not dismiss all notifications:', error.message);
+                    }
+                },
+                
+                getFilingTypeBadgeClass(filingType) {
+                    const type = (filingType || '').toUpperCase();
+                    if (type.includes('10-K')) return 'filing-type-10k';
+                    if (type.includes('10-Q')) return 'filing-type-10q';
+                    if (type.includes('8-K')) return 'filing-type-8k';
+                    return 'filing-type-default';
+                },
+                
+                formatFilingDate(dateStr) {
+                    if (!dateStr) return '';
+                    try {
+                        const d = new Date(dateStr);
+                        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                    } catch {
+                        return dateStr;
+                    }
                 }
             };
         }

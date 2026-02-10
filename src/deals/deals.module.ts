@@ -22,6 +22,15 @@ import { MetricHierarchyService } from './metric-hierarchy.service';
 import { FootnoteLinkingService } from './footnote-linking.service';
 import { MDAIntelligenceService } from './mda-intelligence.service';
 import { ScratchpadItemService } from './scratchpad-item.service';
+// Provocations Engine
+import { TemporalDiffEngineService } from './temporal-diff-engine.service';
+import { SemanticSimilarityEngineService } from './semantic-similarity-engine.service';
+import { ProvocationGeneratorService } from './provocation-generator.service';
+import { SentimentAnalyzerService } from './sentiment-analyzer.service';
+import { AnalysisModeRegistryService } from './analysis-mode-registry.service';
+import { ProvocationsPrecomputeService } from './provocations-precompute.service';
+import { ContradictionDetectorService } from './contradiction-detector.service';
+import { ManagementCredibilityService } from './management-credibility.service';
 
 // Controllers
 import { DealController } from './deal.controller';
@@ -33,6 +42,7 @@ import { DocumentGenerationController } from './document-generation.controller';
 import { DealsTestController } from './deals-test.controller';
 import { ExportController } from './export.controller';
 import { ScratchpadItemController } from './scratchpad-item.controller';
+import { ProvocationsController } from './provocations.controller';
 
 /**
  * Deals Module
@@ -59,6 +69,7 @@ import { ScratchpadItemController } from './scratchpad-item.controller';
     DocumentGenerationController,
     ExportController,
     ScratchpadItemController,
+    ProvocationsController,
   ],
   providers: [
     PrismaService,
@@ -77,6 +88,15 @@ import { ScratchpadItemController } from './scratchpad-item.controller';
     FootnoteLinkingService,
     MDAIntelligenceService,
     ScratchpadItemService,
+    // Provocations Engine
+    TemporalDiffEngineService,
+    SemanticSimilarityEngineService,
+    ProvocationGeneratorService,
+    SentimentAnalyzerService,
+    AnalysisModeRegistryService,
+    ProvocationsPrecomputeService,
+    ContradictionDetectorService,
+    ManagementCredibilityService,
   ],
   exports: [
     DealService,
