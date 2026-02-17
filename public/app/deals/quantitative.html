@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FundLens - Quantitative Analysis</title>
+    <link rel="stylesheet" href="/css/design-system.css">
+    <link rel="stylesheet" href="/css/filing-notifications.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.14.8/dist/cdn.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="_module-config.js"></script>
+    <script src="/app/_shell.js"></script>
+    <script src="/app/_utils.js"></script>
+    <style>
+        [x-cloak] { display: none !important; }
+        .sidebar { width: 240px; background: white; border-right: 1px solid #e5e7eb; }
+        .nav-item { transition: all 0.2s ease; cursor: pointer; position: relative; }
+        .nav-item:hover { background: #f9fafb; }
+        .nav-item.active { background: #eff6ff; color: #1a56db; border-left: 3px solid #1a56db; }
+        .nav-item.active i { color: #1a56db; }
+        .badge { position: absolute; top: 8px; right: 8px; background: #dc2626; color: white; font-size: 0.65rem; padding: 2px 6px; border-radius: 10px; font-weight: 600; }
+        .tenant-badge { background: linear-gradient(135deg, #1a56db 0%, #7c3aed 100%); }
+        .annual-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+        .annual-table th { text-align: left; padding: 0.5rem 1rem; background: #f9fafb; border-bottom: 2px solid #e5e7eb; font-weight: 600; color: #374151; }
+        .annual-table td { padding: 0.5rem 1rem; border-bottom: 1px solid #f3f4f6; }
+        .annual-table tr:hover { background: #f9fafb; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .fade-in { animation: fadeIn 0.3s ease-out; }
+    </style>
+    <script>
+    window.FundLensQuantitativeView = function() {
+        return {
+            loading: true,
+            years: 5,
+            data: null,
+            retryCount: 0,
+            maxRetries: 3,
+
+            formatCurrency(v) { return FundLensUtils.formatCurrency(v); },
+            formatPercent(v) { return FundLensUtils.formatPercent(v); },
+            formatRatio(v) { return FundLensUtils.formatRatio(v); },
+            formatDays(v) { return FundLensUtils.formatDays(v); },
+            getYoYGrowth(d, p) { return FundLensUtils.getYoYGrowth(d, p); },
+            getMarginForPeriod(d, p) { return FundLensUtils.getMarginForPeriod(d, p); },
+            getValueForPeriod(d, p, t) { return FundLensUtils.getValueForPeriod(d, p, t); },
+
+            async init() {
+                await this.loadFinancialData();
+            },
+
+            async loadFinancialData() {
+                this.loading = true;
+                try {
+                    var headers = this.getAuthHeaders();
+                    if (!headers) { this.loading = false; return; }
+                    var ticker = this.entityContext.value;
+                    var resp = await fetch('/api/financial-calculator/dashboard/' + ticker + '?years=' + this.years, { headers: headers });
+                    if (resp.status === 401) { window.location.href = '/login.html'; return; }
+                    var result = await resp.json();
+                    if (result.success) {
+                        this.data = FundLensUtils.deepCopy(result.data);
+                    } else {
+                        this.dataLoadError = 'Could not load financial data.';
+                    }
+                } catch (e) {
+                    console.error('Error loading financial data:', e);
+                    this.dataLoadError = 'Failed to load financial data. Please try again.';
+                } finally {
+                    this.loading = false;
+                }
+            },
+
+            async retryLoadData() {
+                if (this.retryCount >= this.maxRetries) {
+                    this.dataLoadError = 'Failed after multiple attempts. Please refresh.';
+                    return;
+                }
+                this.retryCount++;
+                this.dataLoadError = null;
+                await this.loadFinancialData();
+            }
+        };
+    };
+    </script>
+</head>
+<body class="bg-gray-50">
+    <div x-data="FundLensShell('quantitative', FundLensQuantitativeView())" x-init="try { await init() } catch(e) { console.error('Init error:', e) }" x-cloak>
+
+        <!-- Nav Bar -->
+        <nav class="bg-white shadow-sm border-b border-gray-100 sticky top-0 z-50">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between items-center h-16">
+                    <div class="flex items-center space-x-4">
+                        <a href="/app/deals/index.html" class="flex items-center">
+                            <div class="bg-white px-3 py-1 rounded-lg"><img src="/fundlens-logo.png" alt="FundLens" class="h-8 w-auto"></div>
+                        </a>
+                        <div class="hidden sm:flex items-center">
+                            <span class="text-gray-300 mx-3">|</span>
+                            <div class="tenant-badge px-3 py-1 rounded-full">
+                                <span class="text-white text-sm font-medium" x-text="user.tenantName || 'Loading...'"></span>
+                            </div>
+                            <div x-show="user.isPlatformAdmin" class="ml-2 px-2 py-1 rounded-full bg-yellow-500">
+                                <span class="text-white text-xs font-bold">PLATFORM ADMIN</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <!-- Filing Notifications Bell -->
+                        <div class="relative">
+                            <button @click="filingNotifOpen = !filingNotifOpen" class="filing-notif-bell" aria-label="Filing notifications">
+                                <i class="fas fa-bell"></i>
+                                <span x-show="filingNotifCount > 0" class="filing-notif-badge" x-text="filingNotifCount > 99 ? '99+' : filingNotifCount"></span>
+                            </button>
+                            <div x-show="filingNotifOpen" @click.away="filingNotifOpen = false" x-transition class="filing-notif-dropdown">
+                                <div class="filing-notif-header">
+                                    <h3>New Filings</h3>
+                                    <button x-show="filingNotifications.length > 0" @click="dismissAllFilingNotifs()" class="filing-notif-dismiss-all">Dismiss All</button>
+                                </div>
+                                <div class="filing-notif-list">
+                                    <template x-if="filingNotifications.length === 0">
+                                        <div class="filing-notif-empty"><i class="fas fa-check-circle"></i><p>No new filings</p></div>
+                                    </template>
+                                    <template x-for="notif in filingNotifications" :key="notif.id">
+                                        <div class="filing-notif-card">
+                                            <span class="filing-type-badge" :class="getFilingTypeBadgeClass(notif.filingType)" x-text="notif.filingType"></span>
+                                            <div class="filing-notif-content">
+                                                <div class="filing-notif-ticker" x-text="notif.ticker"></div>
+                                                <div class="filing-notif-date" x-text="formatFilingDate(notif.filingDate)"></div>
+                                            </div>
+                                            <button @click.stop="dismissFilingNotif(notif.id)" class="filing-notif-dismiss"><i class="fas fa-times"></i></button>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- User Menu -->
+                        <div class="relative" x-data="{ open: false }">
+                            <button @click="open = !open" class="flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-gray-100">
+                                <div class="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center">
+                                    <span class="text-indigo-600 font-semibold text-sm" x-text="getUserInitials()"></span>
+                                </div>
+                                <div class="hidden md:block text-left">
+                                    <p class="text-sm font-medium text-gray-700" x-text="user.email"></p>
+                                    <p class="text-xs text-gray-500 capitalize" x-text="user.role"></p>
+                                </div>
+                                <i class="fas fa-chevron-down text-gray-400 text-xs"></i>
+                            </button>
+                            <div x-show="open" @click.away="open = false" x-transition class="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg py-2 z-50 border border-gray-200">
+                                <div class="px-4 py-3 border-b border-gray-200">
+                                    <p class="text-sm font-medium text-gray-900" x-text="user.email"></p>
+                                    <p class="text-xs text-gray-600" x-text="user.tenantName"></p>
+                                </div>
+                                <div class="pt-2">
+                                    <button @click="logout()" class="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"><i class="fas fa-sign-out-alt mr-3"></i> Sign Out</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Breadcrumbs -->
+        <div class="bg-white border-b border-gray-200 px-6 py-3">
+            <div class="flex items-center space-x-2 text-sm mb-2">
+                <template x-for="(crumb, i) in breadcrumbItems" :key="i">
+                    <span class="flex items-center space-x-2">
+                        <span x-show="i > 0"><i class="fas fa-chevron-right text-gray-400 text-xs"></i></span>
+                        <a x-show="crumb.path" :href="crumb.path" class="text-gray-500 hover:text-blue-600" x-text="crumb.label"></a>
+                        <span x-show="!crumb.path" class="text-gray-900 font-medium" x-text="crumb.label"></span>
+                    </span>
+                </template>
+            </div>
+            <div class="flex items-center space-x-4">
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background: linear-gradient(135deg, #1a56db 0%, #7c3aed 100%);">
+                    <i class="fas fa-chart-line text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold text-gray-900" x-text="entityContext.displayName"></h1>
+                    <p class="text-xs text-gray-500" x-text="entityContext.extra.sector" x-show="entityContext.extra.sector"></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Layout -->
+        <div class="flex h-[calc(100vh-132px)]">
+            <!-- Sidebar -->
+            <div class="sidebar flex flex-col" role="navigation">
+                <nav class="flex-1 p-3 space-y-3">
+                    <template x-for="group in sidebarGroups" :key="group.label">
+                        <div>
+                            <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider px-3 py-1" x-text="group.label"></div>
+                            <template x-for="item in group.items" :key="item.page">
+                                <div @click="navigateTo(item.page)" :class="{'active': currentPage === item.page}" class="nav-item flex items-center px-3 py-2.5 rounded-lg cursor-pointer">
+                                    <i :class="item.icon" class="w-5 text-gray-400"></i>
+                                    <span class="ml-3 text-sm font-medium" x-text="item.name"></span>
+                                    <span x-show="item.badge && $data[item.badge] > 0" class="badge" x-text="$data[item.badge]"></span>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </nav>
+                <div class="p-4 border-t border-gray-200">
+                    <p class="text-xs text-gray-400 mb-2">Keyboard Shortcuts</p>
+                    <div class="space-y-1 text-xs text-gray-500">
+                        <template x-for="item in sidebarGroups.flatMap(g => g.items).filter(i => i.shortcut)" :key="item.shortcut">
+                            <div><span x-text="'⌘' + item.shortcut + ' - ' + item.name"></span></div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Content Area -->
+            <div class="flex-1 overflow-auto">
+                <div x-show="!isOnline" class="bg-yellow-50 border-b border-yellow-200 px-6 py-3">
+                    <span class="text-sm text-yellow-800">⚠️ You are currently offline.</span>
+                </div>
+                <div x-show="dataLoadError" class="bg-red-50 border-b border-red-200 px-6 py-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm text-red-800" x-text="dataLoadError"></span>
+                        <button @click="retryLoadData()" class="text-sm text-red-600 hover:text-red-800 font-medium">Retry</button>
+                    </div>
+                </div>
+
+                <div class="fade-in p-8">
+                    <div class="max-w-7xl mx-auto space-y-6">
+
+                        <!-- Loading State -->
+                        <div x-show="loading" class="text-center py-12">
+                            <div class="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+                                <i class="fas fa-chart-bar text-2xl text-indigo-600"></i>
+                            </div>
+                            <h3 class="text-lg font-semibold text-gray-900">Loading Comprehensive Metrics...</h3>
+                        </div>
+
+                        <!-- SECTION 1: FINANCIAL PERFORMANCE -->
+                        <div x-show="!loading && data" class="bg-white rounded-xl p-6 border border-gray-200">
+                            <h2 class="text-xl font-bold mb-6 flex items-center">
+                                <i class="fas fa-chart-line text-green-600 mr-3"></i>1. Financial Performance Metrics
+                            </h2>
+                            <!-- Revenue -->
+                            <div class="mb-8">
+                                <h3 class="text-lg font-semibold text-gray-800 mb-4">Revenue</h3>
+                                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                                    <div class="bg-green-50 rounded-lg p-4">
+                                        <p class="text-sm text-gray-600">TTM Revenue</p>
+                                        <p class="text-2xl font-bold text-green-700" x-text="formatCurrency(data?.metrics?.revenue?.ttm)"></p>
+                                        <p class="text-xs text-green-600">Sum of last 4 quarters (10-Q)</p>
+                                    </div>
+                                    <div class="bg-green-50 rounded-lg p-4">
+                                        <p class="text-sm text-gray-600">Revenue CAGR</p>
+                                        <p class="text-2xl font-bold text-green-700" x-text="formatPercent(data?.metrics?.revenue?.cagr)"></p>
+                                        <p class="text-xs text-green-600">Compound Annual Growth Rate</p>
+                                    </div>
+                                </div>
+                                <div x-show="data?.metrics?.revenue?.annual?.length > 0">
+                                    <h4 class="font-medium text-gray-700 mb-2">Annual Revenue (from 10-K)</h4>
+                                    <table class="annual-table">
+                                        <thead><tr><th>Fiscal Year</th><th>Revenue</th><th>YoY Growth</th></tr></thead>
+                                        <tbody>
+                                            <template x-for="item in data?.metrics?.revenue?.annual?.filter(i => i.period.startsWith('FY'))" :key="item.period">
+                                                <tr>
+                                                    <td x-text="item.period"></td>
+                                                    <td class="font-semibold" x-text="formatCurrency(item.value)"></td>
+                                                    <td x-text="getYoYGrowth(data?.metrics?.revenue?.yoyGrowth, item.period)"></td>
+                                                </tr>
+                                            </template>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <!-- Gross Profit -->
+                            <div class="mb-8">
+                                <h3 class="text-lg font-semibold text-gray-800 mb-4">Gross Profit & Margin</h3>
+                                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                                    <div class="bg-blue-50 rounded-lg p-4">
+                                        <p class="text-sm text-gray-600">Gross Profit TTM</p>
+                                        <p class="text-2xl font-bold text-blue-700" x-text="formatCurrency(data?.metrics?.profitability?.grossProfit?.ttm)"></p>
+                                    </div>
+                                    <div class="bg-blue-50 rounded-lg p-4">
+                                        <p class="text-sm text-gray-600">Gross Margin TTM</p>
+                                        <p class="text-2xl font-bold text-blue-700" x-text="formatPercent(data?.metrics?.profitability?.grossMargin?.ttm)"></p>
+                                    </div>
+                                </div>
+                                <div x-show="data?.metrics?.profitability?.grossProfit?.annual?.length > 0">
+                                    <h4 class="font-medium text-gray-700 mb-2">Annual Gross Profit & Margin</h4>
+                                    <table class="annual-table">
+                                        <thead><tr><th>Fiscal Year</th><th>Gross Profit</th><th>Gross Margin</th></tr></thead>
+                                        <tbody>
+                                            <template x-for="item in data?.metrics?.profitability?.grossProfit?.annual?.filter(i => i.period.startsWith('FY'))" :key="item.period">
+                                                <tr>
+                                                    <td x-text="item.period"></td>
+                                                    <td class="font-semibold" x-text="formatCurrency(item.value)"></td>
+                                                    <td x-text="getMarginForPeriod(data?.metrics?.profitability?.grossMargin?.annual, item.period)"></td>
+                                                </tr>
+                                            </template>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <!-- Operating Income -->
+                            <div class="mb-8">
+                                <h3 class="text-lg font-semibold text-gray-800 mb-4">Operating Income (EBIT)</h3>
+                                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                                    <div class="bg-indigo-50 rounded-lg p-4">
+                                        <p class="text-sm text-gray-600">Operating Income TTM</p>
+                                        <p class="text-2xl font-bold text-indigo-700" x-text="formatCurrency(data?.metrics?.profitability?.operatingIncome?.ttm)"></p>
+                                    </div>
+                                    <div class="bg-indigo-50 rounded-lg p-4">
+                                        <p class="text-sm text-gray-600">Operating Margin TTM</p>
+                                        <p class="text-2xl font-bold text-indigo-700" x-text="formatPercent(data?.metrics?.profitability?.operatingMargin?.ttm)"></p>
+                                    </div>
+                                </div>
+                                <div x-show="data?.metrics?.profitability?.operatingIncome?.annual?.length > 0">
+                                    <h4 class="font-medium text-gray-700 mb-2">Annual Operating Income</h4>
+                                    <table class="annual-table">
+                                        <thead><tr><th>Fiscal Year</th><th>Operating Income</th><th>Operating Margin</th></tr></thead>
+                                        <tbody>
+                                            <template x-for="item in data?.metrics?.profitability?.operatingIncome?.annual?.filter(i => i.period.startsWith('FY'))" :key="item.period">
+                                                <tr>
+                                                    <td x-text="item.period"></td>
+                                                    <td class="font-semibold" x-text="formatCurrency(item.value)"></td>
+                                                    <td x-text="getMarginForPeriod(data?.metrics?.profitability?.operatingMargin?.annual, item.period)"></td>
+                                                </tr>
+                                            </template>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <!-- EBITDA -->
+                            <div class="mb-8">
+                                <h3 class="text-lg font-semibold text-gray-800 mb-4">EBITDA</h3>
+                                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                                    <div class="bg-purple-50 rounded-lg p-4">
+                                        <p class="text-sm text-gray-600">EBITDA TTM</p>
+                                        <p class="text-2xl font-bold text-purple-700" x-text="formatCurrency(data?.metrics?.profitability?.ebitda?.ttm)"></p>
+                                    </div>
+                                    <div class="bg-purple-50 rounded-lg p-4">
+                                        <p class="text-sm text-gray-600">EBITDA Margin TTM</p>
+                                        <p class="text-2xl font-bold text-purple-700" x-text="formatPercent(data?.metrics?.profitability?.ebitdaMargin?.ttm)"></p>
+                                    </div>
+                                </div>
+                                <div x-show="data?.metrics?.profitability?.ebitda?.annual?.length > 0">
+                                    <h4 class="font-medium text-gray-700 mb-2">Annual EBITDA</h4>
+                                    <table class="annual-table">
+                                        <thead><tr><th>Fiscal Year</th><th>EBITDA</th><th>EBITDA Margin</th></tr></thead>
+                                        <tbody>
+                                            <template x-for="item in data?.metrics?.profitability?.ebitda?.annual?.filter(i => i.period.startsWith('FY'))" :key="item.period">
+                                                <tr>
+                                                    <td x-text="item.period"></td>
+                                                    <td class="font-semibold" x-text="formatCurrency(item.value)"></td>
+                                                    <td x-text="getMarginForPeriod(data?.metrics?.profitability?.ebitdaMargin?.annual, item.period)"></td>
+                                                </tr>
+                                            </template>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <!-- Net Income -->
+                            <div class="mb-8">
+                                <h3 class="text-lg font-semibold text-gray-800 mb-4">Net Income</h3>
+                                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                                    <div class="bg-teal-50 rounded-lg p-4">
+                                        <p class="text-sm text-gray-600">Net Income TTM</p>
+                                        <p class="text-2xl font-bold text-teal-700" x-text="formatCurrency(data?.metrics?.profitability?.netIncome?.ttm)"></p>
+                                    </div>
+                                    <div class="bg-teal-50 rounded-lg p-4">
+                                        <p class="text-sm text-gray-600">Net Margin TTM</p>
+                                        <p class="text-2xl font-bold text-teal-700" x-text="formatPercent(data?.metrics?.profitability?.netMargin?.ttm)"></p>
+                                    </div>
+                                </div>
+                                <div x-show="data?.metrics?.profitability?.netIncome?.annual?.length > 0">
+                                    <h4 class="font-medium text-gray-700 mb-2">Annual Net Income</h4>
+                                    <table class="annual-table">
+                                        <thead><tr><th>Fiscal Year</th><th>Net Income</th><th>Net Margin</th><th>YoY Growth</th></tr></thead>
+                                        <tbody>
+                                            <template x-for="item in data?.metrics?.profitability?.netIncome?.annual?.filter(i => i.period.startsWith('FY'))" :key="item.period">
+                                                <tr>
+                                                    <td x-text="item.period"></td>
+                                                    <td class="font-semibold" x-text="formatCurrency(item.value)"></td>
+                                                    <td x-text="getMarginForPeriod(data?.metrics?.profitability?.netMargin?.annual, item.period)"></td>
+                                                    <td x-text="getYoYGrowth(data?.metrics?.profitability?.netIncome?.yoyGrowth, item.period)"></td>
+                                                </tr>
+                                            </template>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- SECTION 2: CASH FLOW -->
+                        <div x-show="!loading && data" class="bg-white rounded-xl p-6 border border-gray-200">
+                            <h2 class="text-xl font-bold mb-6 flex items-center">
+                                <i class="fas fa-money-bill-wave text-purple-600 mr-3"></i>2. Cash Flow Metrics
+                            </h2>
+                            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                                <div class="bg-purple-50 rounded-lg p-4">
+                                    <p class="text-sm text-gray-600">Operating Cash Flow TTM</p>
+                                    <p class="text-2xl font-bold text-purple-700" x-text="formatCurrency(data?.metrics?.cashFlow?.operatingCashFlow?.ttm)"></p>
+                                </div>
+                                <div class="bg-purple-50 rounded-lg p-4">
+                                    <p class="text-sm text-gray-600">Free Cash Flow TTM</p>
+                                    <p class="text-2xl font-bold text-purple-700" x-text="formatCurrency(data?.metrics?.cashFlow?.freeCashFlow?.ttm)"></p>
+                                </div>
+                                <div class="bg-purple-50 rounded-lg p-4">
+                                    <p class="text-sm text-gray-600">CapEx TTM</p>
+                                    <p class="text-2xl font-bold text-purple-700" x-text="formatCurrency(data?.metrics?.cashFlow?.capex?.ttm)"></p>
+                                </div>
+                                <div class="bg-purple-50 rounded-lg p-4">
+                                    <p class="text-sm text-gray-600">Cash Conversion Ratio TTM</p>
+                                    <p class="text-2xl font-bold text-purple-700" x-text="formatPercent(data?.metrics?.cashFlow?.cashConversionRatio?.ttm)"></p>
+                                </div>
+                            </div>
+                            <div x-show="data?.metrics?.cashFlow?.freeCashFlow?.annual?.length > 0">
+                                <h4 class="font-medium text-gray-700 mb-2">Annual Cash Flow</h4>
+                                <table class="annual-table">
+                                    <thead><tr><th>Fiscal Year</th><th>Operating CF</th><th>Free Cash Flow</th><th>Cash Conversion</th></tr></thead>
+                                    <tbody>
+                                        <template x-for="item in data?.metrics?.cashFlow?.freeCashFlow?.annual?.filter(i => i.period.startsWith('FY'))" :key="item.period">
+                                            <tr>
+                                                <td x-text="item.period"></td>
+                                                <td x-text="getValueForPeriod(data?.metrics?.cashFlow?.operatingCashFlow?.annual, item.period, 'currency')"></td>
+                                                <td class="font-semibold" x-text="formatCurrency(item.value)"></td>
+                                                <td x-text="getValueForPeriod(data?.metrics?.cashFlow?.cashConversionRatio?.annual, item.period, 'percent')"></td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- SECTION 3: WORKING CAPITAL -->
+                        <div x-show="!loading && data" class="bg-white rounded-xl p-6 border border-gray-200">
+                            <h2 class="text-xl font-bold mb-6 flex items-center">
+                                <i class="fas fa-sync-alt text-orange-600 mr-3"></i>3. Working Capital Cycle
+                            </h2>
+                            <div x-show="data?.metrics?.workingCapital?.dso?.length > 0">
+                                <table class="annual-table">
+                                    <thead><tr><th>Fiscal Year</th><th>DSO</th><th>DIO</th><th>DPO</th><th>Cash Conversion Cycle</th></tr></thead>
+                                    <tbody>
+                                        <template x-for="item in data?.metrics?.workingCapital?.dso" :key="item.period">
+                                            <tr>
+                                                <td x-text="item.period"></td>
+                                                <td x-text="formatDays(item.value)"></td>
+                                                <td x-text="getValueForPeriod(data?.metrics?.workingCapital?.dio, item.period, 'days')"></td>
+                                                <td x-text="getValueForPeriod(data?.metrics?.workingCapital?.dpo, item.period, 'days')"></td>
+                                                <td class="font-semibold" x-text="getValueForPeriod(data?.metrics?.workingCapital?.cashConversionCycle, item.period, 'days')"></td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- SECTION 4: BALANCE SHEET -->
+                        <div x-show="!loading && data" class="bg-white rounded-xl p-6 border border-gray-200">
+                            <h2 class="text-xl font-bold mb-6 flex items-center">
+                                <i class="fas fa-balance-scale text-blue-600 mr-3"></i>4. Balance Sheet Health
+                            </h2>
+                            <div x-show="data?.metrics?.balanceSheet?.currentRatio?.length > 0">
+                                <table class="annual-table">
+                                    <thead><tr><th>Fiscal Year</th><th>Current Ratio</th><th>Quick Ratio</th><th>Working Capital</th><th>Debt/Equity</th><th>ROE</th><th>Asset Turnover</th></tr></thead>
+                                    <tbody>
+                                        <template x-for="item in data?.metrics?.balanceSheet?.currentRatio" :key="item.period">
+                                            <tr>
+                                                <td x-text="item.period"></td>
+                                                <td x-text="formatRatio(item.value)"></td>
+                                                <td x-text="getValueForPeriod(data?.metrics?.balanceSheet?.quickRatio, item.period, 'ratio')"></td>
+                                                <td x-text="getValueForPeriod(data?.metrics?.balanceSheet?.workingCapital, item.period, 'currency')"></td>
+                                                <td x-text="getValueForPeriod(data?.metrics?.balanceSheet?.debtToEquity, item.period, 'ratio')"></td>
+                                                <td x-text="getValueForPeriod(data?.metrics?.balanceSheet?.roe, item.period, 'percent')"></td>
+                                                <td x-text="getValueForPeriod(data?.metrics?.balanceSheet?.assetTurnover, item.period, 'ratio')"></td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Data Source Info -->
+                        <div x-show="!loading && data" class="bg-gray-50 rounded-lg p-4 text-sm text-gray-600">
+                            <div class="flex items-center">
+                                <i class="fas fa-info-circle text-gray-400 mr-2"></i>
+                                <span>All metrics calculated deterministically from SEC filings (10-K, 10-Q)</span>
+                            </div>
+                            <div class="mt-2 text-xs text-gray-500">
+                                Last calculated: <span x-text="data?.calculationDate ? new Date(data.calculationDate).toLocaleString() : 'N/A'"></span>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filing Toast -->
+        <div x-show="filingNotifToast" x-transition class="fixed bottom-4 right-4 bg-blue-600 text-white px-4 py-3 rounded-lg shadow-lg z-50">
+            <span x-text="filingNotifToast"></span>
+        </div>
+    </div>
+</body>
+</html>

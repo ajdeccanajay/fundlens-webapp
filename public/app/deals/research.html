@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FundLens - Research Assistant</title>
+    <link rel="stylesheet" href="/css/design-system.css">
+    <link rel="stylesheet" href="/css/filing-notifications.css">
+    <link rel="stylesheet" href="/css/instant-rag.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.14.8/dist/cdn.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="_module-config.js"></script>
+    <script src="/app/_shell.js"></script>
+    <script src="/app/_utils.js"></script>
+    <style>
+        [x-cloak] { display: none !important; }
+        .sidebar { width: 240px; background: white; border-right: 1px solid #e5e7eb; }
+        .nav-item { transition: all 0.2s ease; cursor: pointer; position: relative; }
+        .nav-item:hover { background: #f9fafb; }
+        .nav-item.active { background: #eff6ff; color: #1a56db; border-left: 3px solid #1a56db; }
+        .nav-item.active i { color: #1a56db; }
+        .badge { position: absolute; top: 8px; right: 8px; background: #dc2626; color: white; font-size: 0.65rem; padding: 2px 6px; border-radius: 10px; font-weight: 600; }
+        .tenant-badge { background: linear-gradient(135deg, #1a56db 0%, #7c3aed 100%); }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .fade-in { animation: fadeIn 0.3s ease-out; }
+        .message-user { max-width: 80%; padding: 12px 16px; border-radius: 16px 16px 4px 16px; background: linear-gradient(135deg, var(--fundlens-primary, #1a56db) 0%, var(--fundlens-accent, #7c3aed) 100%); color: white; }
+        .message-assistant { max-width: 90%; padding: 16px 20px; border-radius: 16px 16px 16px 4px; background: white; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .message-assistant table, .message-assistant .markdown-table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.875rem; }
+        .message-assistant th, .message-assistant td { border: 1px solid #e5e7eb; padding: 8px 12px; text-align: left; }
+        .message-assistant th { background: #f9fafb; font-weight: 600; }
+        .typing-indicator { display: flex; gap: 4px; padding: 8px 0; }
+        .typing-dot { width: 8px; height: 8px; border-radius: 50%; background: #9ca3af; animation: typingBounce 1.4s infinite ease-in-out; }
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typingBounce { 0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; } 40% { transform: scale(1); opacity: 1; } }
+        .citation-link { cursor: pointer; font-weight: 600; text-decoration: underline; }
+        .citation-sec { color: #1a56db; }
+        .citation-upload { color: #059669; }
+        .severity-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; }
+        .severity-red { background: #fee2e2; color: #991b1b; }
+        .severity-amber { background: #fef3c7; color: #92400e; }
+        .severity-green { background: #d1fae5; color: #065f46; }
+        .source-modal-backdrop { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.5); }
+        .source-modal { background: white; border-radius: 16px; max-width: 640px; width: 90%; max-height: 80vh; overflow-y: auto; box-shadow: 0 25px 50px rgba(0,0,0,0.25); }
+        .source-modal-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid #e5e7eb; }
+        .source-modal-header h3 { font-size: 1.125rem; font-weight: 700; color: #111827; }
+        .source-modal-close { padding: 8px; border-radius: 8px; color: #6b7280; cursor: pointer; border: none; background: none; }
+        .source-modal-close:hover { background: #f3f4f6; }
+        .source-modal-meta { padding: 16px 24px; border-bottom: 1px solid #f3f4f6; }
+        .source-badge { padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; }
+        .source-badge.sec { background: #dbeafe; color: #1e40af; }
+        .source-badge.upload { background: #d1fae5; color: #065f46; }
+        .source-modal-excerpt { padding: 20px 24px; font-size: 0.875rem; color: #374151; line-height: 1.6; }
+        .source-modal-actions { display: flex; gap: 8px; padding: 16px 24px; border-top: 1px solid #e5e7eb; }
+        .source-modal-btn { padding: 8px 16px; border-radius: 8px; font-size: 0.875rem; font-weight: 500; border: 1px solid #d1d5db; background: white; cursor: pointer; }
+        .source-modal-btn:hover { background: #f9fafb; }
+        .source-modal-btn.primary { background: var(--fundlens-primary, #1a56db); color: white; border-color: transparent; }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <script>
+    window.FundLensResearchView = function() {
+        return {
+        researchMessages: [],
+        researchInput: '',
+        researchTyping: false,
+        conversationId: null,
+        notebookId: null,
+        provocationsMode: null,
+        showSettingsModal: false,
+        systemPrompt: localStorage.getItem('fundlens_system_prompt') || '',
+        defaultSystemPrompts: {
+            analyst: 'You are a senior equity research analyst with 15+ years of experience. Provide detailed, data-driven analysis with specific numbers, ratios, and year-over-year comparisons. Always cite sources from SEC filings. Structure responses with clear sections and bullet points.',
+            investor: "You are a value investor following Warren Buffett's principles. Focus on competitive moats, management quality, long-term growth potential, and intrinsic value. Highlight risks and opportunities. Be conservative in estimates.",
+            technical: 'Focus on technical analysis of financial statements. Highlight accounting anomalies, unusual line items, changes in accounting policies, and potential red flags in the numbers.',
+            concise: 'Provide brief, direct answers. Use bullet points. No lengthy explanations unless specifically asked. Focus on the most important data points.'
+        },
+        showSourceModal: false,
+        sourceModal: { sourceType: 'SEC_FILING', filename: '', ticker: '', filingType: '', fiscalPeriod: '', section: '', pageNumber: null, excerpt: '', relevanceScore: null },
+        currentCitations: [],
+        presetQuestions: [],
+        instantRagSession: null,
+        instantRagFiles: [],
+        instantRagUploading: false,
+        instantRagIntakeSummaries: [],
+        instantRagDragOver: false,
+        instantRagTimeoutWarning: false,
+        instantRagDuplicateToast: null,
+        instantRagTimeRemaining: 0,
+        showInstantRagSummaries: false,
+        _instantRagTimerInterval: null,
+
+        async init() {
+            var params = new URLSearchParams(window.location.search);
+            var q = params.get('query');
+            if (q) { this.researchInput = decodeURIComponent(q); this.$nextTick(() => this.sendResearchMessage()); }
+            var conv = params.get('conv');
+            if (conv) { this.conversationId = conv; await this.loadConversationHistory(conv); }
+            document.addEventListener('citation-click', (e) => { this.handleCitationClickByNumber(e.detail.num); });
+        },
+
+        async loadConversationHistory(convId) {
+            try {
+                var resp = await fetch('/api/research/conversations/' + convId + '/messages', { headers: this.getAuthHeaders() });
+                if (resp.ok) {
+                    var data = await resp.json();
+                    this.researchMessages = (data.data || []).map(function(m) { return { id: m.id, role: m.role, content: m.content, sources: m.sources || [], citations: m.citations || [], visualization: m.visualization || null, peerComparison: m.peerComparison || null }; });
+                    this.$nextTick(() => { this.renderExistingCharts(); this.scrollResearchToBottom(); });
+                }
+            } catch (e) { console.error('Failed to load conversation:', e); }
+        },
+
+        getEffectiveSystemPrompt() {
+            if (this.provocationsMode === 'provocations') return 'You are the FundLens Provocations Engine — a senior adversarial research analyst. Your job is to stress-test investment theses by surfacing risks, contradictions, and inconvenient truths hidden in SEC filings. Be direct, evidence-based, and challenging. Every finding must reference specific filing sections. Structure each finding with: Observation, Filing Reference, Cross-Filing Delta (if applicable), Implication, and Challenge Question. Classify severity as RED FLAG (material risk), AMBER (noteworthy pattern), or GREEN CHALLENGE (intellectual question).';
+            if (this.provocationsMode === 'sentiment') return 'You are a sentiment analysis engine tracking management tone, confidence, and language patterns across SEC filings. Focus on confidence indicators, tone shifts, hedging language, commitment levels, and defensive language. Output sentiment scores (-1 to +1) and highlight material tone shifts.';
+            return this.systemPrompt || undefined;
+        },
+
+        quickQuery(query) { this.researchInput = query; this.sendResearchMessage(); },
+
+        async sendResearchMessage() {
+            if (!this.researchInput.trim()) return;
+            if (this.instantRagSession && this.instantRagSession.status === 'active') { await this.sendInstantRagQuery(); return; }
+            if (this.instantRagFiles.some(function(f) { return f.status === 'pending'; })) { await this.uploadInstantRagFiles(); return; }
+            if (!this.conversationId) { this.conversationId = await this.createConversation(); if (!this.conversationId) return; }
+            var userMessage = { id: Date.now(), role: 'user', content: this.researchInput };
+            this.researchMessages.push(userMessage);
+            var messageContent = this.researchInput;
+            this.researchInput = '';
+            var assistantMessageIndex = this.researchMessages.length;
+            this.researchMessages.push({ id: Date.now() + 1, role: 'assistant', content: '', sources: [], citations: [], visualization: null });
+            this.researchTyping = true;
+            try {
+                var headers = this.getAuthHeaders();
+                if (!headers) { window.location.href = '/login.html'; return; }
+                var url = '/api/research/conversations/' + this.conversationId + '/messages';
+                var response = await fetch(url, { method: 'POST', headers: headers, body: JSON.stringify({ content: messageContent, systemPrompt: this.getEffectiveSystemPrompt(), context: { tickers: [this.entityContext.value], provocationsMode: this.provocationsMode || undefined, instantRagSessionId: this.instantRagSession && this.instantRagSession.status === 'active' ? this.instantRagSession.sessionId : undefined } }) });
+                if (response.status === 401) { localStorage.removeItem('fundlens_token'); window.location.href = '/login.html'; return; }
+                if (!response.ok) { var errorText = await response.text(); throw new Error('HTTP ' + response.status + ': ' + errorText); }
+                var reader = response.body.getReader();
+                var decoder = new TextDecoder();
+                var buffer = '';
+                var currentEvent = null;
+                var self = this;
+                while (true) {
+                    var result = await reader.read();
+                    if (result.done) break;
+                    buffer += decoder.decode(result.value, { stream: true });
+                    var lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+                    for (var li = 0; li < lines.length; li++) {
+                        var line = lines[li];
+                        if (line.startsWith('event: ')) { currentEvent = line.substring(7).trim(); }
+                        else if (line.startsWith('data: ')) {
+                            try {
+                                var jsonStr = line.substring(6).trim();
+                                if (!jsonStr) continue;
+                                var data = JSON.parse(jsonStr);
+                                if (currentEvent === 'token' && data.text) { self.researchMessages[assistantMessageIndex].content += data.text; self.$nextTick(function() { self.scrollResearchToBottom(); }); }
+                                else if (currentEvent === 'source' && data.title) { self.researchMessages[assistantMessageIndex].sources.push(data); }
+                                else if (currentEvent === 'citations' && data.citations) { self.researchMessages[assistantMessageIndex].citations = data.citations; }
+                                else if (currentEvent === 'peerComparison' && data) { self.researchMessages[assistantMessageIndex].peerComparison = data; }
+                                else if (currentEvent === 'visualization' && data) { self.researchMessages[assistantMessageIndex].visualization = data; self.$nextTick(function() { self.renderChart(assistantMessageIndex, data); self.scrollResearchToBottom(); }); }
+                                else if (currentEvent === 'done' && data.complete) { self.researchTyping = false; }
+                                else if (currentEvent === 'error' && data.message) { self.researchMessages[assistantMessageIndex].content = 'Error: ' + data.message; self.researchTyping = false; }
+                            } catch (e) { console.warn('Failed to parse SSE data:', line, e); }
+                        } else if (line.trim() === '') { currentEvent = null; }
+                    }
+                }
+                this.researchTyping = false;
+                if (!this.researchMessages[assistantMessageIndex].content) { this.researchMessages[assistantMessageIndex].content = 'No response received. Please try again.'; }
+            } catch (error) {
+                console.error('Error sending message:', error);
+                if (!this.researchMessages[assistantMessageIndex].content) { this.researchMessages[assistantMessageIndex].content = 'Sorry, I encountered an error. Please try again.'; }
+            } finally { this.researchTyping = false; }
+        },
+
+        async createConversation() {
+            var headers = this.getAuthHeaders();
+            if (!headers) { window.location.href = '/login.html'; return null; }
+            try {
+                var response = await fetch('/api/research/conversations', { method: 'POST', headers: headers, body: JSON.stringify({ title: this.entityContext.value + ' Research ' + new Date().toLocaleDateString() }) });
+                if (response.status === 401) { localStorage.removeItem('fundlens_token'); window.location.href = '/login.html'; return null; }
+                if (!response.ok) throw new Error('Failed to create conversation: ' + response.status);
+                var data = await response.json();
+                var convId = data.data.id;
+                var urlParams = new URLSearchParams(window.location.search);
+                urlParams.set('conv', convId);
+                window.history.replaceState({}, '', '?' + urlParams.toString());
+                return convId;
+            } catch (error) { console.error('Error creating conversation:', error); return null; }
+        },
+
+        clearConversation() { this.conversationId = null; this.researchMessages = []; var urlParams = new URLSearchParams(window.location.search); urlParams.delete('conv'); window.history.replaceState({}, '', '?' + urlParams.toString()); },
+
+        canSaveToScratchpad(message) {
+            if (message.role !== 'assistant') return false;
+            if (!message.content || message.content.trim().length < 20) return false;
+            if (message.content.includes('Sorry, I encountered an error')) return false;
+            if (message.content.includes('No response received')) return false;
+            return true;
+        },
+
+        async saveToScratchpad(message) {
+            if (!this.canSaveToScratchpad(message)) { alert('This message cannot be saved'); return; }
+            var notes = prompt('Add your notes (optional):');
+            if (notes === null) return;
+            var headers = this.getAuthHeaders();
+            if (!headers) { window.location.href = '/login.html'; return; }
+            try {
+                if (!this.notebookId) await this.createNotebook();
+                var response = await fetch('/api/research/notebooks/' + this.notebookId + '/insights', { method: 'POST', headers: headers, body: JSON.stringify({ content: message.content, userNotes: notes || '', tags: [this.entityContext.value, 'research'] }) });
+                if (response.status === 401) { localStorage.removeItem('fundlens_token'); window.location.href = '/login.html'; return; }
+                if (response.ok) { this.loadScratchpadCount(); alert('Saved to scratchpad!'); }
+                else throw new Error('HTTP ' + response.status);
+            } catch (error) { console.error('Error saving to scratchpad:', error); alert('Error saving to scratchpad'); }
+        },
+
+        async createNotebook() {
+            var headers = this.getAuthHeaders();
+            if (!headers) return;
+            try {
+                var response = await fetch('/api/research/notebooks', { method: 'POST', headers: headers, body: JSON.stringify({ title: this.entityContext.value + ' Research Notes', description: 'Research insights and analysis' }) });
+                if (response.ok) { var data = await response.json(); this.notebookId = data.data.id; }
+            } catch (error) { console.error('Error creating notebook:', error); }
+        },
+
+        createDealForTicker(ticker) { window.location.href = '/app/deals/index.html?createDeal=' + encodeURIComponent(ticker); },
+
+        toggleProvocationsMode(mode) {
+            if (this.provocationsMode === mode) { this.provocationsMode = null; this.presetQuestions = []; }
+            else { this.provocationsMode = mode; this.loadPresetQuestions(mode); }
+        },
+
+        async loadPresetQuestions(mode) {
+            try {
+                var ticker = this.entityContext.value;
+                if (!ticker) return;
+                var res = await fetch('/api/provocations/' + ticker + '/modes');
+                var data = await res.json();
+                if (data.success) { var modeData = data.modes.find(function(m) { return m.name === mode; }); this.presetQuestions = modeData?.presetQuestions || []; }
+            } catch (e) { console.error('Failed to load preset questions:', e); }
+        },
+
+        async saveSettings() {
+            localStorage.setItem('fundlens_system_prompt', this.systemPrompt);
+            this.showSettingsModal = false;
+            alert('Settings saved! Your custom prompt will be used in future research queries.');
+        },
+
+        scrollResearchToBottom() {
+            var self = this;
+            this.$nextTick(function() {
+                var container = document.querySelector('[x-ref="researchMessages"]');
+                if (container) container.scrollTop = container.scrollHeight;
+            });
+        },
+
+        renderMarkdown(text) {
+            if (!text) return '';
+            try {
+                var processedText = text.replace(/\r\n/g, '\n');
+                var hasTable = processedText.includes('|') && (processedText.includes('---') || processedText.includes('| '));
+                if (hasTable) {
+                    var lines = processedText.split('\n');
+                    var fixedLines = [];
+                    var inTable = false;
+                    var tableLines = [];
+                    for (var i = 0; i < lines.length; i++) {
+                        var line = lines[i];
+                        var trimmedLine = line.trim();
+                        var isTableRow = trimmedLine.includes('|') && !trimmedLine.startsWith('```') && !trimmedLine.startsWith('`');
+                        if (isTableRow) {
+                            if (!inTable) { if (fixedLines.length > 0 && fixedLines[fixedLines.length - 1].trim() !== '') fixedLines.push(''); inTable = true; tableLines = []; }
+                            var fixedLine = trimmedLine;
+                            if (!fixedLine.startsWith('|')) fixedLine = '| ' + fixedLine;
+                            if (!fixedLine.endsWith('|')) fixedLine = fixedLine + ' |';
+                            tableLines.push(fixedLine);
+                        } else if (inTable) {
+                            if (tableLines.length >= 2) {
+                                var hasSep = tableLines.some(function(l) { return /^\|[\s\-:|]+\|$/.test(l.trim()); });
+                                if (!hasSep && tableLines.length >= 1) { var hc = tableLines[0].split('|').filter(function(c) { return c.trim(); }); var sep = '|' + hc.map(function() { return '---'; }).join('|') + '|'; tableLines.splice(1, 0, sep); }
+                                fixedLines.push.apply(fixedLines, tableLines);
+                            }
+                            fixedLines.push('');
+                            inTable = false; tableLines = [];
+                            if (trimmedLine !== '') fixedLines.push(line);
+                        } else { fixedLines.push(line); }
+                    }
+                    if (inTable && tableLines.length >= 2) {
+                        var hasSep2 = tableLines.some(function(l) { return /^\|[\s\-:|]+\|$/.test(l.trim()); });
+                        if (!hasSep2) { var hc2 = tableLines[0].split('|').filter(function(c) { return c.trim(); }); var sep2 = '|' + hc2.map(function() { return '---'; }).join('|') + '|'; tableLines.splice(1, 0, sep2); }
+                        fixedLines.push.apply(fixedLines, tableLines);
+                        fixedLines.push('');
+                    }
+                    processedText = fixedLines.join('\n');
+                }
+                if (typeof marked !== 'undefined') { marked.use({ breaks: false, gfm: true, headerIds: false, mangle: false }); }
+                var html = marked.parse(processedText);
+                var finalHtml = html;
+                if (finalHtml.includes('|') && !finalHtml.includes('<table')) {
+                    var self = this;
+                    finalHtml = finalHtml.replace(/<p>([^<]*\|[^<]*)<\/p>/g, function(match, content) {
+                        if ((content.match(/\|/g) || []).length >= 2) { var tableHtml = self.convertRawTableToHtml(content); if (tableHtml) return tableHtml; }
+                        return match;
+                    });
+                }
+                if (typeof hljs !== 'undefined') { setTimeout(function() { document.querySelectorAll('.message-assistant pre code').forEach(function(block) { if (!block.classList.contains('hljs')) hljs.highlightElement(block); }); }, 0); }
+                finalHtml = this.convertSeverityBadges(finalHtml);
+                finalHtml = finalHtml.replace(/([^>])\n([^<])/g, '$1<br>\n$2');
+                return finalHtml;
+            } catch (error) { console.error('Error rendering markdown:', error); return text.replace(/\n/g, '<br>'); }
+        },
+
+        convertSeverityBadges(html) {
+            if (!html) return html;
+            html = html.replace(/🔴\s*RED FLAG:?\s*/gi, '<span class="severity-badge severity-red"><i class="fas fa-exclamation-circle"></i> RED FLAG</span> ');
+            html = html.replace(/<strong>RED FLAG<\/strong>:?\s*/gi, '<span class="severity-badge severity-red"><i class="fas fa-exclamation-circle"></i> RED FLAG</span> ');
+            html = html.replace(/([^>])RED FLAG:?\s*/gi, '$1<span class="severity-badge severity-red"><i class="fas fa-exclamation-circle"></i> RED FLAG</span> ');
+            html = html.replace(/^RED FLAG:?\s*/gim, '<span class="severity-badge severity-red"><i class="fas fa-exclamation-circle"></i> RED FLAG</span> ');
+            html = html.replace(/🟠\s*AMBER:?\s*/gi, '<span class="severity-badge severity-amber"><i class="fas fa-exclamation-triangle"></i> AMBER</span> ');
+            html = html.replace(/<strong>AMBER<\/strong>:?\s*/gi, '<span class="severity-badge severity-amber"><i class="fas fa-exclamation-triangle"></i> AMBER</span> ');
+            html = html.replace(/([^>])AMBER:?\s*/gi, '$1<span class="severity-badge severity-amber"><i class="fas fa-exclamation-triangle"></i> AMBER</span> ');
+            html = html.replace(/^AMBER:?\s*/gim, '<span class="severity-badge severity-amber"><i class="fas fa-exclamation-triangle"></i> AMBER</span> ');
+            html = html.replace(/🟢\s*GREEN CHALLENGE:?\s*/gi, '<span class="severity-badge severity-green"><i class="fas fa-lightbulb"></i> GREEN CHALLENGE</span> ');
+            html = html.replace(/<strong>GREEN CHALLENGE<\/strong>:?\s*/gi, '<span class="severity-badge severity-green"><i class="fas fa-lightbulb"></i> GREEN CHALLENGE</span> ');
+            html = html.replace(/([^>])GREEN CHALLENGE:?\s*/gi, '$1<span class="severity-badge severity-green"><i class="fas fa-lightbulb"></i> GREEN CHALLENGE</span> ');
+            html = html.replace(/^GREEN CHALLENGE:?\s*/gim, '<span class="severity-badge severity-green"><i class="fas fa-lightbulb"></i> GREEN CHALLENGE</span> ');
+            html = html.replace(/🟢\s*GREEN:?\s*/gi, '<span class="severity-badge severity-green"><i class="fas fa-lightbulb"></i> GREEN</span> ');
+            return html;
+        },
+
+        convertRawTableToHtml(rawTable) {
+            try {
+                var cleanTable = rawTable.replace(/<br\s*\/?>/gi, '\n').replace(/<\/?p>/gi, '\n').replace(/&nbsp;/gi, ' ').trim();
+                var lines = cleanTable.split('\n').filter(function(l) { return l.trim() && l.includes('|'); });
+                if (lines.length < 2) return null;
+                var separatorIndex = -1;
+                for (var i = 0; i < lines.length; i++) { var line = lines[i].trim(); if (/^\|?[\s\-:|]+\|[\s\-:|]*\|?$/.test(line) && line.includes('-')) { separatorIndex = i; break; } }
+                if (separatorIndex === -1) { var hc = lines[0].split('|').filter(function(c) { return c.trim(); }); var sep = '|' + hc.map(function() { return '---'; }).join('|') + '|'; lines.splice(1, 0, sep); separatorIndex = 1; }
+                var html = '<table class="markdown-table"><thead><tr>';
+                var headerCells = lines[0].split('|').filter(function(c) { return c !== ''; });
+                headerCells.forEach(function(cell) { html += '<th>' + cell.trim() + '</th>'; });
+                html += '</tr></thead><tbody>';
+                for (var j = separatorIndex + 1; j < lines.length; j++) { var ln = lines[j]; if (!ln.includes('|')) continue; var cells = ln.split('|').filter(function(c) { return c !== ''; }); if (cells.length === 0) continue; html += '<tr>'; cells.forEach(function(cell) { html += '<td>' + cell.trim() + '</td>'; }); html += '</tr>'; }
+                html += '</tbody></table>';
+                return html;
+            } catch (e) { return null; }
+        },
+
+        renderMarkdownWithCitations(content, citations) {
+            if (!citations || citations.length === 0) return this.renderMarkdown(content);
+            this.currentCitations = citations;
+            var html = this.renderMarkdown(content);
+            citations.forEach(function(citation) {
+                var citationNum = citation.number || citation.citationNumber;
+                if (!citationNum) return;
+                var sourceType = citation.sourceType || 'SEC_FILING';
+                var cssClass = sourceType === 'USER_UPLOAD' ? 'citation-link citation-upload' : 'citation-link citation-sec';
+                var regex = new RegExp('\\[' + citationNum + '\\]', 'g');
+                html = html.replace(regex, '<a href="#" class="' + cssClass + '" data-citation-num="' + citationNum + '" onclick="event.preventDefault(); document.dispatchEvent(new CustomEvent(\'citation-click\', {detail: {num: ' + citationNum + '}}));">[' + citationNum + ']</a>');
+            });
+            return html;
+        },
+
+        handleCitationClickByNumber(citationNum) {
+            var citation = this.currentCitations?.find(function(c) { return c.number === citationNum || c.citationNumber === citationNum; });
+            if (!citation) return;
+            var sourceType = citation.sourceType || 'SEC_FILING';
+            if (sourceType === 'USER_UPLOAD') {
+                this.sourceModal = { sourceType: 'USER_UPLOAD', filename: citation.filename || '', ticker: '', filingType: '', fiscalPeriod: '', section: '', pageNumber: null, excerpt: citation.excerpt || '', relevanceScore: citation.relevanceScore || citation.score || null };
+            } else {
+                this.sourceModal = { sourceType: 'SEC_FILING', filename: '', ticker: citation.ticker || '', filingType: citation.filingType || '', fiscalPeriod: citation.fiscalPeriod || '', section: citation.section || '', pageNumber: citation.pageNumber || null, excerpt: citation.excerpt || '', relevanceScore: citation.relevanceScore || citation.score || null };
+            }
+            this.showSourceModal = true;
+            var self = this;
+            this.$nextTick(function() { self.$refs.sourceModalClose?.focus(); });
+        },
+
+        async copySourceCitation() { try { await navigator.clipboard.writeText(this.sourceModal.excerpt || ''); } catch (e) { console.error('Copy failed:', e); } },
+
+        formatExcerpt(text) {
+            if (!text) return '<p class="text-gray-400 italic">No excerpt available</p>';
+            return text.split('\n').map(function(p) { return '<p>' + p + '</p>'; }).join('');
+        },
+
+        renderChart(messageIndex, payload) {
+            if (!payload || !payload.datasets || payload.datasets.length === 0) return;
+            var messageId = this.researchMessages[messageIndex]?.id;
+            if (!messageId) return;
+            var canvasId = 'chart-' + messageId;
+            var self = this;
+            this.$nextTick(function() {
+                var canvas = document.getElementById(canvasId);
+                if (!canvas) return;
+                var existingChart = Chart.getChart(canvas);
+                if (existingChart) existingChart.destroy();
+                var colors = ['#1a56db', '#7c3aed', '#0e7490', '#059669', '#d97706', '#dc2626', '#6366f1', '#ec4899'];
+                var bgColors = colors.map(function(c) { return c + '20'; });
+                var chartType = payload.chartType === 'groupedBar' ? 'bar' : payload.chartType;
+                var datasets = payload.datasets.map(function(ds, i) {
+                    var color = colors[i % colors.length];
+                    var bgColor = bgColors[i % bgColors.length];
+                    var dataset = { label: ds.label, data: ds.data, borderColor: color, backgroundColor: ds.type === 'line' || chartType === 'line' ? bgColor : color, borderWidth: 2, tension: 0.3, fill: chartType === 'line' && !ds.yAxisID, pointRadius: chartType === 'line' ? 4 : 0, pointHoverRadius: chartType === 'line' ? 6 : 0 };
+                    if (ds.type) dataset.type = ds.type;
+                    if (ds.yAxisID) dataset.yAxisID = ds.yAxisID;
+                    return dataset;
+                });
+                var scales = {
+                    x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+                    y: { beginAtZero: false, grid: { color: '#f3f4f6' }, ticks: { font: { size: 11 }, callback: function(value) {
+                        if (payload.options?.currency) { if (Math.abs(value) >= 1e9) return '$' + (value / 1e9).toFixed(1) + 'B'; if (Math.abs(value) >= 1e6) return '$' + (value / 1e6).toFixed(1) + 'M'; return '$' + value.toLocaleString(); }
+                        if (payload.options?.percentage) return value.toFixed(1) + '%';
+                        return value.toLocaleString();
+                    } } }
+                };
+                if (payload.options?.dualAxis) { scales.yoy = { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { font: { size: 11 }, callback: function(value) { return value.toFixed(1) + '%'; } }, title: { display: true, text: 'YoY Growth %', font: { size: 11 } } }; }
+                new Chart(canvas, { type: chartType, data: { labels: payload.labels, datasets: datasets }, options: { responsive: true, maintainAspectRatio: true, aspectRatio: 2, plugins: { title: { display: true, text: payload.title, font: { size: 14, weight: '600' }, color: '#111827', padding: { bottom: 16 } }, legend: { display: datasets.length > 1, position: 'bottom', labels: { font: { size: 11 }, usePointStyle: true, padding: 16 } }, tooltip: { backgroundColor: '#1e293b', titleFont: { size: 12 }, bodyFont: { size: 12 }, padding: 12, cornerRadius: 8, callbacks: { label: function(context) {
+                    var label = context.dataset.label || '';
+                    var value = context.parsed.y;
+                    if (context.dataset.yAxisID === 'yoy') return label + ': ' + value.toFixed(1) + '%';
+                    if (payload.options?.currency) { if (Math.abs(value) >= 1e9) return label + ': $' + (value / 1e9).toFixed(2) + 'B'; if (Math.abs(value) >= 1e6) return label + ': $' + (value / 1e6).toFixed(2) + 'M'; return label + ': $' + value.toLocaleString(); }
+                    if (payload.options?.percentage) return label + ': ' + value.toFixed(2) + '%';
+                    return label + ': ' + value.toLocaleString();
+                } } } }, scales: scales } });
+            });
+        },
+
+        renderExistingCharts() { var self = this; this.researchMessages.forEach(function(msg, index) { if (msg.visualization) self.$nextTick(function() { self.renderChart(index, msg.visualization); }); }); },
+
+        toggleInstantRagSummaries() { this.showInstantRagSummaries = !this.showInstantRagSummaries; },
+        handleInstantRagDrop(event) { var files = Array.from(event.dataTransfer.files); this.addInstantRagFiles(files); },
+        handleInstantRagFiles(event) { var files = Array.from(event.target.files); this.addInstantRagFiles(files); event.target.value = ''; },
+
+        addInstantRagFiles(files) {
+            var allowedTypes = ['pdf', 'docx', 'xlsx', 'csv', 'pptx', 'txt', 'png', 'jpg', 'jpeg'];
+            var maxFileSize = 50 * 1024 * 1024;
+            var maxFiles = 5;
+            for (var i = 0; i < files.length; i++) {
+                var file = files[i];
+                if (this.instantRagFiles.length >= maxFiles) { alert('Maximum ' + maxFiles + ' files allowed per session'); break; }
+                var ext = file.name.split('.').pop().toLowerCase();
+                if (!allowedTypes.includes(ext)) { alert('File type .' + ext + ' is not supported.'); continue; }
+                if (file.size > maxFileSize) { alert('File "' + file.name + '" exceeds 50MB limit'); continue; }
+                this.instantRagFiles.push({ file: file, name: file.name, size: file.size, status: 'pending', progress: 0, phase: null, error: null });
+            }
+        },
+
+        removeInstantRagFile(index) { this.instantRagFiles.splice(index, 1); },
+
+        async uploadInstantRagFiles() {
+            if (this.instantRagUploading) return;
+            var pendingFiles = this.instantRagFiles.filter(function(f) { return f.status === 'pending'; });
+            if (pendingFiles.length === 0) return;
+            this.instantRagUploading = true;
+            var progressInterval = null;
+            try {
+                var headers = this.getAuthHeaders();
+                if (!headers) { window.location.href = '/login.html'; return; }
+                var formData = new FormData();
+                formData.append('dealId', this.entityContext.value);
+                pendingFiles.forEach(function(fileObj) { formData.append('files', fileObj.file); fileObj.status = 'processing'; fileObj.phase = 'Uploading'; fileObj.progress = 0; });
+                progressInterval = setInterval(function() { pendingFiles.forEach(function(fileObj) { if (fileObj.status === 'processing' && fileObj.progress < 50) fileObj.progress = Math.min(fileObj.progress + 5, 50); }); }, 200);
+                var response = await fetch('/api/instant-rag/upload', { method: 'POST', headers: { 'Authorization': headers['Authorization'] }, body: formData });
+                clearInterval(progressInterval);
+                if (!response.ok) { var errorData = await response.json().catch(function() { return {}; }); throw new Error(errorData.message || 'Upload failed: ' + response.status); }
+                pendingFiles.forEach(function(fileObj) { if (fileObj.status === 'processing') { fileObj.progress = 75; fileObj.phase = 'Extracting text'; } });
+                var result = await response.json();
+                if (result.documents) {
+                    result.documents.forEach(function(doc) {
+                        var fileObj = pendingFiles.find(function(f) { return f.file.name === doc.fileName; });
+                        if (fileObj) {
+                            if (doc.status === 'complete' || doc.status === 'duplicate') { fileObj.status = 'complete'; fileObj.progress = 100; fileObj.phase = doc.status === 'duplicate' ? 'Duplicate' : 'Complete'; }
+                            else { fileObj.status = 'error'; fileObj.progress = 0; fileObj.phase = 'Failed'; }
+                            fileObj.documentId = doc.documentId;
+                            if (doc.error) fileObj.error = doc.error;
+                        }
+                    });
+                }
+                pendingFiles.forEach(function(fileObj) { if (fileObj.status === 'processing') { fileObj.status = 'complete'; fileObj.progress = 100; fileObj.phase = 'Complete'; } });
+                if (result.sessionId) {
+                    this.instantRagSession = { id: result.sessionId, sessionId: result.sessionId, status: 'active', filesTotal: result.documents ? result.documents.length : 0, filesProcessed: result.documents ? result.documents.filter(function(d) { return d.status === 'complete' || d.status === 'duplicate'; }).length : 0, filesFailed: result.documents ? result.documents.filter(function(d) { return d.status === 'failed'; }).length : 0 };
+                }
+                if (result.intakeSummaries) { this.instantRagIntakeSummaries = result.intakeSummaries; }
+                this.startInstantRagTimer();
+            } catch (error) {
+                if (progressInterval) clearInterval(progressInterval);
+                console.error('Upload error:', error);
+                pendingFiles.forEach(function(f) { f.status = 'error'; f.progress = 0; f.phase = 'Failed'; f.error = error.message; });
+                alert('Upload failed: ' + error.message);
+            } finally { this.instantRagUploading = false; }
+        },
+
+        startInstantRagTimer() {
+            this.instantRagTimeRemaining = 600;
+            if (this._instantRagTimerInterval) clearInterval(this._instantRagTimerInterval);
+            var self = this;
+            this._instantRagTimerInterval = setInterval(function() {
+                self.instantRagTimeRemaining--;
+                if (self.instantRagTimeRemaining === 60) self.instantRagTimeoutWarning = true;
+                if (self.instantRagTimeRemaining <= 0) self.handleInstantRagTimeout();
+            }, 1000);
+        },
+
+        handleInstantRagTimeout() { clearInterval(this._instantRagTimerInterval); this.instantRagTimeoutWarning = false; if (this.instantRagSession) { this.instantRagSession.status = 'expired'; this.endInstantRagSession(); } },
+
+        async endInstantRagSession() {
+            if (!this.instantRagSession) return;
+            try {
+                var headers = this.getAuthHeaders();
+                if (!headers) return;
+                await fetch('/api/instant-rag/session/' + this.instantRagSession.sessionId + '/end', { method: 'POST', headers: headers });
+                clearInterval(this._instantRagTimerInterval);
+                this.instantRagSession = null; this.instantRagFiles = []; this.instantRagIntakeSummaries = []; this.instantRagTimeoutWarning = false;
+            } catch (error) { console.error('Failed to end session:', error); }
+        },
+
+        async sendInstantRagQuery() {
+            if (!this.researchInput.trim() || !this.instantRagSession) return;
+            var query = this.researchInput.trim();
+            this.researchInput = '';
+            this.researchMessages.push({ id: Date.now(), role: 'user', content: query, isInstantRag: true });
+            var assistantIndex = this.researchMessages.length;
+            this.researchMessages.push({ id: Date.now() + 1, role: 'assistant', content: '', citations: [], sources: [], isInstantRag: true });
+            this.researchTyping = true;
+            this.instantRagTimeRemaining = 600;
+            this.instantRagTimeoutWarning = false;
+            var self = this;
+            try {
+                var headers = this.getAuthHeaders();
+                if (!headers) return;
+                var response = await fetch('/api/instant-rag/session/' + this.instantRagSession.sessionId + '/query', { method: 'POST', headers: Object.assign({}, headers, { 'Content-Type': 'application/json' }), body: JSON.stringify({ query: query }) });
+                if (!response.ok) throw new Error('Query failed: ' + response.status);
+                var reader = response.body.getReader();
+                var decoder = new TextDecoder();
+                var buffer = '';
+                while (true) {
+                    var result = await reader.read();
+                    if (result.done) break;
+                    buffer += decoder.decode(result.value, { stream: true });
+                    var lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+                    for (var li = 0; li < lines.length; li++) {
+                        var line = lines[li];
+                        if (line.startsWith('data: ')) {
+                            try {
+                                var data = JSON.parse(line.substring(6));
+                                if (data.type === 'content') { self.researchMessages[assistantIndex].content = data.content; if (data.citations) self.researchMessages[assistantIndex].citations = data.citations; self.$nextTick(function() { self.scrollResearchToBottom(); }); }
+                                else if (data.type === 'done') { self.researchTyping = false; }
+                                else if (data.type === 'error') { self.researchMessages[assistantIndex].content = 'Error: ' + data.error; self.researchTyping = false; }
+                            } catch (e) { console.warn('Failed to parse SSE:', e); }
+                        }
+                    }
+                }
+            } catch (error) { console.error('Query error:', error); this.researchMessages[assistantIndex].content = 'Sorry, an error occurred. Please try again.'; }
+            finally { this.researchTyping = false; }
+        },
+
+        getFileIconName(filename) { var ext = filename.split('.').pop().toLowerCase(); var icons = { pdf: 'fas fa-file-pdf', docx: 'fas fa-file-word', xlsx: 'fas fa-file-excel', csv: 'fas fa-file-csv', pptx: 'fas fa-file-powerpoint', txt: 'fas fa-file-alt', png: 'fas fa-file-image', jpg: 'fas fa-file-image', jpeg: 'fas fa-file-image' }; return icons[ext] || 'fas fa-file'; },
+        getFileIconClass(filename) { var ext = filename.split('.').pop().toLowerCase(); return 'file-icon ' + (ext === 'jpg' || ext === 'jpeg' || ext === 'png' ? 'image' : ext); },
+        getChipStatusClass(file) { return { 'chip-pending': file.status === 'pending', 'chip-processing': file.status === 'processing', 'chip-complete': file.status === 'complete', 'chip-error': file.status === 'error' }; },
+        truncateFileName(name, maxLen) { if (name.length <= maxLen) return name; var ext = name.split('.').pop(); var base = name.slice(0, maxLen - ext.length - 4); return base + '...' + ext; },
+        formatFileSize(bytes) { if (bytes < 1024) return bytes + ' B'; if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'; return (bytes / (1024 * 1024)).toFixed(1) + ' MB'; },
+        formatSessionTime(seconds) { var mins = Math.floor(seconds / 60); var secs = seconds % 60; return mins + ':' + secs.toString().padStart(2, '0'); }
+    };
+    };
+    </script>
+
+    <div x-data="FundLensShell('research', FundLensResearchView())" x-init="try { await init() } catch(e) { console.error('Init error:', e) }" x-cloak>
+
+        <!-- Nav Bar -->
+        <nav class="bg-white shadow-sm border-b border-gray-100 sticky top-0 z-50"><div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"><div class="flex justify-between items-center h-16"><div class="flex items-center space-x-4"><a href="/app/deals/index.html" class="flex items-center"><div class="bg-white px-3 py-1 rounded-lg"><img src="/fundlens-logo.png" alt="FundLens" class="h-8 w-auto"></div></a><div class="hidden sm:flex items-center"><span class="text-gray-300 mx-3">|</span><div class="tenant-badge px-3 py-1 rounded-full"><span class="text-white text-sm font-medium" x-text="user.tenantName || 'Loading...'"></span></div></div></div><div class="flex items-center space-x-4"><div class="relative"><button @click="filingNotifOpen = !filingNotifOpen" class="filing-notif-bell"><i class="fas fa-bell"></i><span x-show="filingNotifCount > 0" class="filing-notif-badge" x-text="filingNotifCount > 99 ? '99+' : filingNotifCount"></span></button><div x-show="filingNotifOpen" @click.away="filingNotifOpen = false" x-transition class="filing-notif-dropdown"><div class="filing-notif-header"><h3>New Filings</h3></div><div class="filing-notif-list"><template x-if="filingNotifications.length === 0"><div class="filing-notif-empty"><i class="fas fa-check-circle"></i><p>No new filings</p></div></template><template x-for="notif in filingNotifications" :key="notif.id"><div class="filing-notif-card"><span class="filing-type-badge" :class="getFilingTypeBadgeClass(notif.filingType)" x-text="notif.filingType"></span><div class="filing-notif-content"><div class="filing-notif-ticker" x-text="notif.ticker"></div><div class="filing-notif-date" x-text="formatFilingDate(notif.filingDate)"></div></div><button @click.stop="dismissFilingNotif(notif.id)" class="filing-notif-dismiss"><i class="fas fa-times"></i></button></div></template></div></div></div><div class="relative" x-data="{ open: false }"><button @click="open = !open" class="flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-gray-100"><div class="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center"><span class="text-indigo-600 font-semibold text-sm" x-text="getUserInitials()"></span></div><div class="hidden md:block text-left"><p class="text-sm font-medium text-gray-700" x-text="user.email"></p></div></button><div x-show="open" @click.away="open = false" x-transition class="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg py-2 z-50 border border-gray-200"><div class="px-4 py-3 border-b border-gray-200"><p class="text-sm font-medium text-gray-900" x-text="user.email"></p><p class="text-xs text-gray-600" x-text="user.tenantName"></p></div><div class="pt-2"><button @click="logout()" class="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"><i class="fas fa-sign-out-alt mr-3"></i> Sign Out</button></div></div></div></div></div></div></nav>
+
+        <!-- Breadcrumbs -->
+        <div class="bg-white border-b border-gray-200 px-6 py-3"><div class="flex items-center space-x-2 text-sm mb-2"><template x-for="(crumb, i) in breadcrumbItems" :key="i"><span class="flex items-center space-x-2"><span x-show="i > 0"><i class="fas fa-chevron-right text-gray-400 text-xs"></i></span><a x-show="crumb.path" :href="crumb.path" class="text-gray-500 hover:text-blue-600" x-text="crumb.label"></a><span x-show="!crumb.path" class="text-gray-900 font-medium" x-text="crumb.label"></span></span></template></div><div class="flex items-center space-x-4"><div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background: linear-gradient(135deg, #1a56db 0%, #7c3aed 100%);"><i class="fas fa-chart-line text-white"></i></div><div><h1 class="text-lg font-bold text-gray-900" x-text="entityContext.displayName"></h1></div></div></div>
+
+        <!-- Main Layout -->
+        <div class="flex h-[calc(100vh-132px)]">
+            <div class="sidebar flex flex-col" role="navigation"><nav class="flex-1 p-3 space-y-3"><template x-for="group in sidebarGroups" :key="group.label"><div><div class="text-xs font-semibold text-gray-400 uppercase tracking-wider px-3 py-1" x-text="group.label"></div><template x-for="item in group.items" :key="item.page"><div @click="navigateTo(item.page)" :class="{'active': currentPage === item.page}" class="nav-item flex items-center px-3 py-2.5 rounded-lg cursor-pointer"><i :class="item.icon" class="w-5 text-gray-400"></i><span class="ml-3 text-sm font-medium" x-text="item.name"></span><span x-show="item.badge && $data[item.badge] > 0" class="badge" x-text="$data[item.badge]"></span></div></template></div></template></nav><div class="p-3 border-t border-gray-200"><div @click="showSettingsModal = true" class="nav-item flex items-center px-3 py-3 rounded-lg cursor-pointer" role="button" tabindex="0" aria-label="Settings" @keydown.enter="showSettingsModal = true" @keydown.space.prevent="showSettingsModal = true"><i class="fas fa-cog w-5 text-gray-400"></i><span class="ml-3 text-sm font-medium">Settings</span></div></div><div class="p-4 border-t border-gray-200"><p class="text-xs text-gray-400 mb-2">Keyboard Shortcuts</p><div class="space-y-1 text-xs text-gray-500"><template x-for="item in sidebarGroups.flatMap(g => g.items).filter(i => i.shortcut)" :key="item.shortcut"><div><span x-text="'⌘' + item.shortcut + ' - ' + item.name"></span></div></template></div></div></div>
+
+            <!-- Research Content Area -->
+            <div class="flex-1 flex flex-col" :class="{ 'ring-2 ring-red-400': provocationsMode === 'provocations', 'ring-2 ring-purple-400': provocationsMode === 'sentiment' }">
+                <div class="flex-1 overflow-auto p-6 space-y-4" x-ref="researchMessages">
+                    <template x-if="researchMessages.length === 0">
+                        <div class="text-center py-20">
+                            <div class="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6" style="background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);"><i class="fas fa-brain text-3xl" style="color: var(--fundlens-primary);"></i></div>
+                            <h2 class="text-2xl font-bold text-gray-900 mb-4">Research Assistant</h2>
+                            <p class="text-gray-600 mb-8" x-text="'Ask questions about ' + entityContext.value + ' or compare with other companies'"></p>
+                            <div class="grid grid-cols-2 gap-4 max-w-2xl mx-auto">
+                                <button @click="quickQuery('What are the key risks?')" class="bg-white p-6 rounded-xl border border-gray-200 text-left hover:shadow-lg transition-all"><div class="w-10 h-10 rounded-lg flex items-center justify-center mb-3" style="background: #fee2e2;"><i class="fas fa-exclamation-triangle" style="color: var(--fundlens-error);"></i></div><h3 class="font-semibold text-gray-900 mb-2">Risk Analysis</h3><p class="text-sm text-gray-600">Key risks and challenges</p></button>
+                                <button @click="quickQuery('Compare revenue with peers')" class="bg-white p-6 rounded-xl border border-gray-200 text-left hover:shadow-lg transition-all"><div class="w-10 h-10 rounded-lg flex items-center justify-center mb-3" style="background: #dbeafe;"><i class="fas fa-chart-line" style="color: var(--fundlens-primary);"></i></div><h3 class="font-semibold text-gray-900 mb-2">Compare</h3><p class="text-sm text-gray-600">Compare with peers</p></button>
+                            </div>
+                        </div>
+                    </template>
+                    <template x-for="message in researchMessages" :key="message.id">
+                        <div>
+                            <div x-show="message.role === 'user'" class="flex justify-end mb-4"><div class="message-user" x-text="message.content"></div></div>
+                            <div x-show="message.role === 'assistant'" class="flex justify-start mb-4">
+                                <div class="message-assistant">
+                                    <div x-show="message.visualization" class="mb-4"><canvas :id="'chart-' + message.id" style="max-height: 320px; width: 100%;"></canvas></div>
+                                    <div x-html="renderMarkdownWithCitations(message.content, message.citations)"></div>
+                                    <template x-if="message.peerComparison">
+                                        <div class="mt-4 p-4 rounded-lg" style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border: 1px solid #86efac;">
+                                            <div x-show="message.peerComparison.peersIncluded && message.peerComparison.peersIncluded.length > 0" class="mb-3">
+                                                <p class="text-sm font-medium text-green-800 mb-2"><i class="fas fa-check-circle mr-1"></i>Peers Included in Analysis</p>
+                                                <div class="flex flex-wrap gap-2">
+                                                    <span class="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800 border border-green-300" x-text="message.peerComparison.primaryTicker + ' (primary)'"></span>
+                                                    <template x-for="peer in message.peerComparison.peersIncluded" :key="peer"><span class="px-2 py-1 text-xs font-medium rounded-full bg-green-50 text-green-700 border border-green-200" x-text="peer"></span></template>
+                                                </div>
+                                            </div>
+                                            <div x-show="message.peerComparison.missingPeers && message.peerComparison.missingPeers.length > 0">
+                                                <p class="text-sm font-medium text-amber-800 mb-2"><i class="fas fa-plus-circle mr-1"></i>Add These Peers for Complete Comparison</p>
+                                                <div class="flex flex-wrap gap-2">
+                                                    <template x-for="peer in message.peerComparison.missingPeers" :key="peer.ticker"><button @click="createDealForTicker(peer.ticker)" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300 transition-colors cursor-pointer flex items-center"><i class="fas fa-plus mr-1"></i><span x-text="peer.ticker"></span></button></template>
+                                                </div>
+                                                <p class="text-xs text-amber-600 mt-2" x-text="message.peerComparison.missingPeers[0]?.reason || 'Create deals for these companies to include them in future comparisons.'"></p>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <button @click="saveToScratchpad(message)" :disabled="!canSaveToScratchpad(message)" :class="{ 'opacity-50 cursor-not-allowed': !canSaveToScratchpad(message) }" class="mt-3 text-xs flex items-center" style="color: var(--fundlens-primary);"><i class="fas fa-bookmark mr-1"></i>Save to Scratchpad</button>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                    <div x-show="researchTyping" class="flex justify-start mb-4"><div class="message-assistant"><div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div></div>
+                </div>
+
+                <!-- Input Area -->
+                <div class="border-t border-gray-200 p-6 bg-white">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center space-x-3">
+                            <button @click="toggleProvocationsMode('provocations')" :class="provocationsMode === 'provocations' ? 'bg-red-100 text-red-800 border-red-300' : 'bg-gray-100 text-gray-600 border-gray-200'" class="px-3 py-1.5 rounded-lg text-xs font-medium border transition-all hover:shadow-sm"><i class="fas fa-bolt mr-1"></i>Provocations</button>
+                            <button @click="toggleProvocationsMode('sentiment')" :class="provocationsMode === 'sentiment' ? 'bg-purple-100 text-purple-800 border-purple-300' : 'bg-gray-100 text-gray-600 border-gray-200'" class="px-3 py-1.5 rounded-lg text-xs font-medium border transition-all hover:shadow-sm"><i class="fas fa-chart-line mr-1"></i>Sentiment</button>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <template x-if="instantRagSession && instantRagSession.status === 'active'">
+                                <div class="flex items-center space-x-2 px-3 py-1 bg-green-50 border border-green-200 rounded-lg">
+                                    <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                                    <span class="text-xs text-green-700 font-medium"><span x-text="instantRagFiles.filter(f => f.status === 'complete').length"></span> doc(s) active</span>
+                                    <span class="text-xs text-green-600" x-text="formatSessionTime(instantRagTimeRemaining)"></span>
+                                    <button @click="endInstantRagSession()" class="text-xs text-green-600 hover:text-green-800 ml-1" title="End document session"><i class="fas fa-times"></i></button>
+                                </div>
+                            </template>
+                            <p class="text-xs text-gray-500"><span x-show="conversationId">Conversation active</span><span x-show="!conversationId">New conversation</span></p>
+                            <button x-show="conversationId" @click="clearConversation()" class="text-xs text-gray-500 hover:text-gray-700"><i class="fas fa-redo mr-1"></i>New</button>
+                        </div>
+                    </div>
+                    <!-- Instant RAG Intake Summaries -->
+                    <template x-if="instantRagIntakeSummaries.length > 0">
+                        <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+                            <div class="flex items-center justify-between mb-2"><span class="text-xs font-medium text-blue-800"><i class="fas fa-file-alt mr-1"></i>Uploaded Documents</span><button @click="toggleInstantRagSummaries()" class="text-xs text-blue-600 hover:text-blue-800"><span x-text="showInstantRagSummaries ? 'Hide' : 'Show'"></span></button></div>
+                            <div x-show="showInstantRagSummaries" x-transition class="space-y-2">
+                                <template x-for="(summary, index) in instantRagIntakeSummaries" :key="index">
+                                    <div class="bg-white p-3 rounded-lg border border-blue-100 text-sm">
+                                        <div class="flex items-center justify-between mb-1"><span class="font-medium text-gray-900" x-text="summary.reportingEntity || summary.fileName"></span><span class="text-xs px-2 py-0.5 rounded-full" :class="summary.documentType === '10-K' || summary.documentType === '10-Q' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'" x-text="summary.documentType"></span></div>
+                                        <div class="text-xs text-gray-500" x-text="summary.periodCovered"></div>
+                                        <template x-if="summary.headlineMetrics && summary.headlineMetrics.length > 0"><div class="flex flex-wrap gap-1 mt-2"><template x-for="metric in summary.headlineMetrics.slice(0, 3)" :key="metric.metric"><span class="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded"><span x-text="metric.metric"></span>: <span class="font-medium" x-text="metric.value"></span></span></template></div></template>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                    <!-- Preset Question Chips -->
+                    <div x-show="provocationsMode && presetQuestions.length > 0" class="flex flex-wrap gap-2 mb-3">
+                        <template x-for="q in presetQuestions.slice(0, 6)" :key="q.id"><button @click="quickQuery(q.text)" class="px-3 py-1.5 rounded-full text-xs font-medium transition-all hover:shadow-sm" :class="provocationsMode === 'provocations' ? 'bg-red-50 text-red-700 border border-red-200 hover:bg-red-100' : 'bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100'" x-text="q.text.length > 60 ? q.text.substring(0, 57) + '...' : q.text"></button></template>
+                    </div>
+                    <!-- Upload Chips -->
+                    <div x-show="instantRagFiles.length > 0" class="upload-chips-container">
+                        <template x-for="(file, index) in instantRagFiles" :key="index">
+                            <div class="upload-chip" :class="getChipStatusClass(file)">
+                                <span class="upload-chip-icon" :class="getFileIconClass(file.name)"><i :class="getFileIconName(file.name)"></i></span>
+                                <div class="upload-chip-info"><span class="upload-chip-name" x-text="truncateFileName(file.name, 20)"></span><span class="upload-chip-size" x-text="formatFileSize(file.size)"></span></div>
+                                <div x-show="file.status === 'processing'" class="upload-chip-progress"><div class="upload-chip-progress-bar" :style="'width:' + (file.progress || 0) + '%'"></div></div>
+                                <span x-show="file.status === 'complete'" class="upload-chip-status complete"><i class="fas fa-check-circle"></i></span>
+                                <span x-show="file.status === 'error'" class="upload-chip-status error"><i class="fas fa-exclamation-circle"></i></span>
+                                <span x-show="file.phase && file.status === 'processing'" class="upload-chip-phase" x-text="file.phase"></span>
+                                <button x-show="file.status !== 'processing'" @click="removeInstantRagFile(index)" class="upload-chip-remove"><i class="fas fa-times"></i></button>
+                            </div>
+                        </template>
+                    </div>
+                    <!-- Input with drag-drop -->
+                    <div class="relative" @dragover.prevent="instantRagDragOver = true" @dragleave.prevent="instantRagDragOver = false" @drop.prevent="handleInstantRagDrop($event); instantRagDragOver = false">
+                        <div x-show="instantRagDragOver" x-transition class="drag-drop-overlay"><div class="drag-drop-content"><i class="fas fa-cloud-upload-alt drag-drop-icon"></i><p class="drag-drop-text">Drop files here</p><p class="drag-drop-subtext">PDF, DOCX, XLSX, CSV, PPTX, TXT, Images</p></div></div>
+                        <div class="flex items-end space-x-3">
+                            <div class="flex-1 flex items-end border-2 border-gray-200 rounded-xl focus-within:border-blue-500 transition-colors" :class="{ 'border-green-400': instantRagSession && instantRagSession.status === 'active' }">
+                                <div class="relative flex-shrink-0 pl-2 pb-2.5">
+                                    <input type="file" x-ref="instantRagFileInput" @change="handleInstantRagFiles($event)" multiple accept=".pdf,.docx,.xlsx,.csv,.pptx,.txt,.png,.jpg,.jpeg" class="hidden">
+                                    <button @click="$refs.instantRagFileInput.click()" :disabled="instantRagUploading || (instantRagFiles.length >= 5)" class="p-1.5 rounded-lg hover:bg-gray-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed" :class="{ 'bg-green-50 hover:bg-green-100': instantRagSession && instantRagSession.status === 'active' }" title="Upload documents for instant Q&amp;A"><i class="fas fa-paperclip text-gray-400 text-lg" :class="{ 'text-green-600': instantRagSession && instantRagSession.status === 'active' }"></i></button>
+                                    <span x-show="instantRagFiles.length > 0" class="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 text-white text-[10px] rounded-full flex items-center justify-center" x-text="instantRagFiles.length"></span>
+                                </div>
+                                <textarea x-model="researchInput" @keydown.enter.prevent="sendResearchMessage()" :disabled="researchTyping || instantRagUploading" :placeholder="instantRagSession && instantRagSession.status === 'active' ? 'Ask about your uploaded documents...' : 'Ask about any company...'" rows="2" class="flex-1 px-3 py-3 focus:outline-none resize-none disabled:opacity-50 bg-transparent border-0 rounded-r-xl"></textarea>
+                            </div>
+                            <button @click="sendResearchMessage()" :disabled="researchTyping || instantRagUploading || !researchInput.trim()" class="px-6 py-3 rounded-xl font-medium text-white hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed" style="background: linear-gradient(135deg, var(--fundlens-primary) 0%, var(--fundlens-accent) 100%);"><i class="fas fa-paper-plane"></i></button>
+                        </div>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-2">Press Enter to send</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Modal -->
+        <div x-show="showSettingsModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto" @click.self="showSettingsModal = false">
+            <div class="flex items-center justify-center min-h-screen px-4">
+                <div class="fixed inset-0 bg-black opacity-50"></div>
+                <div class="relative bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6 z-10">
+                    <div class="flex items-center justify-between mb-6"><h2 class="text-2xl font-bold text-gray-900"><i class="fas fa-cog mr-2" style="color: var(--fundlens-primary);"></i>Research Assistant Settings</h2><button @click="showSettingsModal = false" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button></div>
+                    <div class="space-y-6">
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">Custom System Prompt</label>
+                            <p class="text-sm text-gray-600 mb-3">Customize how the AI assistant responds.</p>
+                            <div class="mb-3"><label class="block text-xs font-medium text-gray-600 mb-2">Quick Presets:</label>
+                                <div class="flex flex-wrap gap-2">
+                                    <button @click="systemPrompt = defaultSystemPrompts.analyst" class="px-3 py-1 text-xs rounded-lg border border-gray-300 hover:bg-gray-50">Financial Analyst</button>
+                                    <button @click="systemPrompt = defaultSystemPrompts.investor" class="px-3 py-1 text-xs rounded-lg border border-gray-300 hover:bg-gray-50">Value Investor</button>
+                                    <button @click="systemPrompt = defaultSystemPrompts.technical" class="px-3 py-1 text-xs rounded-lg border border-gray-300 hover:bg-gray-50">Technical Focus</button>
+                                    <button @click="systemPrompt = defaultSystemPrompts.concise" class="px-3 py-1 text-xs rounded-lg border border-gray-300 hover:bg-gray-50">Concise Answers</button>
+                                    <button @click="systemPrompt = ''" class="px-3 py-1 text-xs rounded-lg border border-gray-300 hover:bg-gray-50">Clear</button>
+                                </div>
+                            </div>
+                            <textarea x-model="systemPrompt" rows="8" placeholder="Enter your custom system prompt here..." class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm font-mono"></textarea>
+                        </div>
+                        <div class="text-xs text-gray-500 text-right"><span x-text="systemPrompt.length"></span> characters</div>
+                        <div class="flex gap-3 pt-4 border-t border-gray-200">
+                            <button @click="saveSettings()" class="flex-1 px-6 py-3 rounded-lg font-medium text-white" style="background: var(--fundlens-primary);"><i class="fas fa-save mr-2"></i>Save Settings</button>
+                            <button @click="showSettingsModal = false" class="px-6 py-3 rounded-lg font-medium border border-gray-300 hover:bg-gray-50">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Source Citation Modal -->
+        <div x-show="showSourceModal" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="transition ease-in duration-150" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="source-modal-backdrop" @click.self="showSourceModal = false" @keydown.escape.window="showSourceModal = false" role="dialog" aria-modal="true" aria-labelledby="source-modal-title">
+            <div class="source-modal">
+                <div class="source-modal-header">
+                    <h3 id="source-modal-title"><template x-if="sourceModal.sourceType === 'USER_UPLOAD'"><span><i class="fas fa-file-alt mr-2"></i>Uploaded Document Source</span></template><template x-if="sourceModal.sourceType !== 'USER_UPLOAD'"><span><i class="fas fa-landmark mr-2"></i>SEC Filing Source</span></template></h3>
+                    <button @click="showSourceModal = false" class="source-modal-close" x-ref="sourceModalClose"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="source-modal-meta">
+                    <template x-if="sourceModal.sourceType === 'USER_UPLOAD'"><div class="flex items-center gap-3"><span class="source-badge upload"><i class="fas fa-upload mr-1"></i>Uploaded</span><span class="text-sm font-medium" x-text="sourceModal.filename"></span></div></template>
+                    <template x-if="sourceModal.sourceType !== 'USER_UPLOAD'"><div class="flex flex-wrap items-center gap-3"><span class="source-badge sec" x-text="sourceModal.ticker"></span><span class="text-sm" x-text="sourceModal.filingType"></span><span class="text-sm text-gray-500" x-text="sourceModal.fiscalPeriod"></span><span x-show="sourceModal.section" class="text-sm text-gray-500" x-text="sourceModal.section"></span><span x-show="sourceModal.pageNumber" class="text-sm text-gray-400" x-text="'p. ' + sourceModal.pageNumber"></span></div></template>
+                    <div x-show="sourceModal.relevanceScore" class="mt-2"><span class="text-xs text-gray-500">Relevance: </span><span class="text-xs font-medium" :class="sourceModal.relevanceScore > 0.8 ? 'text-green-600' : sourceModal.relevanceScore > 0.5 ? 'text-yellow-600' : 'text-red-600'" x-text="(sourceModal.relevanceScore * 100).toFixed(0) + '%'"></span></div>
+                </div>
+                <div class="source-modal-excerpt"><div x-html="formatExcerpt(sourceModal.excerpt)"></div></div>
+                <div class="source-modal-actions"><button @click="copySourceCitation()" class="source-modal-btn primary"><i class="fas fa-copy mr-1"></i>Copy Citation</button><button @click="showSourceModal = false" class="source-modal-btn">Close</button></div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
