@@ -180,7 +180,8 @@ export class ChatService {
       // Generate AI response with enhanced citations
       const aiResponse = await this.ragService.query(params.content, {
         includeNarrative: true,
-        includeCitations: true
+        includeCitations: true,
+        ticker: deal.ticker,
       });
 
       // Enhance sources with detailed traceability
@@ -264,7 +265,8 @@ export class ChatService {
       try {
         const narrativeResults = await this.ragService.query(query, {
           includeNarrative: true,
-          includeCitations: true
+          includeCitations: true,
+          ticker: deal.ticker,
         });
         
         if (narrativeResults?.answer) {

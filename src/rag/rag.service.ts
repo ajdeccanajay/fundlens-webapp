@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { QueryRouterService } from './query-router.service';
 import { StructuredRetrieverService } from './structured-retriever.service';
 import { SemanticRetrieverService } from './semantic-retriever.service';
@@ -8,6 +8,9 @@ import { ComputedMetricsService } from '../dataSources/sec/computed-metrics.serv
 import { PerformanceMonitorService } from './performance-monitor.service';
 import { PerformanceOptimizerService } from './performance-optimizer.service';
 import { QueryIntent, RAGResponse } from './types/query-intent';
+import { ResponseEnrichmentService } from './response-enrichment.service';
+import { MetricsSummary } from '../deals/financial-calculator.service';
+import { InstantRAGService } from '../instant-rag/instant-rag.service';
 
 /**
  * RAG Service
@@ -30,6 +33,9 @@ export class RAGService {
     private readonly computedMetrics: ComputedMetricsService,
     private readonly performanceMonitor: PerformanceMonitorService,
     private readonly performanceOptimizer: PerformanceOptimizerService,
+    private readonly responseEnrichment: ResponseEnrichmentService,
+    @Inject(forwardRef(() => InstantRAGService))
+    private readonly instantRAGService: InstantRAGService,
   ) {}
 
   /**
@@ -44,6 +50,7 @@ export class RAGService {
       tenantId?: string; // For user document search
       ticker?: string; // For scoped user document search
       tickers?: string[]; // Multi-ticker array for peer comparison
+      instantRagSessionId?: string; // Instant RAG session ID for cross-source retrieval
     },
   ): Promise<RAGResponse> {
     const startTime = Date.now();
@@ -77,9 +84,15 @@ export class RAGService {
       }
       
       // Step 1.5: Check if clarification needed (Phase 3)
-      if (intent.needsClarification) {
+      // IMPORTANT: Skip clarification when a ticker is explicitly provided via options.
+      // This means the user is in a workspace context and we know the company.
+      const hasExplicitTicker = options?.ticker || (options?.tickers && options.tickers.length > 0);
+      if (intent.needsClarification && !hasExplicitTicker) {
         this.logger.log(`⚠️ Query needs clarification, generating clarification prompt`);
         return this.generateClarificationPrompt(intent);
+      } else if (intent.needsClarification && hasExplicitTicker) {
+        this.logger.log(`🔧 Skipping clarification — explicit ticker provided: ${options?.ticker || options?.tickers?.join(',')}`);
+        intent.needsClarification = false;
       }
       
       // Step 1.5: Make optimization decisions
@@ -91,10 +104,7 @@ export class RAGService {
       
       this.logger.log(`🎯 Optimization decisions: ${optimizationDecisions.reasoning.join(', ')}`);
       
-      // Step 1.6: Check cache - DISABLED FOR TESTING
-      // Cache disabled to allow immediate visibility of formatting changes
-      // Will re-enable after formatting improvements are verified
-      /*
+      // Step 1.6: Check cache
       if (optimizationDecisions.useCache && optimizationDecisions.cacheKey) {
         const cached = this.performanceOptimizer.getCachedQuery<RAGResponse>(
           optimizationDecisions.cacheKey
@@ -116,7 +126,27 @@ export class RAGService {
           };
         }
       }
-      */
+
+      // Quick response path — skip LLM for simple structured lookups
+      if (this.responseEnrichment.isQuickResponseEligible(intent)) {
+        if (plan.useStructured && plan.structuredQuery) {
+          const result = await this.structuredRetriever.retrieve(plan.structuredQuery);
+          const quickMetrics = result.metrics;
+          if (quickMetrics.length > 0) {
+            this.logger.log('⚡ Quick response path — skipping LLM');
+            const quickResponse = await this.responseEnrichment.buildQuickResponse(intent, quickMetrics);
+            // Append degradation messaging for any unresolved metrics
+            const { unresolved } = this.responseEnrichment.partitionResolutions(
+              plan.structuredQuery.metrics,
+            );
+            const degradationMsg = this.responseEnrichment.buildUnresolvedMessage(unresolved);
+            if (degradationMsg) {
+              quickResponse.answer = `${quickResponse.answer}\n\n${degradationMsg}`;
+            }
+            return quickResponse;
+          }
+        }
+      }
 
       // Step 2: HYBRID RETRIEVAL - Combine structured + semantic + user documents
       let metrics: any[] = [];
@@ -184,7 +214,7 @@ export class RAGService {
           this.logger.log(`📊 Retrieving structured metrics from PostgreSQL`);
           this.logger.log(`🔍 DEBUG Structured Query:`);
           this.logger.log(`   Tickers: ${JSON.stringify(plan.structuredQuery.tickers)}`);
-          this.logger.log(`   Metrics: ${JSON.stringify(plan.structuredQuery.metrics)}`);
+          this.logger.log(`   Metrics: ${JSON.stringify(plan.structuredQuery.metrics.map(m => m.canonical_id || m.original_query))}`);
           this.logger.log(`   Period: ${plan.structuredQuery.period}`);
           
           const result = await this.structuredRetriever.retrieve(
@@ -211,6 +241,22 @@ export class RAGService {
           }
 
           this.logger.log(`📊 Retrieved ${metrics.length} structured metrics`);
+          
+          // FALLBACK: If structured returned 0 metrics, escalate to semantic path
+          // This prevents "No data found" for valid queries where metric name doesn't match DB exactly
+          if (metrics.length === 0 && !plan.useSemantic) {
+            this.logger.log(`⚠️ Structured retrieval returned 0 metrics — escalating to semantic fallback`);
+            const tickers = plan.structuredQuery.tickers;
+            plan.useSemantic = true;
+            plan.semanticQuery = {
+              query: intent.originalQuery,
+              tickers: tickers.length > 0 ? tickers : undefined,
+              documentTypes: ['10-K', '10-Q'],
+              sectionTypes: undefined,
+              period: plan.structuredQuery.period,
+              maxResults: 5,
+            };
+          }
         }
 
         // SEMANTIC PATH: Foundation model narratives from Bedrock KB + RDS context
@@ -262,6 +308,123 @@ export class RAGService {
         }
       }
 
+      // INSTANT RAG SESSION DOCUMENTS PATH: Retrieve and merge session docs if session ID provided
+      let sessionDocsUnavailable = false;
+      if (options?.instantRagSessionId) {
+        try {
+          this.logger.log(`📎 Retrieving Instant RAG session documents for session ${options.instantRagSessionId}`);
+          const sessionDocs = await this.instantRAGService.getSessionDocuments(options.instantRagSessionId);
+          
+          // Filter to docs with non-empty extractedText
+          const validDocs = sessionDocs.filter(doc => doc.extractedText && doc.extractedText.trim().length > 0);
+          
+          if (validDocs.length > 0) {
+            // Convert SessionDocument[] to UserDocumentChunk[] format
+            const sessionChunks = validDocs.map(doc => ({
+              id: doc.id,
+              documentId: doc.id,
+              content: doc.extractedText!.substring(0, 2000), // Truncate to 2000 chars
+              pageNumber: null,
+              ticker: null,
+              filename: doc.fileName,
+              score: 0.85, // User explicitly uploaded = high relevance
+            }));
+            
+            this.logger.log(`📎 Found ${sessionChunks.length} valid session document chunks`);
+            
+            // Merge session docs with existing narratives
+            narratives = this.documentRAG.mergeAndRerankResults(sessionChunks, narratives, 10);
+            this.logger.log(`🔀 Merged session docs: ${narratives.length} total narratives`);
+          } else {
+            this.logger.log(`📎 No valid session documents found (${sessionDocs.length} total, 0 with text)`);
+          }
+        } catch (error) {
+          this.logger.warn(`⚠️ Failed to retrieve session documents: ${error.message}`);
+          sessionDocsUnavailable = true;
+        }
+      }
+
+      // If both retrieval paths returned nothing, try to provide helpful context
+      // about what data IS available for this ticker
+      if (metrics.length === 0 && narratives.length === 0) {
+        const tickers = Array.isArray(intent.ticker) ? intent.ticker : intent.ticker ? [intent.ticker] : [];
+        if (tickers.length > 0) {
+          try {
+            const availablePeriods = await this.structuredRetriever.getAvailablePeriods(tickers[0]);
+            if (availablePeriods.length > 0) {
+              const periodList = availablePeriods.slice(0, 5).map(p => `${p.period} (${p.filingType})`).join(', ');
+              this.logger.log(`📋 No data found, but ${tickers[0]} has data for: ${periodList}`);
+            } else {
+              this.logger.log(`📋 No data found — ${tickers[0]} has no ingested data at all`);
+            }
+          } catch (e) {
+            this.logger.warn(`Could not check available data: ${e.message}`);
+          }
+        }
+      }
+
+      // MISSING TICKER DATA HANDLING: Identify which tickers have data and which don't
+      // For multi-ticker queries, partition by data availability and build actionable messages
+      const requestedTickers = Array.isArray(intent.ticker) ? intent.ticker : intent.ticker ? [intent.ticker] : [];
+      let missingTickerMessage: string | undefined;
+
+      if (requestedTickers.length > 0 && metrics.length >= 0) {
+        const tickersWithData = requestedTickers.filter(t =>
+          metrics.some(m => m.ticker?.toUpperCase() === t.toUpperCase()),
+        );
+        const tickersWithoutData = requestedTickers.filter(t =>
+          !metrics.some(m => m.ticker?.toUpperCase() === t.toUpperCase()),
+        );
+
+        if (tickersWithoutData.length > 0 && tickersWithoutData.length === requestedTickers.length) {
+          // ALL tickers missing structured data
+          if (narratives.length === 0) {
+            // No narratives either — return early with a helpful message
+            this.logger.log(`⚠️ All requested tickers lack data: ${tickersWithoutData.join(', ')}`);
+            const latency = Date.now() - startTime;
+            return {
+              answer: `No data found for ${requestedTickers.join(', ')}. Please ingest their SEC filings first.`,
+              intent,
+              sources: [],
+              timestamp: new Date(),
+              latency,
+              cost: 0,
+              processingInfo: {
+                structuredMetrics: 0,
+                semanticNarratives: 0,
+                userDocumentChunks: 0,
+                usedBedrockKB: !!process.env.BEDROCK_KB_ID,
+                usedClaudeGeneration: false,
+                hybridProcessing: true,
+                fromCache: false,
+              },
+            };
+          }
+          // Has narratives but no structured metrics — continue but note the missing data
+          missingTickerMessage = `No structured metric data found for ${requestedTickers.join(', ')}. Please ingest their SEC filings for quantitative analysis.`;
+          this.logger.log(`⚠️ All tickers lack structured data but narratives available — continuing with semantic results`);
+        }
+
+        if (tickersWithoutData.length > 0 && tickersWithData.length > 0) {
+          // Partial data — some tickers have data, others don't
+          missingTickerMessage = `Data available for ${tickersWithData.join(', ')}. ` +
+            `No data found for ${tickersWithoutData.join(', ')} — please ingest their SEC filings.`;
+          this.logger.log(`⚠️ Partial ticker data: ${missingTickerMessage}`);
+        }
+      }
+
+      // Phase 1 (Pre-LLM): Compute financial metrics for trend/computation queries
+      let computedSummary: MetricsSummary | MetricsSummary[] | undefined;
+      if (intent.needsTrend || intent.needsComputation) {
+        const tickers = Array.isArray(intent.ticker) ? intent.ticker : [];
+        if (tickers.length > 1) {
+          const summaries = await this.responseEnrichment.computeFinancialsMulti(intent, metrics);
+          computedSummary = summaries.length > 0 ? summaries : undefined;
+        } else {
+          computedSummary = await this.responseEnrichment.computeFinancials(intent, metrics);
+        }
+      }
+
       // Step 3: HYBRID RESPONSE GENERATION
       let answer: string;
       let usage: any = undefined;
@@ -308,6 +471,7 @@ export class RAGService {
             systemPrompt: options?.systemPrompt, // Pass custom system prompt
             modelId, // Use selected model tier
             isPeerComparison,
+            computedSummary, // Phase 1: YoY growth data for LLM context
           });
           answer = generated.answer;
           usage = generated.usage;
@@ -338,6 +502,23 @@ export class RAGService {
 
       const latency = Date.now() - startTime;
 
+      // Graceful degradation: append messaging for unresolved metrics (Req 9.1–9.4)
+      if (plan.structuredQuery && plan.structuredQuery.metrics.length > 0) {
+        const { unresolved } = this.responseEnrichment.partitionResolutions(
+          plan.structuredQuery.metrics,
+        );
+        const degradationMsg = this.responseEnrichment.buildUnresolvedMessage(unresolved);
+        if (degradationMsg) {
+          this.logger.log(`⚠️ ${unresolved.length} unresolved metric(s) — appending degradation message`);
+          answer = answer ? `${answer}\n\n${degradationMsg}` : degradationMsg;
+        }
+      }
+
+      // Append missing ticker data message if some tickers lacked data
+      if (missingTickerMessage) {
+        answer = answer ? `${answer}\n\n${missingTickerMessage}` : missingTickerMessage;
+      }
+
       const response: RAGResponse = {
         answer,
         intent,
@@ -361,6 +542,7 @@ export class RAGService {
           modelTier: optimizationDecisions.modelTier,
           parallelExecution: optimizationDecisions.parallelExecution,
           optimizationDecisions: optimizationDecisions.reasoning,
+          sessionDocsUnavailable,
         },
       };
 
@@ -378,22 +560,24 @@ export class RAGService {
         metricsCount: metrics.length,
         narrativesCount: narratives.length,
       });
-      
-      // Cache the response - DISABLED FOR TESTING
-      // Cache disabled to allow immediate visibility of formatting changes
-      /*
+
+      // Phase 2 (Post-LLM): Enrich response with visualization
+      const enrichedResponse = this.responseEnrichment.enrichResponse(response, intent, metrics, computedSummary);
+
+      // Cache the enriched response
       if (optimizationDecisions.useCache && optimizationDecisions.cacheKey) {
         const ttl = this.performanceOptimizer.getCacheTTL(intent);
+        const ticker = Array.isArray(intent.ticker) ? intent.ticker[0] : intent.ticker;
         this.performanceOptimizer.cacheQuery(
           optimizationDecisions.cacheKey,
-          response,
-          ttl
+          enrichedResponse,
+          ttl,
+          ticker
         );
         this.logger.log(`💾 Response cached with TTL ${ttl}s`);
       }
-      */
 
-      return response;
+      return enrichedResponse;
     } catch (error) {
       this.logger.error(`❌ Error processing hybrid query: ${error.message}`);
       throw error;
@@ -508,7 +692,34 @@ export class RAGService {
       return this.buildHybridAnswer(query, metrics, narratives);
     }
 
-    return 'No data found for your query.';
+    // No data found — build a helpful response asynchronously is not possible here,
+    // so return a descriptive message based on what we know from the intent
+    return this.buildNoDataMessage(intent);
+  }
+
+  /**
+   * Build a helpful "no data" message that tells the user what went wrong
+   * and suggests alternatives based on the intent
+   */
+  private buildNoDataMessage(intent: QueryIntent): string {
+    const lines: string[] = [];
+    const tickers = Array.isArray(intent.ticker) ? intent.ticker : intent.ticker ? [intent.ticker] : [];
+    const ticker = tickers[0] || 'the requested company';
+    const metricNames = (intent.metrics || []).map(m => this.getMetricDisplayName(m)).join(', ') || 'the requested metrics';
+    const period = intent.period || '';
+
+    lines.push(`### No Data Available\n`);
+    lines.push(`We couldn't find **${metricNames}** for **${ticker}**${period ? ` in **${period}**` : ''}.\n`);
+    lines.push(`This typically means:\n`);
+    lines.push(`- The filing for that period hasn't been ingested yet`);
+    lines.push(`- The metric may be stored under a different name in the SEC filing`);
+    lines.push(`- The company may not report this specific line item\n`);
+    lines.push(`**Try these alternatives:**`);
+    lines.push(`- Ask without a specific year: _"What is the cash and cash equivalents for ${ticker}?"_`);
+    lines.push(`- Ask for the latest data: _"What is the latest ${metricNames} for ${ticker}?"_`);
+    lines.push(`- Try a different period: _"What is the ${metricNames} for ${ticker} in FY2024?"_`);
+
+    return lines.join('\n');
   }
 
   /**
@@ -655,11 +866,19 @@ export class RAGService {
           for (let i = 0; i < Math.min(topChunks.length, paragraphs.length); i++) {
             const chunk = topChunks[i];
             const score = (chunk.score * 100).toFixed(0);
-            // Handle undefined fiscalPeriod gracefully
-            const fiscalPeriod = chunk.metadata.fiscalPeriod || 'Period Unknown';
-            const source = `${chunk.metadata.filingType} ${fiscalPeriod}`;
-            const pageInfo = chunk.metadata.pageNumber ? `, Page ${chunk.metadata.pageNumber}` : '';
-            lines.push(`- ${ticker} ${source}${pageInfo} (${score}% relevance)`);
+            
+            if (chunk.sourceType === 'USER_UPLOAD') {
+              // Uploaded document from Instant RAG session
+              const filename = chunk.filename || 'Uploaded Document';
+              lines.push(`- [Uploaded Document: ${filename}] (${score}% relevance)`);
+            } else {
+              // SEC filing from Bedrock KB
+              const fiscalPeriod = chunk.metadata?.fiscalPeriod || 'Period Unknown';
+              const filingType = chunk.metadata?.filingType || 'Filing';
+              const chunkTicker = chunk.metadata?.ticker || ticker;
+              const pageInfo = chunk.metadata?.pageNumber ? `, Page ${chunk.metadata.pageNumber}` : '';
+              lines.push(`- [SEC Filing: ${chunkTicker} ${filingType}] ${fiscalPeriod}${pageInfo} (${score}% relevance)`);
+            }
           }
           lines.push('');
         }
@@ -718,8 +937,8 @@ export class RAGService {
     const grouped: Record<string, Record<string, any[]>> = {};
 
     for (const narrative of narratives) {
-      const ticker = narrative.metadata.ticker;
-      const sectionType = narrative.metadata.sectionType;
+      const ticker = narrative.metadata?.ticker || narrative.ticker || 'Uploaded Documents';
+      const sectionType = narrative.metadata?.sectionType || (narrative.sourceType === 'USER_UPLOAD' ? 'uploaded_document' : 'unknown');
 
       if (!grouped[ticker]) {
         grouped[ticker] = {};
@@ -746,7 +965,8 @@ export class RAGService {
       'directors_officers': 'Directors & Officers',
       'controls_procedures': 'Controls & Procedures',
       'executive_compensation': 'Executive Compensation',
-      'general': 'General Information'
+      'general': 'General Information',
+      'uploaded_document': 'Uploaded Documents',
     };
 
     return sectionNames[sectionType] || sectionType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
@@ -977,6 +1197,22 @@ export class RAGService {
     }
 
     for (const narrative of narratives) {
+      // Handle uploaded document sources (from Instant RAG session)
+      if (narrative.sourceType === 'USER_UPLOAD') {
+        const key = `upload-${narrative.filename || narrative.id}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          sources.push({
+            type: 'uploaded_document',
+            sourceType: 'USER_UPLOAD',
+            filename: narrative.filename,
+            ticker: null,
+            filingType: 'Uploaded Document',
+          });
+        }
+        continue;
+      }
+      
       // Only add if we have valid metadata (fiscalPeriod is optional)
       if (narrative.metadata?.ticker && narrative.metadata?.filingType) {
         const fiscalPeriod = narrative.metadata.fiscalPeriod || 'unknown';
@@ -985,6 +1221,7 @@ export class RAGService {
           seen.add(key);
           sources.push({
             type: 'narrative',
+            sourceType: 'SEC_FILING',
             ticker: narrative.metadata.ticker,
             filingType: narrative.metadata.filingType,
             fiscalPeriod: narrative.metadata.fiscalPeriod || 'Period Unknown',

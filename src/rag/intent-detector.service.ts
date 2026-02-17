@@ -1,21 +1,41 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { QueryIntent, QueryType, PeriodType } from './types/query-intent';
 import { BedrockService } from './bedrock.service';
 import { IntentAnalyticsService } from './intent-analytics.service';
+import { MetricRegistryService } from './metric-resolution/metric-registry.service';
+import { ConceptRegistryService } from './metric-resolution/concept-registry.service';
+import { MetricLearningService } from './metric-learning.service';
+import { LlmClassificationResult, LlmDetectionEngine } from './intent-detection/llm-detection-engine';
+import { FastPathCache } from './intent-detection/fast-path-cache';
+import { CompanyTickerMapService } from './intent-detection/company-ticker-map.service';
+import { IntentFeedbackService } from './intent-detection/intent-feedback.service';
+
+/**
+ * Result of period extraction — supports both single periods and multi-year ranges.
+ */
+interface PeriodExtractionResult {
+  period?: string;          // Single period (e.g., "FY2024") or undefined for ranges
+  periodType?: PeriodType;  // 'annual' | 'quarterly' | 'latest' | 'range'
+  periodStart?: string;     // Start of range (e.g., "FY2020")
+  periodEnd?: string;       // End of range (e.g., "FY2024")
+}
 
 /**
  * Intent Detector Service
- * Parses natural language queries to extract structured intent
- * 
- * Uses hybrid detection:
- * 1. Regex patterns (fast, 80% accuracy)
- * 2. LLM fallback (slower, 95%+ accuracy)
- * 3. Generic fallback (always succeeds)
+ *
+ * Three-layer intelligent detection architecture:
+ *   Layer 1: Regex Fast-Path ($0/query, <10ms)
+ *   Layer 2: Fast-Path Cache ($0/query, <5ms)
+ *   Layer 3: LLM Classification via Claude 3.5 Haiku (~$0.0002/query)
+ *
+ * The LLM is a classifier, not a resolver. Metric resolution is always
+ * delegated to MetricRegistryService. Concept matching is always delegated
+ * to ConceptRegistryService.
  */
 @Injectable()
 export class IntentDetectorService {
   private readonly logger = new Logger(IntentDetectorService.name);
-  
+
   // LLM usage tracking
   private llmUsageStats = {
     totalQueries: 0,
@@ -28,15 +48,21 @@ export class IntentDetectorService {
   constructor(
     private readonly bedrock: BedrockService,
     private readonly analytics: IntentAnalyticsService,
+    private readonly metricRegistry: MetricRegistryService,
+    @Optional() private readonly conceptRegistry?: ConceptRegistryService,
+    @Optional() private readonly metricLearning?: MetricLearningService,
+    @Optional() private readonly fastPathCache?: FastPathCache,
+    @Optional() private readonly companyTickerMap?: CompanyTickerMapService,
+    @Optional() private readonly feedbackService?: IntentFeedbackService,
   ) {}
 
   /**
-   * Detect intent from natural language query
-   * Uses three-tier fallback: regex → LLM → generic
-   * 
+   * Detect intent from natural language query.
+   * Uses three-layer detection: regex fast-path → cache → LLM.
+   *
    * @param query The natural language query
    * @param tenantId Optional tenant ID for analytics
-   * @param contextTicker Optional ticker from workspace context (e.g., from deal page)
+   * @param contextTicker Optional ticker from workspace context
    */
   async detectIntent(query: string, tenantId?: string, contextTicker?: string): Promise<QueryIntent> {
     this.logger.log(`Detecting intent for query: "${query}"`);
@@ -47,405 +73,253 @@ export class IntentDetectorService {
 
     const startTime = Date.now();
 
-    // Tier 1: Try regex detection first (fast path)
-    const regexIntent = await this.detectWithRegex(query, contextTicker);
-    
-    // CRITICAL FIX: Changed from > 0.7 to >= 0.7 to accept queries with exactly 0.7 confidence
-    // This includes ticker-only queries (base 0.5 + ticker 0.2 = 0.7)
-    // Bug fix for boundary condition that was rejecting 20% of queries
-    if (regexIntent.confidence >= 0.7) {
-      // NEW: Check for ambiguity before accepting regex intent
-      // Ambiguous queries (ticker-only with generic words) should receive clarification prompts
-      if (this.isAmbiguous(regexIntent)) {
-        this.logger.log(`⚠️ Ambiguous query detected, forcing LLM detection for clarification`);
-        
-        // Force LLM detection to get better intent understanding
-        try {
-          const llmIntent = await this.detectWithLLM(query);
-          
-          // Mark as needing clarification
-          llmIntent.needsClarification = true;
-          llmIntent.ambiguityReason = 'Ticker-only query with generic words';
-          
-          const llmLatency = Date.now() - startTime;
-          this.llmUsageStats.llmLatencyMs.push(llmLatency);
-          this.llmUsageStats.llmFallback++;
-          
-          this.logger.log(`✅ LLM detection for ambiguous query succeeded (confidence: ${llmIntent.confidence.toFixed(2)}, latency: ${llmLatency}ms)`);
-          
-          // Log to analytics
-          if (tenantId) {
-            const llmCost = this.calculateLLMCost(query);
-            await this.analytics.logDetection({
-              tenantId,
-              query,
-              detectedIntent: llmIntent,
-              detectionMethod: 'llm',
-              confidence: llmIntent.confidence,
-              success: true,
-              latencyMs: llmLatency,
-              llmCostUsd: llmCost,
-            });
-          }
-          
-          this.logUsageStats();
-          return llmIntent;
-        } catch (error) {
-          this.logger.error(`LLM detection for ambiguous query failed: ${error.message}`);
-          // Fall back to regex intent but mark as needing clarification
-          regexIntent.needsClarification = true;
-          regexIntent.ambiguityReason = 'Ticker-only query with generic words (LLM failed)';
-        }
-      }
-      
-      // Not ambiguous, use regex (fast path)
+    // Layer 1: Regex Fast-Path (Req 1.2)
+    const fastPathResult = this.regexFastPath(query, contextTicker);
+    if (fastPathResult.confidence >= 0.9) {
       this.llmUsageStats.regexSuccess++;
-      const latency = Date.now() - startTime;
-      this.logger.log(`✅ Regex detection succeeded (confidence: ${regexIntent.confidence.toFixed(2)}, latency: ${latency}ms)`);
-      
-      // Log to analytics
-      if (tenantId) {
-        await this.analytics.logDetection({
-          tenantId,
-          query,
-          detectedIntent: regexIntent,
-          detectionMethod: 'regex',
-          confidence: regexIntent.confidence,
-          success: true,
-          latencyMs: latency,
-        });
-      }
-      
-      this.logUsageStats();
-      return regexIntent;
+      this.logger.log(`✅ Regex fast-path hit (confidence: ${fastPathResult.confidence.toFixed(2)}, latency: ${Date.now() - startTime}ms)`);
+      await this.logDetection(fastPathResult, 'regex_fast_path', tenantId, startTime);
+      return fastPathResult;
     }
 
-    // Tier 2: Fallback to LLM (slower but more accurate)
-    this.logger.log(`⚠️ Regex confidence low (${regexIntent.confidence.toFixed(2)}), falling back to LLM`);
-    
+    // Layer 2: Fast-Path Cache (Req 1.3, 4.2)
+    if (this.fastPathCache) {
+      const cacheResult = this.fastPathCache.lookup(query, fastPathResult);
+      if (cacheResult) {
+        this.logger.log(`✅ Cache hit (latency: ${Date.now() - startTime}ms)`);
+        await this.logDetection(cacheResult, 'cache_hit', tenantId, startTime);
+        return cacheResult;
+      }
+    }
+
+    // Layer 3: LLM Classification (Req 1.5)
     try {
-      const llmIntent = await this.detectWithLLM(query);
-      const llmLatency = Date.now() - startTime;
-      this.llmUsageStats.llmLatencyMs.push(llmLatency);
-      
-      if (llmIntent.confidence > 0.6) {
-        this.llmUsageStats.llmFallback++;
-        this.logger.log(`✅ LLM detection succeeded (confidence: ${llmIntent.confidence.toFixed(2)}, latency: ${llmLatency}ms)`);
-        
-        // Log to analytics with LLM cost
-        if (tenantId) {
-          const llmCost = this.calculateLLMCost(query);
-          await this.analytics.logDetection({
-            tenantId,
-            query,
-            detectedIntent: llmIntent,
-            detectionMethod: 'llm',
-            confidence: llmIntent.confidence,
-            success: true,
-            latencyMs: llmLatency,
-            llmCostUsd: llmCost,
-          });
-        }
-        
-        this.logUsageStats();
-        return llmIntent;
+      const llmEngine = new LlmDetectionEngine(this.bedrock, this.metricRegistry, this.conceptRegistry!);
+      const llmResult = await llmEngine.classify(query, contextTicker);
+      const resolvedIntent = await this.resolveFromLlmResult(llmResult, query, contextTicker);
+
+      // Cache the successful LLM result if confidence >= 0.8 (Req 4.1)
+      if (resolvedIntent.confidence >= 0.8 && this.fastPathCache) {
+        this.fastPathCache.store(query, resolvedIntent);
       }
 
-      // Tier 3: Generic fallback - PRESERVE regex-detected ticker
-      this.logger.log(`⚠️ LLM confidence low (${llmIntent.confidence.toFixed(2)}), using generic detection with regex ticker`);
-      this.llmUsageStats.genericFallback++;
-      const genericIntent = this.detectGenericWithRegexFallback(query, regexIntent);
-      
-      // Log to analytics
-      if (tenantId) {
-        await this.analytics.logDetection({
-          tenantId,
-          query,
-          detectedIntent: genericIntent,
-          detectionMethod: 'generic',
-          confidence: genericIntent.confidence,
-          success: false,
-          latencyMs: Date.now() - startTime,
-        });
+      // Set needsClarification for very low confidence (Req 12.2)
+      // Only trigger clarification when confidence is genuinely low AND no context ticker is available.
+      // A context ticker means the user is in a workspace — we know the company, so proceed with RAG.
+      if (resolvedIntent.confidence < 0.5 && !contextTicker) {
+        resolvedIntent.needsClarification = true;
+        if (!resolvedIntent.ambiguityReason) {
+          resolvedIntent.ambiguityReason = 'Detection confidence is low';
+        }
       }
-      
-      this.logUsageStats();
-      return genericIntent;
-      
+      // If context ticker is provided, never trigger clarification — the workspace context is sufficient
+      if (contextTicker && resolvedIntent.needsClarification) {
+        resolvedIntent.needsClarification = false;
+        resolvedIntent.ambiguityReason = undefined;
+        this.logger.log(`🔧 Overriding needsClarification=false because contextTicker="${contextTicker}" is provided`);
+      }
+
+      this.llmUsageStats.llmFallback++;
+      const llmLatency = Date.now() - startTime;
+      this.llmUsageStats.llmLatencyMs.push(llmLatency);
+      this.logger.log(`✅ LLM detection succeeded (confidence: ${resolvedIntent.confidence.toFixed(2)}, latency: ${llmLatency}ms)`);
+      await this.logDetection(resolvedIntent, 'llm', tenantId, startTime);
+      return resolvedIntent;
     } catch (error) {
-      this.logger.error(`LLM detection failed: ${error.message}`);
+      // Fallback: use regex result with degraded confidence (Req 12.1, 12.4)
       this.llmUsageStats.genericFallback++;
-      // CRITICAL FIX: Preserve regex-detected ticker when LLM fails
-      const genericIntent = this.detectGenericWithRegexFallback(query, regexIntent);
-      
-      // Log to analytics
-      if (tenantId) {
-        await this.analytics.logDetection({
-          tenantId,
-          query,
-          detectedIntent: genericIntent,
-          detectionMethod: 'generic',
-          confidence: genericIntent.confidence,
-          success: false,
-          errorMessage: error.message,
-          latencyMs: Date.now() - startTime,
-        });
-      }
-      
-      this.logUsageStats();
-      return genericIntent;
+      this.logger.error(`LLM detection failed: ${error.message}, using fallback`);
+      const fallback = this.buildFallbackIntent(query, fastPathResult);
+      await this.logDetection(fallback, 'fallback', tenantId, startTime, error.message);
+      return fallback;
     }
   }
 
   /**
-   * Detect intent using regex patterns (original implementation)
-   * 
-   * @param query The natural language query
-   * @param contextTicker Optional ticker from workspace context for disambiguation
+   * Build a fallback QueryIntent when LLM detection fails.
+   * Uses the regex fast-path result with degraded confidence.
+   * If regex confidence is below 0.5, returns a semantic fallback (Req 12.1).
    */
-  private async detectWithRegex(query: string, contextTicker?: string): Promise<QueryIntent> {
-    const normalizedQuery = query.toLowerCase();
+  private buildFallbackIntent(query: string, fastPathResult: QueryIntent): QueryIntent {
+    if (fastPathResult.confidence >= 0.5) {
+      const fallback: QueryIntent = {
+        ...fastPathResult,
+        confidence: Math.max(0, fastPathResult.confidence - 0.1),
+        originalQuery: query,
+      };
+      if (fallback.confidence < 0.5) {
+        fallback.needsClarification = true;
+        if (!fallback.ambiguityReason) {
+          fallback.ambiguityReason = 'LLM detection failed; using regex fallback';
+        }
+      }
+      return fallback;
+    }
 
-    // Extract components
-    const ticker = this.extractTicker(normalizedQuery, contextTicker);
-    const metrics = this.extractMetrics(normalizedQuery);
-    const period = this.extractPeriod(normalizedQuery);
-    const periodType = this.determinePeriodType(period);
-    const documentTypes = this.extractDocumentTypes(normalizedQuery);
-    const sectionTypes = this.extractSectionTypes(normalizedQuery);
-
-    // Identify target subsection (Phase 2 enhancement)
-    const subsectionName = this.identifyTargetSubsection(normalizedQuery, sectionTypes);
-
-    // Determine query type
-    const type = this.determineQueryType(
-      normalizedQuery,
-      metrics,
-      sectionTypes,
-    );
-
-    // Determine characteristics
-    const needsNarrative = this.needsNarrative(normalizedQuery, type);
-    const needsComparison = this.needsComparison(normalizedQuery);
-    const needsComputation = this.needsComputation(normalizedQuery, metrics);
-    const needsTrend = this.needsTrend(normalizedQuery);
-    const needsPeerComparison = this.needsPeerComparison(normalizedQuery);
-
-    const intent: QueryIntent = {
-      type,
-      ticker,
-      metrics: metrics.length > 0 ? metrics : undefined,
-      period,
-      periodType,
-      documentTypes: documentTypes.length > 0 ? documentTypes : undefined,
-      sectionTypes: sectionTypes.length > 0 ? sectionTypes : undefined,
-      subsectionName,
-      needsNarrative,
-      needsComparison,
-      needsComputation,
-      needsTrend,
-      needsPeerComparison,
-      confidence: this.calculateConfidence(ticker, metrics, period),
+    return {
+      type: 'semantic',
+      needsNarrative: true,
+      needsComparison: false,
+      needsComputation: false,
+      needsTrend: false,
+      needsClarification: true,
+      ambiguityReason: 'LLM detection failed and regex confidence is low',
+      confidence: Math.max(0.3, fastPathResult.confidence),
       originalQuery: query,
+      ticker: fastPathResult.ticker,
     };
+  }
 
-    this.logger.log(`Detected intent: ${JSON.stringify(intent, null, 2)}`);
-
-    return intent;
+  /**
+   * Log a detection event to IntentAnalyticsService.
+   * Non-throwing — logging failures don't break detection.
+   */
+  private async logDetection(
+    intent: QueryIntent,
+    method: 'regex_fast_path' | 'cache_hit' | 'llm' | 'fallback',
+    tenantId: string | undefined,
+    startTime: number,
+    errorMessage?: string,
+  ): Promise<void> {
+    if (!tenantId) return;
+    try {
+      const latencyMs = Date.now() - startTime;
+      const llmCostUsd = method === 'llm' ? this.calculateLLMCost(intent.originalQuery) : undefined;
+      await this.analytics.logDetection({
+        tenantId,
+        query: intent.originalQuery,
+        detectedIntent: intent,
+        detectionMethod: method as any,
+        confidence: intent.confidence,
+        success: !errorMessage,
+        errorMessage,
+        latencyMs,
+        llmCostUsd,
+      });
+    } catch (error) {
+      this.logger.warn(`Failed to log detection: ${error?.message}`);
+    }
   }
 
   /**
    * Extract ticker symbol from query
-   * 
+   *
    * @param query The normalized query string
    * @param contextTicker Optional ticker from workspace context for disambiguation
    */
   private extractTicker(query: string, contextTicker?: string): string | string[] | undefined {
-    // CRITICAL FIX: If we have a context ticker from workspace, use it directly
-    // This prevents false positives from single-letter tickers and ambiguous matches
-    // The workspace context (from deal page) is the source of truth
+    const queryTickers = this.extractTickersFromQuery(query);
+
     if (contextTicker) {
-      const contextTickerUpper = contextTicker.toUpperCase();
-      this.logger.log(`🎯 Using context ticker from workspace: ${contextTickerUpper}`);
-      return contextTickerUpper;
+      const ctUpper = contextTicker.toUpperCase();
+      const allTickers = new Set<string>([ctUpper, ...queryTickers]);
+      const arr = Array.from(allTickers);
+      this.logger.log(`🎯 Context ticker: ${ctUpper}, query tickers: [${queryTickers.join(', ')}], merged: [${arr.join(', ')}]`);
+      return arr.length === 1 ? arr[0] : arr;
     }
 
+    if (queryTickers.length === 0) {
+      return undefined;
+    }
+    if (queryTickers.length === 1) {
+      return queryTickers[0];
+    }
+    this.logger.log(`🔍 Multiple tickers detected: ${queryTickers.join(', ')}`);
+    return queryTickers;
+  }
+
+  /**
+   * Extract ticker symbols from query text using regex patterns.
+   * The hardcoded companyMap has been removed (Req 11.4, 13.1).
+   * Company name resolution is handled by CompanyTickerMapService (injected separately)
+   * and by the LLM layer for names it recognizes.
+   */
+  private extractTickersFromQuery(query: string): string[] {
     const foundTickers = new Set<string>();
 
-    // Common ticker patterns - ordered by specificity (longer tickers first to avoid false matches)
-    // Single-letter tickers (V, MA) are at the end to minimize false positives
+    // Ticker regex — matches known uppercase ticker symbols
     const tickerPatterns = [
       /\b(GOOGL|GOOG|AAPL|MSFT|AMZN|TSLA|META|NVDA|NFLX|INTC|ORCL|ADBE|PYPL|CSCO|SBUX|JPM|BAC|WFC|DIS|AMD|CRM|PFE|MRK|JNJ|UNH|CVS|WMT|TGT|NKE|MCD|KO|PEP|HD|LOW|RH|V|MA)\b/gi,
     ];
 
-    // Try specific tickers first
     const specificMatch = query.match(tickerPatterns[0]);
     if (specificMatch) {
       specificMatch.forEach(ticker => foundTickers.add(ticker.toUpperCase()));
     }
 
-    // Company name to ticker mapping (enhanced for comparison queries)
-    const companyMap: Record<string, string> = {
-      apple: 'AAPL',
-      'apple inc': 'AAPL',
-      microsoft: 'MSFT',
-      'microsoft corp': 'MSFT',
-      google: 'GOOGL',
-      alphabet: 'GOOGL',
-      amazon: 'AMZN',
-      'amazon.com': 'AMZN',
-      tesla: 'TSLA',
-      'tesla inc': 'TSLA',
-      meta: 'META',
-      facebook: 'META',
-      'meta platforms': 'META',
-      nvidia: 'NVDA',
-      'jp morgan': 'JPM',
-      jpmorgan: 'JPM',
-      'jpmorgan chase': 'JPM',
-      'restoration hardware': 'RH',
-      'rh inc': 'RH',
-    };
-
-    // Check for company names (case insensitive)
-    const lowerQuery = query.toLowerCase();
-    for (const [company, ticker] of Object.entries(companyMap)) {
-      if (lowerQuery.includes(company)) {
-        foundTickers.add(ticker);
-      }
-    }
-
-    // Convert to array
-    const tickers = Array.from(foundTickers);
-    
-    if (tickers.length === 0) {
-      return undefined;
-    } else if (tickers.length === 1) {
-      return tickers[0];
-    } else {
-      // Multiple tickers found - return array for comparison queries
-      this.logger.log(`🔍 Multiple tickers detected: ${tickers.join(', ')}`);
-      return tickers;
-    }
-  }
-
-  /**
-   * Extract financial metrics from query
-   */
-  private extractMetrics(query: string): string[] {
-    const metrics: string[] = [];
-
-    // Skip metric extraction if query is about accounting policies (not actual metrics)
-    const accountingPolicyPatterns = [
-      'revenue recognition',
-      'revenue policy',
-      'recognize revenue',
-      'accounting policy',
-      'accounting policies',
-    ];
-    
-    const isAccountingPolicyQuery = accountingPolicyPatterns.some(pattern => query.includes(pattern));
-
-    // Metric patterns (using capitalized names to match database)
-    const metricPatterns: Record<string, string[]> = {
-      Revenue: ['revenue', 'sales', 'top line', 'topline'],
-      Net_Income: ['net income', 'profit', 'earnings', 'bottom line'],
-      Gross_Profit: ['gross profit'],
-      Operating_Income: ['operating income', 'operating profit', 'ebit'],
-      Cost_of_Revenue: ['cost of revenue', 'cost of goods sold', 'cost of sales', 'cogs'],
-      Research_and_Development: ['research and development', 'r&d', 'rnd'],
-      Selling_General_Administrative: ['selling general administrative', 'sg&a', 'sga', 'selling general and administrative'],
-      Total_Assets: ['total assets', 'assets'],
-      Total_Liabilities: ['total liabilities', 'liabilities', 'debt'],
-      Total_Equity: ['total equity', 'equity', 'shareholders equity'],
-      Cash_and_Cash_Equivalents: ['cash', 'cash and cash equivalents', 'cash and equivalents', 'cash equivalents'],
-      Accounts_Payable: ['accounts payable', 'payables'],
-      Accounts_Receivable: ['accounts receivable', 'receivables'],
-      Inventory: ['inventory'],
-      gross_margin: ['gross margin'],
-      net_margin: ['net margin', 'profit margin'],
-      operating_margin: ['operating margin'],
-      roe: ['roe', 'return on equity'],
-      roa: ['roa', 'return on assets'],
-      // Cash flow metrics - CRITICAL for value investing
-      Free_Cash_Flow: ['free cash flow', 'fcf', 'unlevered free cash flow'],
-      Operating_Cash_Flow: ['operating cash flow', 'cash flow from operations', 'ocf', 'cfo'],
-      Investing_Cash_Flow: ['investing cash flow', 'cash flow from investing', 'cfi'],
-      Financing_Cash_Flow: ['financing cash flow', 'cash flow from financing', 'cff'],
-      Capital_Expenditure: ['capital expenditure', 'capex', 'capital expenditures'],
-      // Working capital metrics
-      Working_Capital: ['working capital', 'net working capital'],
-      Current_Assets: ['current assets'],
-      Current_Liabilities: ['current liabilities'],
-      // Valuation metrics (computed)
-      PE_Ratio: ['p/e', 'pe ratio', 'price to earnings', 'price earnings ratio'],
-      PB_Ratio: ['p/b', 'pb ratio', 'price to book', 'price book ratio'],
-      PS_Ratio: ['p/s', 'ps ratio', 'price to sales', 'price sales ratio'],
-      EV_EBITDA: ['ev/ebitda', 'ev to ebitda', 'enterprise value to ebitda'],
-      EV_Sales: ['ev/sales', 'ev to sales', 'enterprise value to sales'],
-      FCF_Yield: ['fcf yield', 'free cash flow yield'],
-      Dividend_Yield: ['dividend yield', 'div yield'],
-      // Efficiency metrics
-      Asset_Turnover: ['asset turnover'],
-      Inventory_Turnover: ['inventory turnover', 'inventory turns'],
-      Receivables_Turnover: ['receivables turnover', 'ar turnover'],
-      Days_Sales_Outstanding: ['days sales outstanding', 'dso'],
-      Days_Inventory_Outstanding: ['days inventory outstanding', 'dio'],
-      Days_Payable_Outstanding: ['days payable outstanding', 'dpo'],
-      Cash_Conversion_Cycle: ['cash conversion cycle', 'ccc'],
-    };
-
-    for (const [metric, patterns] of Object.entries(metricPatterns)) {
-      for (const pattern of patterns) {
-        if (query.includes(pattern)) {
-          // Skip "revenue" metric if this is an accounting policy query
-          if (metric === 'Revenue' && isAccountingPolicyQuery) {
-            continue;
-          }
-          metrics.push(metric);
-          break;
-        }
-      }
-    }
-
-    const uniqueMetrics = [...new Set(metrics)];
-    
-    // CRITICAL DEBUG: Log what metrics were detected
-    if (uniqueMetrics.length > 0) {
-      this.logger.log(`🔍 INTENT DETECTOR: Extracted metrics from query "${query}": ${JSON.stringify(uniqueMetrics)}`);
-    }
-
-    return uniqueMetrics;
+    return Array.from(foundTickers);
   }
 
   /**
    * Extract time period from query
    */
-  private extractPeriod(query: string): string | undefined {
-    // Latest
-    if (query.match(/\b(latest|most recent|current)\b/i)) {
-      return 'latest';
-    }
+  private extractPeriod(query: string): PeriodExtractionResult {
+    const currentYear = new Date().getFullYear();
 
-    // Fiscal year: FY2024, fiscal year 2024, 2024
+    // Check specific fiscal year FIRST — per Req 4.5, explicit FY takes precedence over multi-year phrases
     const fyMatch = query.match(/\b(?:fy|fiscal year)\s*(\d{4})\b/i);
     if (fyMatch) {
-      return `FY${fyMatch[1]}`;
+      return { period: `FY${fyMatch[1]}` };
+    }
+
+    // "past N years", "last N years", "over the past N years", "over the last N years"
+    const multiYearMatch = query.match(/\b(?:past|last|over the (?:past|last))\s+(\d+)\s+years?\b/i);
+    if (multiYearMatch) {
+      const n = Math.min(parseInt(multiYearMatch[1]), 30);
+      return {
+        periodType: 'range',
+        periodStart: `FY${currentYear - n}`,
+        periodEnd: `FY${currentYear}`,
+      };
+    }
+
+    // "N-year" or "N year" (e.g., "5-year trend")
+    const nYearMatch = query.match(/\b(\d+)[\s-]year\b/i);
+    if (nYearMatch) {
+      const n = Math.min(parseInt(nYearMatch[1]), 30);
+      return {
+        periodType: 'range',
+        periodStart: `FY${currentYear - n}`,
+        periodEnd: `FY${currentYear}`,
+      };
+    }
+
+    // "decade" — "past decade", "last decade", "over the past decade"
+    if (query.match(/\b(?:past|last|over the (?:past|last))\s+decade\b/i)) {
+      return {
+        periodType: 'range',
+        periodStart: `FY${currentYear - 10}`,
+        periodEnd: `FY${currentYear}`,
+      };
+    }
+
+    // "year over year" / "yoy" → at least 2 years
+    if (query.match(/\b(?:year over year|yoy)\b/i)) {
+      return {
+        periodType: 'range',
+        periodStart: `FY${currentYear - 2}`,
+        periodEnd: `FY${currentYear}`,
+      };
+    }
+
+    // Latest
+    if (query.match(/\b(latest|most recent|current)\b/i)) {
+      return { period: 'latest' };
     }
 
     // Just year: 2024
     const yearMatch = query.match(/\b(20\d{2})\b/);
     if (yearMatch) {
-      return `FY${yearMatch[1]}`;
+      return { period: `FY${yearMatch[1]}` };
     }
 
     // Quarter: Q4 2024, Q4-2024
     const quarterMatch = query.match(/\bq([1-4])[\s-]*(20\d{2})\b/i);
     if (quarterMatch) {
-      return `Q${quarterMatch[1]}-${quarterMatch[2]}`;
+      return { period: `Q${quarterMatch[1]}-${quarterMatch[2]}` };
     }
 
-    return undefined;
+    return {};
   }
 
   /**
@@ -462,596 +336,12 @@ export class IntentDetectorService {
   }
 
   /**
-   * Extract document types from query
-   */
-  private extractDocumentTypes(query: string): any[] {
-    const types: any[] = [];
-
-    if (query.match(/\b(10-k|annual report|annual filing)\b/i)) {
-      types.push('10-K');
-    }
-    if (query.match(/\b(10-q|quarterly report|quarterly filing)\b/i)) {
-      types.push('10-Q');
-    }
-    if (query.match(/\b(8-k|current report)\b/i)) {
-      types.push('8-K');
-    }
-    if (query.match(/\b(news|article|press)\b/i)) {
-      types.push('news');
-    }
-    if (query.match(/\b(earnings call|transcript|conference call)\b/i)) {
-      types.push('earnings_transcript');
-    }
-
-    // Default to SEC filings if metrics mentioned
-    if (types.length === 0 && this.extractMetrics(query).length > 0) {
-      types.push('10-K', '10-Q');
-    }
-
-    return types;
-  }
-
-  /**
-   * Extract section types from query
-   * Maps user-friendly terms to actual SEC filing section identifiers
-   * 
-   * IMPORTANT: Some topics like "revenue recognition" appear in BOTH:
-   * - Item 7 (MD&A) under "Critical Accounting Policies" 
-   * - Item 8 (Financial Statements) in the Notes
-   * We include both sections to ensure comprehensive retrieval.
-   */
-  private extractSectionTypes(query: string): any[] {
-    const sections: any[] = [];
-
-    // MD&A is Item 7 in 10-K
-    if (
-      query.match(
-        /\b(md&a|management discussion|management's discussion)\b/i,
-      )
-    ) {
-      sections.push('item_7');
-    }
-    // Risk factors is Item 1A in 10-K
-    if (query.match(/\b(risk|risks|risk factors)\b/i)) {
-      sections.push('item_1a');
-    }
-    // Business description is Item 1 in 10-K
-    if (query.match(/\b(business|business model|strategy|what does.*do|describe.*company|products|services|competitor|competitors|competition)\b/i)) {
-      sections.push('item_1');
-    }
-    // Financial statements is Item 8 in 10-K
-    if (query.match(/\b(notes|footnotes|financial statements|lease|leases|stock-based compensation|income tax|fair value)\b/i)) {
-      sections.push('item_8');
-    }
-    // Properties is Item 2 in 10-K
-    if (query.match(/\b(properties|facilities|locations)\b/i)) {
-      sections.push('item_2');
-    }
-    // Legal proceedings is Item 3 in 10-K
-    if (query.match(/\b(legal|litigation|lawsuit|proceedings)\b/i)) {
-      sections.push('item_3');
-    }
-    
-    // CRITICAL FIX: Accounting policy queries should search BOTH Item 7 AND Item 8
-    // Revenue recognition, accounting policies, etc. are discussed in:
-    // - Item 7 (MD&A) "Critical Accounting Policies" section
-    // - Item 8 (Financial Statements) Notes to Financial Statements
-    if (query.match(/\b(revenue recognition|revenue policy|recognize revenue|accounting policy|accounting policies|critical accounting)\b/i)) {
-      // Add both sections if not already present
-      if (!sections.includes('item_7')) {
-        sections.push('item_7');
-      }
-      if (!sections.includes('item_8')) {
-        sections.push('item_8');
-      }
-    }
-
-    return sections;
-  }
-
-  /**
-   * Determine query type
-   */
-  private determineQueryType(
-    query: string,
-    metrics: string[],
-    sections: any[],
-  ): QueryType {
-    const hasMetrics = metrics.length > 0;
-    const hasNarrativeKeywords = this.hasNarrativeKeywords(query);
-    const hasSections = sections.length > 0;
-
-    // Structured: Only asking for metrics
-    if (hasMetrics && !hasNarrativeKeywords && !hasSections) {
-      return 'structured';
-    }
-
-    // Semantic: Only asking for narrative/explanation
-    if (!hasMetrics && (hasNarrativeKeywords || hasSections)) {
-      return 'semantic';
-    }
-
-    // Hybrid: Asking for both metrics and explanation
-    if (hasMetrics && (hasNarrativeKeywords || hasSections)) {
-      return 'hybrid';
-    }
-
-    // Default to semantic for open-ended questions
-    return 'semantic';
-  }
-
-  /**
-   * Check if query needs narrative explanation
-   */
-  private needsNarrative(query: string, type: QueryType): boolean {
-    if (type === 'semantic' || type === 'hybrid') return true;
-
-    const narrativeKeywords = [
-      'why',
-      'how',
-      'explain',
-      'describe',
-      'what caused',
-      'reason',
-      'impact',
-      'affect',
-      'strategy',
-      'outlook',
-    ];
-
-    return narrativeKeywords.some((keyword) => query.includes(keyword));
-  }
-
-  /**
-   * Check if query has narrative keywords
-   */
-  private hasNarrativeKeywords(query: string): boolean {
-    const keywords = [
-      'why',
-      'how',
-      'explain',
-      'describe',
-      'discuss',
-      'analyze',
-      'what caused',
-      'reason',
-      'impact',
-      'affect',
-      'strategy',
-      'outlook',
-      'trend',
-      'growth',
-      'decline',
-      'improve',
-      'worsen',
-    ];
-
-    return keywords.some((keyword) => query.includes(keyword));
-  }
-
-  /**
-   * Check if query needs comparison
-   */
-  private needsComparison(query: string): boolean {
-    const comparisonKeywords = [
-      'compare',
-      'versus',
-      'vs',
-      'difference',
-      'better',
-      'worse',
-      'higher',
-      'lower',
-      'more than',
-      'less than',
-    ];
-
-    return comparisonKeywords.some((keyword) => query.includes(keyword));
-  }
-
-  /**
-   * Check if query needs peer comparison
-   * Detects queries asking about peers, competitors, or peer group comparisons
-   * 
-   * @param query The normalized query string
-   * @returns true if the query is asking about peer comparison
-   */
-  private needsPeerComparison(query: string): boolean {
-    const peerKeywords = [
-      'peers',
-      'peer group',
-      'peer companies',
-      'competitors',
-      'competitor',
-      'competition',
-      'comparable',
-      'comparables',
-      'comps',
-      'industry peers',
-      'similar companies',
-      'compare to peers',
-      'compare with peers',
-      'vs peers',
-      'versus peers',
-      'against peers',
-      'relative to peers',
-      'how does.*compare',
-      'benchmark',
-      'benchmarking',
-    ];
-
-    const lowerQuery = query.toLowerCase();
-    
-    // Check for exact keyword matches
-    const hasKeyword = peerKeywords.some(kw => {
-      // Handle regex patterns
-      if (kw.includes('.*')) {
-        const regex = new RegExp(kw, 'i');
-        return regex.test(lowerQuery);
-      }
-      return lowerQuery.includes(kw);
-    });
-
-    if (hasKeyword) {
-      this.logger.log(`🔍 Peer comparison detected in query: "${query}"`);
-    }
-
-    return hasKeyword;
-  }
-
-  /**
-   * Check if query needs computation
-   */
-  private needsComputation(query: string, metrics: string[]): boolean {
-    // Check for computed metrics
-    const computedMetrics = [
-      'margin',
-      'ratio',
-      'roe',
-      'roa',
-      'growth',
-      'change',
-      'increase',
-      'decrease',
-    ];
-
-    if (computedMetrics.some((m) => query.includes(m))) {
-      return true;
-    }
-
-    // Check if metrics include computed ones
-    const computedMetricNames = [
-      'gross_margin',
-      'net_margin',
-      'operating_margin',
-      'roe',
-      'roa',
-    ];
-
-    return metrics.some((m) => computedMetricNames.includes(m));
-  }
-
-  /**
-   * Check if query needs trend analysis
-   */
-  private needsTrend(query: string): boolean {
-    const trendKeywords = [
-      'trend',
-      'over time',
-      'historical',
-      'growth',
-      'change',
-      'evolution',
-      'trajectory',
-    ];
-
-    return trendKeywords.some((keyword) => query.includes(keyword));
-  }
-
-  /**
-   * Identify target subsection within a section (Phase 2 enhancement)
-   * Returns subsection name if keywords match, undefined otherwise
-   */
-  private identifyTargetSubsection(query: string, sectionTypes: any[]): string | undefined {
-    if (!sectionTypes || sectionTypes.length === 0) {
-      return undefined;
-    }
-
-    // Process each section type and find the most specific subsection
-    for (const sectionType of sectionTypes) {
-      const subsection = this.identifySubsectionForSection(query, sectionType);
-      if (subsection) {
-        return subsection;
-      }
-    }
-
-    return undefined;
-  }
-
-  /**
-   * Identify subsection for a specific section type
-   */
-  private identifySubsectionForSection(query: string, sectionType: string): string | undefined {
-    switch (sectionType) {
-      case 'item_1':
-        return this.identifyItem1Subsection(query);
-      case 'item_7':
-        return this.identifyItem7Subsection(query);
-      case 'item_8':
-        return this.identifyItem8Subsection(query);
-      case 'item_1a':
-        return this.identifyItem1ASubsection(query);
-      default:
-        return undefined;
-    }
-  }
-
-  /**
-   * Identify Item 1 (Business) subsections
-   */
-  private identifyItem1Subsection(query: string): string | undefined {
-    // Subsection patterns for Item 1 (Business)
-    const subsectionPatterns: Record<string, string[]> = {
-      'Competition': ['competitor', 'competitors', 'competitive landscape', 'competition', 'compete', 'competing'],
-      'Products': ['product', 'products', 'product line', 'offerings', 'services'],
-      'Customers': ['customer', 'customers', 'customer base', 'clientele'],
-      'Markets': ['market', 'markets', 'market segment', 'market segments', 'geographic markets'],
-      'Operations': ['operation', 'operations', 'business operations', 'operating model'],
-      'Strategy': ['strategy', 'strategies', 'business strategy', 'strategic', 'strategic plan'],
-      'Intellectual Property': ['intellectual property', 'patent', 'patents', 'trademark', 'trademarks', 'ip'],
-      'Human Capital': ['employee', 'employees', 'human capital', 'workforce', 'talent', 'personnel'],
-    };
-
-    // Check patterns in order of specificity (most specific first)
-    for (const [subsection, patterns] of Object.entries(subsectionPatterns)) {
-      for (const pattern of patterns) {
-        if (query.includes(pattern)) {
-          this.logger.log(`🎯 Identified Item 1 subsection: ${subsection} (matched: "${pattern}")`);
-          return subsection;
-        }
-      }
-    }
-
-    return undefined;
-  }
-
-  /**
-   * Identify Item 7 (MD&A) subsections
-   */
-  private identifyItem7Subsection(query: string): string | undefined {
-    // Subsection patterns for Item 7 (MD&A)
-    const subsectionPatterns: Record<string, string[]> = {
-      'Results of Operations': ['results of operations', 'operating results', 'performance', 'growth driver', 'growth drivers'],
-      'Liquidity and Capital Resources': ['liquidity', 'capital resources', 'cash flow', 'financing', 'capital structure'],
-      'Critical Accounting Policies': ['critical accounting', 'accounting policies', 'accounting estimates', 'estimates', 'revenue recognition', 'revenue policy', 'recognize revenue'],
-      'Market Risk': ['market risk', 'interest rate risk', 'currency risk', 'foreign exchange risk'],
-      'Contractual Obligations': ['contractual obligations', 'commitments', 'obligations'],
-    };
-
-    for (const [subsection, patterns] of Object.entries(subsectionPatterns)) {
-      for (const pattern of patterns) {
-        if (query.includes(pattern)) {
-          this.logger.log(`🎯 Identified Item 7 subsection: ${subsection} (matched: "${pattern}")`);
-          return subsection;
-        }
-      }
-    }
-
-    return undefined;
-  }
-
-  /**
-   * Identify Item 8 (Financial Statements) subsections
-   */
-  private identifyItem8Subsection(query: string): string | undefined {
-    // Check for specific note numbers first (most specific)
-    const noteMatch = query.match(/\bnote\s+(\d+)\b/i);
-    if (noteMatch) {
-      const noteNumber = noteMatch[1];
-      this.logger.log(`🎯 Identified Item 8 subsection: Note ${noteNumber}`);
-      return `Note ${noteNumber}`;
-    }
-
-    // Subsection patterns for Item 8 (Financial Statements)
-    const subsectionPatterns: Record<string, string[]> = {
-      'Revenue Recognition': ['revenue recognition', 'revenue policy', 'recognize revenue'],
-      'Leases': ['lease', 'leases', 'lease accounting', 'leasing'],
-      'Stock-Based Compensation': ['stock-based compensation', 'equity compensation', 'stock compensation', 'share-based'],
-      'Income Taxes': ['income tax', 'income taxes', 'tax provision', 'taxation'],
-      'Debt': ['debt', 'borrowing', 'borrowings', 'credit facilities', 'credit facility'],
-      'Fair Value': ['fair value', 'fair value measurement', 'fair value measurements'],
-    };
-
-    for (const [subsection, patterns] of Object.entries(subsectionPatterns)) {
-      for (const pattern of patterns) {
-        if (query.includes(pattern)) {
-          this.logger.log(`🎯 Identified Item 8 subsection: ${subsection} (matched: "${pattern}")`);
-          return subsection;
-        }
-      }
-    }
-
-    return undefined;
-  }
-
-  /**
-   * Identify Item 1A (Risk Factors) subsections
-   */
-  private identifyItem1ASubsection(query: string): string | undefined {
-    // Subsection patterns for Item 1A (Risk Factors)
-    const subsectionPatterns: Record<string, string[]> = {
-      'Operational Risks': ['operational risk', 'operational risks', 'operations risk'],
-      'Financial Risks': ['financial risk', 'financial risks', 'credit risk'],
-      'Market Risks': ['market risk', 'market risks', 'economic risk'],
-      'Regulatory Risks': ['regulatory risk', 'regulatory risks', 'compliance risk', 'compliance'],
-      'Technology Risks': ['technology risk', 'technology risks', 'cybersecurity', 'cyber security', 'data security'],
-    };
-
-    for (const [subsection, patterns] of Object.entries(subsectionPatterns)) {
-      for (const pattern of patterns) {
-        if (query.includes(pattern)) {
-          this.logger.log(`🎯 Identified Item 1A subsection: ${subsection} (matched: "${pattern}")`);
-          return subsection;
-        }
-      }
-    }
-
-    return undefined;
-  }
-
-  /**
-   * Calculate confidence score
-   */
-  private calculateConfidence(
-    ticker?: string | string[],
-    metrics?: string[],
-    period?: string,
-  ): number {
-    let confidence = 0.5; // Base confidence
-
-    if (ticker) confidence += 0.2;
-    if (metrics && metrics.length > 0) confidence += 0.2;
-    if (period) confidence += 0.1;
-
-    return Math.min(confidence, 1.0);
-  }
-
-  /**
-   * Detect intent using LLM (Claude 3.5 Haiku)
-   */
-  private async detectWithLLM(query: string): Promise<QueryIntent> {
-    const prompt = `Extract structured intent from this financial query:
-Query: "${query}"
-
-Return ONLY valid JSON with these fields:
-{
-  "ticker": "string or array of ticker symbols (e.g., 'AAPL' or ['AAPL', 'MSFT'])",
-  "metrics": ["array of metric names like 'Revenue', 'Net_Income'"],
-  "sectionTypes": ["array of section types: 'item_1', 'item_7', 'item_8', 'item_1a'"],
-  "subsectionName": "specific subsection if mentioned (e.g., 'Competition', 'Revenue Recognition')",
-  "period": "time period like 'FY2024', 'Q4-2024', or 'latest'",
-  "confidence": 0.0 to 1.0
-}
-
-Examples:
-"Who are NVDA's competitors?" → {"ticker":"NVDA","sectionTypes":["item_1"],"subsectionName":"Competition","confidence":0.9}
-"What is AAPL's revenue recognition policy?" → {"ticker":"AAPL","sectionTypes":["item_8"],"subsectionName":"Revenue Recognition","confidence":0.85}
-"Compare MSFT and GOOGL revenue in 2024" → {"ticker":["MSFT","GOOGL"],"metrics":["Revenue"],"period":"FY2024","confidence":0.9}
-
-Return ONLY the JSON object, no other text.`;
-
-    try {
-      const response = await this.bedrock.invokeClaude({
-        prompt,
-        modelId: 'us.anthropic.claude-3-5-haiku-20241022-v1:0', // Claude 3.5 Haiku Inference Profile
-        max_tokens: 500,
-      });
-
-      // Parse LLM response
-      const parsed = this.parseLLMResponse(response, query);
-      return parsed;
-    } catch (error) {
-      this.logger.error(`LLM invocation failed: ${error.message}`);
-      throw error;
-    }
-  }
-
-  /**
-   * Parse LLM JSON response into QueryIntent
-   */
-  private parseLLMResponse(response: string, originalQuery: string): QueryIntent {
-    try {
-      // Extract JSON from response (LLM might add extra text)
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error('No JSON found in LLM response');
-      }
-
-      const parsed = JSON.parse(jsonMatch[0]);
-
-      // Build QueryIntent from parsed data
-      const intent: QueryIntent = {
-        type: this.determineQueryTypeFromLLM(parsed),
-        ticker: parsed.ticker,
-        metrics: parsed.metrics && parsed.metrics.length > 0 ? parsed.metrics : undefined,
-        period: parsed.period,
-        periodType: this.determinePeriodType(parsed.period),
-        documentTypes: this.extractDocumentTypes(originalQuery),
-        sectionTypes: parsed.sectionTypes && parsed.sectionTypes.length > 0 ? parsed.sectionTypes : undefined,
-        subsectionName: parsed.subsectionName,
-        needsNarrative: this.needsNarrative(originalQuery, this.determineQueryTypeFromLLM(parsed)),
-        needsComparison: this.needsComparison(originalQuery),
-        needsComputation: this.needsComputation(originalQuery, parsed.metrics || []),
-        needsTrend: this.needsTrend(originalQuery),
-        needsPeerComparison: this.needsPeerComparison(originalQuery), // Add peer comparison detection
-        confidence: parsed.confidence || 0.8,
-        originalQuery,
-      };
-
-      return intent;
-    } catch (error) {
-      this.logger.error(`Failed to parse LLM response: ${error.message}`);
-      // Return low confidence intent
-      return {
-        type: 'semantic',
-        confidence: 0.3,
-        originalQuery,
-        needsNarrative: true,
-        needsComparison: false,
-        needsComputation: false,
-        needsTrend: false,
-        needsPeerComparison: this.needsPeerComparison(originalQuery), // Still check for peer comparison
-      };
-    }
-  }
-
-  /**
-   * Determine query type from LLM parsed data
-   */
-  private determineQueryTypeFromLLM(parsed: any): QueryType {
-    const hasMetrics = parsed.metrics && parsed.metrics.length > 0;
-    const hasSections = parsed.sectionTypes && parsed.sectionTypes.length > 0;
-
-    if (hasMetrics && !hasSections) return 'structured';
-    if (!hasMetrics && hasSections) return 'semantic';
-    if (hasMetrics && hasSections) return 'hybrid';
-    return 'semantic';
-  }
-
-  /**
-   * Generic fallback detection that preserves regex-detected values
-   * CRITICAL: This ensures ticker is not lost when LLM fallback fails
-   */
-  private detectGenericWithRegexFallback(query: string, regexIntent: QueryIntent): QueryIntent {
-    this.logger.log(`🔧 Using generic fallback with regex-preserved ticker: ${regexIntent.ticker}`);
-    
-    return {
-      type: regexIntent.type || 'semantic',
-      ticker: regexIntent.ticker, // CRITICAL: Preserve the regex-detected ticker
-      metrics: regexIntent.metrics,
-      period: regexIntent.period,
-      periodType: regexIntent.periodType,
-      documentTypes: regexIntent.documentTypes,
-      sectionTypes: regexIntent.sectionTypes,
-      subsectionName: regexIntent.subsectionName,
-      confidence: 0.5, // Slightly higher than pure generic since we have regex data
-      originalQuery: query,
-      needsNarrative: regexIntent.needsNarrative,
-      needsComparison: regexIntent.needsComparison,
-      needsComputation: regexIntent.needsComputation,
-      needsTrend: regexIntent.needsTrend,
-      needsPeerComparison: regexIntent.needsPeerComparison, // Preserve peer comparison flag
-    };
-  }
-
-  /**
-   * Calculate LLM cost for a query
+   * Calculate LLM cost for a query.
    * Claude 3.5 Haiku: $0.25 per 1M input tokens, $1.25 per 1M output tokens
    */
   private calculateLLMCost(query: string): number {
-    // Rough estimation: ~4 chars per token
-    const inputTokens = (query.length + 500) / 4; // query + prompt
-    const outputTokens = 150; // typical JSON response
+    const inputTokens = (query.length + 500) / 4;
+    const outputTokens = 150;
 
     const inputCost = (inputTokens / 1_000_000) * 0.25;
     const outputCost = (outputTokens / 1_000_000) * 1.25;
@@ -1060,85 +350,289 @@ Return ONLY the JSON object, no other text.`;
   }
 
   /**
-   * Check if a query intent is ambiguous
-   * 
-   * Ambiguous queries have:
-   * - Ticker but no metrics, sections, or subsections
-   * - Generic/vague words (about, information, show me, tell me, etc.)
-   * - Confidence exactly 0.7 (ticker-only)
-   * 
-   * These queries should receive clarification prompts instead of generic results.
-   * 
-   * @param intent The query intent to check
-   * @returns true if the query is ambiguous and needs clarification
+   * Extract simple metric candidate phrases from a query for fast-path resolution.
+   * Generates 1-3 word phrases by stripping stopwords, tickers, and periods.
+   * Simpler than the deleted extractMetricCandidates() — designed for fast-path use only.
    */
-  private isAmbiguous(intent: QueryIntent): boolean {
-    // Ambiguous words that indicate vague queries
-    const ambiguousWords = [
-      'about',
-      'information',
-      'data',
-      'tell me',
-      'show me',
-      'details',
-      'overview',
-      'summary',
-      'update',
-      'status',
-      'give me',
-      'what is',
-      'what are',
-      'info on',
-      'details about',
-      'summary of',
-    ];
-    
-    const query = intent.originalQuery.toLowerCase();
-    const hasAmbiguousWords = ambiguousWords.some(word => query.includes(word));
-    
-    // Check if query has no specific metrics, sections, or subsections
-    const hasNoSpecifics = 
-      !intent.metrics && 
-      !intent.sectionTypes && 
-      !intent.subsectionName;
-    
-    // Check if this is a ticker-only query (confidence exactly 0.7)
-    const isTickerOnly = intent.confidence === 0.7;
-    
-    // Query is ambiguous if it has all three conditions:
-    // 1. Contains ambiguous words
-    // 2. Has no specific metrics/sections
-    // 3. Is ticker-only (confidence 0.7)
-    const isAmbiguous = hasAmbiguousWords && hasNoSpecifics && isTickerOnly;
-    
-    if (isAmbiguous) {
-      this.logger.log(`⚠️ Ambiguous query detected: "${intent.originalQuery}"`);
-      this.logger.log(`  - Has ambiguous words: ${hasAmbiguousWords}`);
-      this.logger.log(`  - Has no specifics: ${hasNoSpecifics}`);
-      this.logger.log(`  - Is ticker-only: ${isTickerOnly}`);
+  private extractMetricCandidatesSimple(query: string): string[] {
+    const stopwords = new Set([
+      'what', 'is', 'the', 'for', 'in', 'of', 'and', 'a', 'an', 'to', 'from',
+      'how', 'much', 'was', 'were', 'are', 'has', 'had', 'have', 'show', 'me',
+      'tell', 'give', 'get', 'find', 'compare', 'vs', 'versus', 'between',
+      'their', 'its', 'this', 'that', 'with', 'by', 'on', 'at', 'do', 'does',
+      'did', 'can', 'could', 'would', 'should', 'will', 'be', 'been', 'being',
+      'about', 'over', 'last', 'past', 'recent', 'latest', 'current',
+    ]);
+
+    const cleaned = query
+      .replace(/\b[a-z]{1,5}\b/g, (match) => {
+        if (/^[a-z]{1,5}$/.test(match) && match === match.toUpperCase?.()) return '';
+        return match;
+      })
+      .replace(/\b[A-Z]{1,5}\b/g, '')
+      .replace(/\b(20\d{2}|19\d{2})\b/g, '')
+      .replace(/\b(q[1-4]|fy\d{2,4}|annual|quarterly|ttm)\b/gi, '')
+      .toLowerCase()
+      .trim();
+
+    const words = cleaned.split(/\s+/).filter(w => w.length > 1 && !stopwords.has(w));
+    if (words.length === 0) return [];
+
+    const phrases: string[] = [];
+
+    for (let n = Math.min(3, words.length); n >= 1; n--) {
+      for (let i = 0; i <= words.length - n; i++) {
+        phrases.push(words.slice(i, i + n).join(' '));
+      }
     }
-    
-    return isAmbiguous;
+
+    return [...new Set(phrases)].slice(0, 8);
   }
 
   /**
-   * Log usage statistics
+   * Build a low-confidence QueryIntent for cases where the fast-path cannot
+   * fully resolve the query (missing ticker, metric, or period).
+   * Used to signal that the query should be delegated to the cache or LLM layers.
    */
-  private logUsageStats(): void {
-    const total = this.llmUsageStats.totalQueries;
-    if (total % 100 === 0) { // Log every 100 queries
-      const regexRate = (this.llmUsageStats.regexSuccess / total) * 100;
-      const llmRate = (this.llmUsageStats.llmFallback / total) * 100;
-      const genericRate = (this.llmUsageStats.genericFallback / total) * 100;
-      const avgLlmLatency = this.llmUsageStats.llmLatencyMs.length > 0
-        ? this.llmUsageStats.llmLatencyMs.reduce((a, b) => a + b, 0) / this.llmUsageStats.llmLatencyMs.length
-        : 0;
+  private buildLowConfidenceIntent(
+    query: string,
+    ticker: string | string[] | undefined,
+    metrics: string[],
+    periodResult: PeriodExtractionResult,
+    confidence: number,
+  ): QueryIntent {
+    const hasMetrics = metrics.length > 0;
+    const type: QueryType = hasMetrics ? 'structured' : 'semantic';
 
-      this.logger.log(`📊 Intent Detection Stats (${total} queries):`);
-      this.logger.log(`  - Regex success: ${regexRate.toFixed(1)}%`);
-      this.logger.log(`  - LLM fallback: ${llmRate.toFixed(1)}%`);
-      this.logger.log(`  - Generic fallback: ${genericRate.toFixed(1)}%`);
-      this.logger.log(`  - Avg LLM latency: ${avgLlmLatency.toFixed(0)}ms`);
+    return {
+      type,
+      ticker,
+      metrics: hasMetrics ? metrics : undefined,
+      period: periodResult.period,
+      periodType: periodResult.periodType || this.determinePeriodType(periodResult.period),
+      periodStart: periodResult.periodStart,
+      periodEnd: periodResult.periodEnd,
+      needsNarrative: !hasMetrics,
+      needsComparison: Array.isArray(ticker) && ticker.length > 1,
+      needsComputation: false,
+      needsTrend: false,
+      needsPeerComparison: false,
+      confidence: Math.max(0, Math.min(1, confidence)),
+      originalQuery: query,
+    };
+  }
+
+  /**
+   * Regex Fast-Path: Deterministic detection for simple queries.
+   * Returns high confidence (>= 0.9) only when ALL three criteria are met:
+   *   1. Exactly one ticker detected
+   *   2. At least one metric resolved with "exact" confidence from MetricRegistryService
+   *   3. An explicit period extracted
+   *
+   * Multi-ticker queries immediately return confidence 0.5 to delegate to LLM.
+   * Partial matches return proportional low confidence to trigger cache/LLM layers.
+   *
+   * Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 6.6
+   */
+  private regexFastPath(query: string, contextTicker?: string): QueryIntent {
+    const normalizedQuery = query.toLowerCase();
+
+    const ticker = this.extractTicker(normalizedQuery, contextTicker);
+    const periodResult = this.extractPeriod(normalizedQuery);
+
+    const metricCandidates = this.extractMetricCandidatesSimple(normalizedQuery);
+    const exactMetrics: string[] = [];
+    let hasComputedMetric = false;
+
+    for (const candidate of metricCandidates) {
+      try {
+        const resolution = this.metricRegistry.resolve(candidate);
+        if (resolution && resolution.confidence === 'exact') {
+          const metricKey = resolution.db_column || resolution.canonical_id;
+          if (!exactMetrics.includes(metricKey)) {
+            exactMetrics.push(metricKey);
+          }
+          if (resolution.type === 'computed') {
+            hasComputedMetric = true;
+          }
+        }
+      } catch {
+        // MetricRegistryService error — skip this candidate
+      }
+    }
+
+    const isSingleTicker = typeof ticker === 'string';
+    const hasExactMetric = exactMetrics.length > 0;
+    const hasPeriod = !!periodResult.period;
+    const isMultiTicker = Array.isArray(ticker) && ticker.length > 1;
+
+    // Multi-ticker → always delegate to LLM (Req 2.7)
+    if (isMultiTicker) {
+      return this.buildLowConfidenceIntent(query, ticker, exactMetrics, periodResult, 0.5);
+    }
+
+    // Full fast-path: single ticker + exact metric + period (Req 2.1)
+    if (isSingleTicker && hasExactMetric && hasPeriod) {
+      const type: QueryType = exactMetrics.length > 0 ? 'structured' : 'semantic';
+
+      return {
+        type,
+        ticker,
+        metrics: exactMetrics,
+        period: periodResult.period,
+        periodType: periodResult.periodType || this.determinePeriodType(periodResult.period),
+        periodStart: periodResult.periodStart,
+        periodEnd: periodResult.periodEnd,
+        needsNarrative: false,
+        needsComparison: false,
+        needsComputation: hasComputedMetric,
+        needsTrend: false,
+        needsPeerComparison: false,
+        confidence: 0.95,
+        originalQuery: query,
+      };
+    }
+
+    // Partial match — return low confidence to trigger LLM (Req 2.5)
+    const confidence = (isSingleTicker ? 0.3 : 0) + (hasExactMetric ? 0.3 : 0) + (hasPeriod ? 0.2 : 0);
+    return this.buildLowConfidenceIntent(query, ticker, exactMetrics, periodResult, confidence);
+  }
+
+  /**
+   * Post-LLM resolution pipeline.
+   *
+   * Takes the raw LLM classification result and resolves entities through
+   * the existing registries:
+   * - Metrics → MetricRegistryService.resolve()
+   * - Concepts → ConceptRegistryService.matchConcept() + getMetricBundle()
+   * - Periods → extractPeriod() as fallback
+   * - Tickers → merge with contextTicker
+   *
+   * Requirements: 3.1, 3.2, 3.3, 3.4, 5.2, 5.3, 5.4, 5.5
+   */
+  async resolveFromLlmResult(
+    llmResult: LlmClassificationResult,
+    query: string,
+    contextTicker?: string,
+  ): Promise<QueryIntent> {
+    // 1. Resolve tickers (merge with contextTicker if present)
+    let tickers = llmResult.tickers;
+    if (contextTicker) {
+      const ctUpper = contextTicker.toUpperCase();
+      tickers = [...new Set([ctUpper, ...tickers])];
+    }
+
+    // 2. Resolve metrics through MetricRegistryService
+    const resolvedMetrics: string[] = [];
+    let needsComputation = llmResult.needsComputation;
+    for (const phrase of llmResult.rawMetricPhrases) {
+      try {
+        const resolution = this.metricRegistry.resolve(phrase);
+        if (resolution && resolution.confidence !== 'unresolved') {
+          const metricKey = resolution.db_column || resolution.canonical_id;
+          if (!resolvedMetrics.includes(metricKey)) {
+            resolvedMetrics.push(metricKey);
+          }
+          if (resolution.type === 'computed') {
+            needsComputation = true;
+          }
+        } else {
+          await this.logUnresolvedMetric(phrase, query, tickers[0] || '');
+        }
+      } catch (error) {
+        this.logger.warn(`MetricRegistryService error resolving "${phrase}": ${error?.message}`);
+        await this.logUnresolvedMetric(phrase, query, tickers[0] || '');
+      }
+    }
+
+    // 3. Match concepts through ConceptRegistryService (Req 5.3)
+    if (llmResult.conceptMatch && this.conceptRegistry) {
+      try {
+        const conceptMatch = this.conceptRegistry.matchConcept(query);
+        if (conceptMatch) {
+          const bundle = this.conceptRegistry.getMetricBundle(conceptMatch.concept_id);
+          if (bundle) {
+            for (const metricId of [...bundle.primary_metrics, ...bundle.secondary_metrics]) {
+              if (!resolvedMetrics.includes(metricId)) {
+                resolvedMetrics.push(metricId);
+              }
+            }
+            needsComputation = true;
+          }
+        }
+      } catch (error) {
+        this.logger.warn(`ConceptRegistryService error for query "${query}": ${error?.message}`);
+      }
+    }
+
+    // 4. Resolve period (use preserved extractPeriod logic as fallback)
+    const periodResult = this.extractPeriod(query);
+    const period = llmResult.period || periodResult.period;
+    const periodType = this.determinePeriodType(period);
+
+    // 5. Structural comparison detection (Req 3.1, 3.2)
+    const needsComparison = tickers.length > 1 || llmResult.needsComparison;
+    const needsPeerComparison = llmResult.needsPeerComparison ||
+      (tickers.length > 1 && this.hasComparisonConnectors(query));
+
+    // 6. Build QueryIntent
+    return {
+      type: llmResult.queryType,
+      ticker: tickers.length === 1 ? tickers[0] : tickers.length > 1 ? tickers : undefined,
+      metrics: resolvedMetrics.length > 0 ? resolvedMetrics : undefined,
+      period,
+      periodType,
+      periodStart: llmResult.periodStart || periodResult.periodStart,
+      periodEnd: llmResult.periodEnd || periodResult.periodEnd,
+      documentTypes: llmResult.documentTypes as any,
+      sectionTypes: llmResult.sectionTypes as any,
+      subsectionName: llmResult.subsectionName,
+      needsNarrative: llmResult.needsNarrative,
+      needsComparison,
+      needsComputation,
+      needsTrend: llmResult.needsTrend,
+      needsPeerComparison,
+      needsClarification: llmResult.needsClarification,
+      ambiguityReason: llmResult.ambiguityReason,
+      confidence: llmResult.confidence,
+      suggestedChart: llmResult.suggestedChart ?? null,
+      retrievalPaths: llmResult.retrievalPaths,
+      originalQuery: query,
+    };
+  }
+
+  /**
+   * Check if a query contains comparison connectors between entities.
+   * Used for structural peer comparison detection (Req 3.2).
+   */
+  private hasComparisonConnectors(query: string): boolean {
+    const normalized = query.toLowerCase();
+    const connectors = [
+      'vs',
+      'versus',
+      'compared to',
+      'relative to',
+      'against',
+      'stack up',
+    ];
+    return connectors.some(connector => normalized.includes(connector));
+  }
+
+  /**
+   * Log an unresolved metric phrase to MetricLearningService.
+   */
+  private async logUnresolvedMetric(rawPhrase: string, query: string, ticker: string): Promise<void> {
+    try {
+      await this.metricLearning?.logUnrecognizedMetric({
+        tenantId: '',
+        ticker,
+        query,
+        requestedMetric: rawPhrase,
+        failureReason: 'LLM detected metric phrase not in MetricRegistryService',
+        userMessage: '',
+      });
+    } catch (error) {
+      this.logger.warn(`Failed to log unresolved metric "${rawPhrase}": ${error?.message}`);
     }
   }
 }
