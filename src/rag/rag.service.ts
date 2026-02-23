@@ -1,4 +1,4 @@
-import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef, Optional } from '@nestjs/common';
 import { QueryRouterService } from './query-router.service';
 import { StructuredRetrieverService } from './structured-retriever.service';
 import { SemanticRetrieverService } from './semantic-retriever.service';
@@ -7,10 +7,13 @@ import { DocumentRAGService } from './document-rag.service';
 import { ComputedMetricsService } from '../dataSources/sec/computed-metrics.service';
 import { PerformanceMonitorService } from './performance-monitor.service';
 import { PerformanceOptimizerService } from './performance-optimizer.service';
-import { QueryIntent, RAGResponse } from './types/query-intent';
+import { QueryIntent, RAGResponse, MetricResult, ChunkResult, StructuredQuery } from './types/query-intent';
 import { ResponseEnrichmentService } from './response-enrichment.service';
 import { MetricsSummary } from '../deals/financial-calculator.service';
 import { InstantRAGService } from '../instant-rag/instant-rag.service';
+import { HybridSynthesisService, FinancialAnalysisContext, SubQueryResult } from './hybrid-synthesis.service';
+import { QueryDecomposerService, DecomposedQuery } from './query-decomposer.service';
+import { classifyResponseType, ResponseClassificationInput } from './types/query-intent';
 
 /**
  * RAG Service
@@ -24,6 +27,9 @@ import { InstantRAGService } from '../instant-rag/instant-rag.service';
 export class RAGService {
   private readonly logger = new Logger(RAGService.name);
 
+  /** Maximum number of retrieval loop iterations (Req 13.1) */
+  private static readonly MAX_RETRIEVAL_ITERATIONS = 3;
+
   constructor(
     private readonly queryRouter: QueryRouterService,
     private readonly structuredRetriever: StructuredRetrieverService,
@@ -36,6 +42,10 @@ export class RAGService {
     private readonly responseEnrichment: ResponseEnrichmentService,
     @Inject(forwardRef(() => InstantRAGService))
     private readonly instantRAGService: InstantRAGService,
+    @Optional()
+    private readonly hybridSynthesis?: HybridSynthesisService,
+    @Optional()
+    private readonly queryDecomposer?: QueryDecomposerService,
   ) {}
 
   /**
@@ -124,6 +134,144 @@ export class RAGService {
               fromCache: true,
             } : undefined,
           };
+        }
+      }
+
+      // ── Step 1.7: Query Decomposition (Req 14.1) ──────────────────────
+      // After intent detection and before retrieval, check if the query
+      // has multiple information needs and should be decomposed.
+      if (this.queryDecomposer) {
+        try {
+          const decomposed = await this.queryDecomposer.decompose(query, intent);
+
+          if (decomposed.isDecomposed) {
+            this.logger.log(
+              `🔀 Query decomposed into ${decomposed.subQueries.length} sub-queries`,
+            );
+
+            // Execute sub-queries independently and collect results (Req 14.1)
+            const subQueryResults = await this.executeSubQueries(
+              decomposed,
+              intent,
+              options,
+            );
+
+            // If all sub-queries failed, fall back to treating original query as single-intent
+            if (subQueryResults.length === 0) {
+              this.logger.warn(
+                `⚠️ All sub-queries failed — falling back to single-intent flow`,
+              );
+              // Fall through to normal retrieval flow below
+            } else {
+
+            // Build FinancialAnalysisContext with sub-query results (Req 14.2)
+            const synthesisContext: FinancialAnalysisContext = {
+              originalQuery: query,
+              intent,
+              metrics: [],
+              narratives: subQueryResults.flatMap(sq => sq.narratives),
+              computedResults: [],
+              subQueryResults,
+              unifyingInstruction: decomposed.unifyingInstruction,
+              modelTier: optimizationDecisions.modelTier as 'haiku' | 'sonnet' | 'opus',
+              tenantId: options?.tenantId,
+            };
+
+            // Use HybridSynthesisService with unifying prompt (Req 14.3)
+            let answer: string;
+            let usage: any;
+            let citations: any[] = [];
+
+            if (this.hybridSynthesis) {
+              try {
+                const synthesisResult = await this.hybridSynthesis.synthesize(synthesisContext);
+                answer = synthesisResult.answer;
+                usage = synthesisResult.usage;
+                citations = synthesisResult.citations || [];
+                this.logger.log(
+                  `🤖 Decomposed synthesis complete: responseType=${synthesisResult.responseType}`,
+                );
+              } catch (synthError) {
+                this.logger.warn(
+                  `HybridSynthesis failed for decomposed query, building fallback: ${synthError.message}`,
+                );
+                answer = this.buildAnswer(query, intent, [], []);
+                usage = undefined;
+              }
+            } else {
+              answer = this.buildAnswer(query, intent, [], []);
+              usage = undefined;
+            }
+
+            // Collect all metrics and narratives from sub-queries for the response
+            const allMetrics = subQueryResults.flatMap((sq) => sq.metrics);
+            const allNarratives = subQueryResults.flatMap((sq) => sq.narratives);
+
+            const latency = Date.now() - startTime;
+            const response: RAGResponse = {
+              answer,
+              intent,
+              metrics: allMetrics.length > 0 ? allMetrics : undefined,
+              narratives: allNarratives.length > 0 ? allNarratives : undefined,
+              sources: this.extractSources(allMetrics, allNarratives),
+              citations: citations.length > 0 ? citations : undefined,
+              timestamp: new Date(),
+              latency,
+              cost: this.estimateCost(allMetrics, allNarratives, usage),
+              usage,
+              processingInfo: {
+                structuredMetrics: allMetrics.length,
+                semanticNarratives: allNarratives.length,
+                userDocumentChunks: 0,
+                usedBedrockKB: !!process.env.BEDROCK_KB_ID,
+                usedClaudeGeneration: !!usage,
+                hybridProcessing: true,
+                fromCache: false,
+                modelTier: optimizationDecisions.modelTier,
+                parallelExecution: false,
+                optimizationDecisions: optimizationDecisions.reasoning,
+              },
+            };
+
+            // Record performance metrics
+            this.performanceMonitor.recordQuery({
+              query,
+              latency,
+              timestamp: new Date(),
+              queryType: intent.type,
+              ticker: Array.isArray(intent.ticker) ? intent.ticker[0] : intent.ticker,
+              metricsCount: allMetrics.length,
+              narrativesCount: allNarratives.length,
+            });
+
+            // Enrich response with visualization
+            const enrichedResponse = this.responseEnrichment.enrichResponse(
+              response,
+              intent,
+              allMetrics,
+              undefined,
+            );
+
+            // Cache the enriched response
+            if (optimizationDecisions.useCache && optimizationDecisions.cacheKey) {
+              const ttl = this.performanceOptimizer.getCacheTTL(intent);
+              const ticker = Array.isArray(intent.ticker) ? intent.ticker[0] : intent.ticker;
+              this.performanceOptimizer.cacheQuery(
+                optimizationDecisions.cacheKey,
+                enrichedResponse,
+                ttl,
+                ticker,
+              );
+            }
+
+            return enrichedResponse;
+            } // end else (subQueryResults.length > 0)
+          }
+        } catch (decomposeError) {
+          // If decomposition fails entirely, fall through to normal flow
+          this.logger.warn(
+            `Query decomposition failed, continuing with normal flow: ${decomposeError.message}`,
+          );
         }
       }
 
@@ -344,6 +492,99 @@ export class RAGService {
         }
       }
 
+      // ── Bounded Retrieval Loop (Req 13.1–13.6) ────────────────────────
+      // After the initial retrieval pass, evaluate completeness and re-plan
+      // if needed, up to MAX_RETRIEVAL_ITERATIONS total iterations.
+      let retrievalIteration = 1;
+      while (
+        retrievalIteration < RAGService.MAX_RETRIEVAL_ITERATIONS &&
+        !this.isRetrievalComplete(intent, metrics, narratives)
+      ) {
+        retrievalIteration++;
+        this.logger.log(
+          `🔄 Retrieval loop iteration ${retrievalIteration}/${RAGService.MAX_RETRIEVAL_ITERATIONS} — data incomplete`,
+        );
+
+        try {
+          // Build replanner prompt and invoke LLM
+          const replanPrompt = this.buildReplanPrompt(query, intent, metrics, narratives);
+          const replanResponse = await this.bedrock.invokeClaude({
+            prompt: replanPrompt,
+            max_tokens: 300,
+          });
+          const replanResult = this.parseReplanResult(replanResponse);
+
+          // If replanner says done → exit loop (Req 13.4)
+          if (replanResult.done) {
+            this.logger.log('🔄 Replanner says done — exiting retrieval loop');
+            break;
+          }
+
+          // Execute additional retrieval with new parameters
+          const additionalMetrics: any[] = [];
+          const additionalNarratives: any[] = [];
+
+          // Structured retrieval for additional tickers/metrics
+          if (
+            plan.useStructured &&
+            plan.structuredQuery &&
+            ((replanResult.additionalTickers && replanResult.additionalTickers.length > 0) ||
+              (replanResult.additionalMetrics && replanResult.additionalMetrics.length > 0))
+          ) {
+            const additionalTickers =
+              replanResult.additionalTickers && replanResult.additionalTickers.length > 0
+                ? replanResult.additionalTickers
+                : plan.structuredQuery.tickers;
+
+            // Build a lightweight structured query for the additional data
+            const additionalQuery: StructuredQuery = {
+              ...plan.structuredQuery,
+              tickers: additionalTickers,
+            };
+
+            const additionalResult = await this.structuredRetriever.retrieve(additionalQuery);
+            additionalMetrics.push(...(additionalResult.metrics || []));
+          }
+
+          // Semantic retrieval for additional sections
+          if (
+            plan.useSemantic &&
+            plan.semanticQuery &&
+            replanResult.additionalSections &&
+            replanResult.additionalSections.length > 0
+          ) {
+            const additionalSemanticQuery = {
+              ...plan.semanticQuery,
+              sectionTypes: replanResult.additionalSections as any[],
+            };
+            const additionalResult =
+              await this.semanticRetriever.retrieveWithContext(additionalSemanticQuery);
+            additionalNarratives.push(...(additionalResult.narratives || []));
+          }
+
+          // Merge results (Req 13.5)
+          const merged = this.mergeRetrievalResults(
+            { metrics, narratives },
+            { metrics: additionalMetrics, narratives: additionalNarratives },
+          );
+          metrics = merged.metrics;
+          narratives = merged.narratives;
+        } catch (error) {
+          // Replanner LLM failure → exit loop, use data collected so far
+          this.logger.warn(
+            `⚠️ Retrieval loop iteration ${retrievalIteration} failed: ${error.message} — using data collected so far`,
+          );
+          break;
+        }
+      }
+
+      // Log total iteration count (Req 13.6)
+      if (retrievalIteration > 1) {
+        this.logger.log(
+          `🔄 Retrieval loop completed after ${retrievalIteration} iteration(s)`,
+        );
+      }
+
       // If both retrieval paths returned nothing, try to provide helpful context
       // about what data IS available for this ticker
       if (metrics.length === 0 && narratives.length === 0) {
@@ -455,29 +696,71 @@ export class RAGService {
       this.logger.log(`   BEDROCK_KB_ID: ${process.env.BEDROCK_KB_ID ? 'SET' : 'NOT SET'}`);
       this.logger.log(`   metrics.length: ${metrics.length}`);
       this.logger.log(`   narratives.length: ${narratives.length}`);
-      this.logger.log(`   Will use Claude: ${shouldUseLLM && process.env.BEDROCK_KB_ID && (metrics.length > 0 || narratives.length > 0)}`);
+      this.logger.log(`   hybridSynthesis available: ${!!this.hybridSynthesis}`);
+      this.logger.log(`   Will use HybridSynthesis: ${shouldUseLLM && !!this.hybridSynthesis && (metrics.length > 0 || narratives.length > 0)}`);
 
-      // Use Claude for generation if appropriate
-      if (shouldUseLLM && process.env.BEDROCK_KB_ID && (metrics.length > 0 || narratives.length > 0)) {
-        // Select model tier based on complexity
+      // Use HybridSynthesisService for structured 5-step reasoning (Req 10.1–10.3)
+      if (shouldUseLLM && this.hybridSynthesis && (metrics.length > 0 || narratives.length > 0)) {
+        this.logger.log(`🤖 Synthesizing via HybridSynthesisService (${optimizationDecisions.modelTier})`);
+        try {
+          // Req 10.1: Construct FinancialAnalysisContext from retrieval results
+          const synthesisContext: FinancialAnalysisContext = {
+            originalQuery: query,
+            intent,
+            metrics,
+            narratives,
+            computedResults: [], // Populated by computed metrics from FormulaResolutionService when available
+            modelTier: optimizationDecisions.modelTier as 'haiku' | 'sonnet' | 'opus',
+            tenantId: options?.tenantId,
+          };
+
+          // Req 10.2: Call hybridSynthesis.synthesize() instead of bedrock.generate()
+          const synthesisResult = await this.hybridSynthesis.synthesize(synthesisContext);
+
+          // Req 10.3: Use SynthesisResult for answer, usage, citations
+          answer = synthesisResult.answer;
+          usage = synthesisResult.usage;
+          citations = synthesisResult.citations || [];
+          
+          // Also extract citations from user document chunks if present
+          if (userDocChunks.length > 0 && options?.includeCitations) {
+            const userDocCitations = this.documentRAG.extractCitationsFromChunks(userDocChunks);
+            citations = [...citations, ...userDocCitations];
+            this.logger.log(`📎 Extracted ${userDocCitations.length} citations from user documents`);
+          }
+          
+          this.logger.log(
+            `🤖 Synthesis complete: responseType=${synthesisResult.responseType} (${usage.inputTokens} input, ${usage.outputTokens} output tokens, ${citations.length} citations)`,
+          );
+        } catch (error) {
+          this.logger.warn(`HybridSynthesis failed, falling back to structured answer: ${error.message}`);
+          const isMultiTicker = Array.isArray(intent.ticker) && intent.ticker.length > 1;
+          if (isMultiTicker && metrics.length > 0) {
+            const fallbackResponse = await this.responseEnrichment.buildQuickResponse(intent, metrics);
+            answer = '⚠️ Analysis temporarily unavailable — showing raw data. Try again for a full comparative analysis.\n\n' + fallbackResponse.answer;
+          } else {
+            answer = this.buildAnswer(query, intent, metrics, narratives);
+          }
+        }
+      } else if (shouldUseLLM && process.env.BEDROCK_KB_ID && (metrics.length > 0 || narratives.length > 0)) {
+        // Legacy fallback: use bedrock.generate() when HybridSynthesisService is not available
         const modelId = this.performanceOptimizer.getModelId(optimizationDecisions.modelTier);
         
-        this.logger.log(`🤖 Generating response with ${optimizationDecisions.modelTier} (${modelId})`);
+        this.logger.log(`🤖 Generating response with legacy bedrock.generate (${optimizationDecisions.modelTier})`);
         try {
           const isPeerComparison = Array.isArray(intent.ticker) && intent.ticker.length > 1;
           const generated = await this.bedrock.generate(query, {
             metrics,
             narratives,
-            systemPrompt: options?.systemPrompt, // Pass custom system prompt
-            modelId, // Use selected model tier
+            systemPrompt: options?.systemPrompt,
+            modelId,
             isPeerComparison,
-            computedSummary, // Phase 1: YoY growth data for LLM context
+            computedSummary,
           });
           answer = generated.answer;
           usage = generated.usage;
-          citations = generated.citations || []; // NEW: Get citations from bedrock
+          citations = generated.citations || [];
           
-          // Also extract citations from user document chunks if present
           if (userDocChunks.length > 0 && options?.includeCitations) {
             const userDocCitations = this.documentRAG.extractCitationsFromChunks(userDocChunks);
             citations = [...citations, ...userDocCitations];
@@ -582,6 +865,226 @@ export class RAGService {
       this.logger.error(`❌ Error processing hybrid query: ${error.message}`);
       throw error;
     }
+  }
+
+  // ── Sub-Query Execution (Req 14.1) ───────────────────────────────────
+
+  /**
+   * Execute each sub-query through the standard retrieval pipeline
+   * and collect results. If a sub-query fails, log a warning and
+   * continue with the remaining sub-queries.
+   */
+  private async executeSubQueries(
+    decomposed: DecomposedQuery,
+    parentIntent: QueryIntent,
+    options?: { tenantId?: string; ticker?: string },
+  ): Promise<SubQueryResult[]> {
+    const results: SubQueryResult[] = [];
+
+    for (const subQuery of decomposed.subQueries) {
+      try {
+        // Route each sub-query through the standard pipeline
+        const subPlan = await this.queryRouter.route(
+          subQuery,
+          options?.tenantId,
+          options?.ticker,
+        );
+        const subIntent = await this.queryRouter.getIntent(
+          subQuery,
+          options?.tenantId,
+          options?.ticker,
+        );
+
+        let subMetrics: MetricResult[] = [];
+        let subNarratives: any[] = [];
+
+        if (subPlan.useStructured && subPlan.structuredQuery) {
+          const result = await this.structuredRetriever.retrieve(
+            subPlan.structuredQuery,
+          );
+          subMetrics = result.metrics;
+        }
+
+        if (subPlan.useSemantic && subPlan.semanticQuery) {
+          const result = await this.semanticRetriever.retrieveWithContext(
+            subPlan.semanticQuery,
+          );
+          subNarratives = result.narratives;
+        }
+
+        const classificationInput: ResponseClassificationInput = {
+          intent: subIntent,
+          metrics: subMetrics,
+          narratives: subNarratives,
+          computedResults: [],
+        };
+
+        results.push({
+          subQuery,
+          metrics: subMetrics,
+          narratives: subNarratives,
+          computedResults: [],
+          responseType: classifyResponseType(classificationInput),
+        });
+
+        this.logger.log(
+          `✅ Sub-query "${subQuery.substring(0, 50)}…" → ${subMetrics.length} metrics, ${subNarratives.length} narratives`,
+        );
+      } catch (error) {
+        // Error handling: log warning and continue with remaining sub-queries
+        this.logger.warn(
+          `⚠️ Sub-query failed: "${subQuery.substring(0, 50)}…" — ${error.message}`,
+        );
+      }
+    }
+
+    // If all sub-queries failed, log a warning (caller will handle fallback)
+    if (results.length === 0 && decomposed.subQueries.length > 0) {
+      this.logger.warn(
+        `⚠️ All ${decomposed.subQueries.length} sub-queries failed — falling back to single-intent`,
+      );
+    }
+
+    return results;
+  }
+
+  // ── Bounded Retrieval Loop helpers (Req 13.1–13.6) ──────────────────
+
+  /**
+   * Check whether retrieval is complete.
+   * Complete when every requested ticker has at least one metric result
+   * AND narrative needs are met (Req 13.2).
+   */
+  private isRetrievalComplete(
+    intent: QueryIntent,
+    metrics: MetricResult[],
+    narratives: ChunkResult[],
+  ): boolean {
+    // Check all requested tickers have at least one metric
+    const requestedTickers: string[] = Array.isArray(intent.ticker)
+      ? intent.ticker
+      : intent.ticker
+        ? [intent.ticker]
+        : [];
+
+    if (requestedTickers.length > 0) {
+      const tickersWithMetrics = new Set(
+        metrics.map((m) => m.ticker?.toUpperCase()),
+      );
+      const allTickersCovered = requestedTickers.every((t) =>
+        tickersWithMetrics.has(t.toUpperCase()),
+      );
+      if (!allTickersCovered) return false;
+    }
+
+    // If narrative is needed, check narratives array is non-empty
+    if (intent.needsNarrative && narratives.length === 0) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Build a replanner prompt asking the LLM what additional data is needed (Req 13.3).
+   */
+  private buildReplanPrompt(
+    query: string,
+    intent: QueryIntent,
+    metrics: MetricResult[],
+    narratives: ChunkResult[],
+  ): string {
+    const requestedTickers: string[] = Array.isArray(intent.ticker)
+      ? intent.ticker
+      : intent.ticker
+        ? [intent.ticker]
+        : [];
+
+    const tickersWithMetrics = new Set(
+      metrics.map((m) => m.ticker?.toUpperCase()),
+    );
+    const missingTickers = requestedTickers.filter(
+      (t) => !tickersWithMetrics.has(t.toUpperCase()),
+    );
+
+    const foundMetricNames = [...new Set(metrics.map((m) => m.normalizedMetric))];
+    const requestedMetrics = intent.metrics ?? [];
+    const missingMetrics = requestedMetrics.filter(
+      (rm) => !foundMetricNames.some((fm) => fm.toLowerCase().includes(rm.toLowerCase())),
+    );
+
+    return [
+      'You are a financial data retrieval planner.',
+      `Original query: "${query}"`,
+      '',
+      'Data retrieved so far:',
+      `- Metrics found: ${foundMetricNames.join(', ') || 'none'}`,
+      `- Tickers with data: ${[...tickersWithMetrics].join(', ') || 'none'}`,
+      `- Tickers missing data: ${missingTickers.join(', ') || 'none'}`,
+      `- Missing metrics: ${missingMetrics.join(', ') || 'none'}`,
+      `- Narratives found: ${narratives.length}`,
+      `- Narrative needed: ${intent.needsNarrative}`,
+      '',
+      'Determine what additional data is needed to fully answer the query.',
+      'Respond with ONLY a JSON object (no markdown, no explanation):',
+      '{ "additionalMetrics": [], "additionalTickers": [], "additionalSections": [], "done": boolean }',
+      '',
+      'Set "done": true if the data already collected is sufficient.',
+    ].join('\n');
+  }
+
+  /**
+   * Parse the replanner LLM response (Req 13.4).
+   * On parse failure → returns done: true to exit the loop safely.
+   */
+  private parseReplanResult(response: string): {
+    additionalMetrics?: string[];
+    additionalTickers?: string[];
+    additionalSections?: string[];
+    done: boolean;
+  } {
+    try {
+      // Strip markdown code fences if present
+      const cleaned = response.replace(/```json?\s*/g, '').replace(/```/g, '').trim();
+      const parsed = JSON.parse(cleaned);
+      return {
+        additionalMetrics: Array.isArray(parsed.additionalMetrics) ? parsed.additionalMetrics : undefined,
+        additionalTickers: Array.isArray(parsed.additionalTickers) ? parsed.additionalTickers : undefined,
+        additionalSections: Array.isArray(parsed.additionalSections) ? parsed.additionalSections : undefined,
+        done: !!parsed.done,
+      };
+    } catch {
+      this.logger.warn('Replanner response parse failed — exiting retrieval loop');
+      return { done: true };
+    }
+  }
+
+  /**
+   * Merge additional retrieval results with existing data (Req 13.5).
+   * Deduplicates metrics by ticker + normalizedMetric + fiscalPeriod.
+   */
+  private mergeRetrievalResults(
+    existing: { metrics: any[]; narratives: any[] },
+    additional: { metrics: any[]; narratives: any[] },
+  ): { metrics: any[]; narratives: any[] } {
+    // Deduplicate metrics by ticker+metric+period
+    const metricKey = (m: any) =>
+      `${(m.ticker || '').toUpperCase()}|${(m.normalizedMetric || '').toLowerCase()}|${m.fiscalPeriod || ''}`;
+
+    const seen = new Set<string>(existing.metrics.map(metricKey));
+    const mergedMetrics = [...existing.metrics];
+    for (const m of additional.metrics) {
+      const key = metricKey(m);
+      if (!seen.has(key)) {
+        seen.add(key);
+        mergedMetrics.push(m);
+      }
+    }
+
+    // Narratives: simple concat (no dedup needed — content varies)
+    const mergedNarratives = [...existing.narratives, ...additional.narratives];
+
+    return { metrics: mergedMetrics, narratives: mergedNarratives };
   }
 
   /**

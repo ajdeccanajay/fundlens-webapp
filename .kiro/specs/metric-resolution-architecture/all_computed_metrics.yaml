@@ -1,0 +1,1049 @@
+# FundLens Metric Registry
+# Auto-generated from existing metrics mapping + GICS expansion
+# Source: mini_MVP_metrics.xlsx + manual curation
+
+gross_margin_pct:
+  display_name: Gross Margin %
+  type: computed
+  statement: null
+  category: profitability
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: gross_profit / revenue * 100
+  dependencies:
+  - gross_profit
+  - revenue
+  synonyms:
+  - gross margin
+  - gross margin percent
+  - gross margin %
+  - GM%
+  - gross profit margin
+  - gross margin percentage
+  - product margin
+  output_format: percentage
+  output_suffix: '%'
+  calculation_notes: Revenue minus COGS as a percentage of revenue
+operating_margin_pct:
+  display_name: Operating Margin %
+  type: computed
+  statement: null
+  category: profitability
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: operating_income / revenue * 100
+  dependencies:
+  - operating_income
+  - revenue
+  synonyms:
+  - operating margin
+  - operating margin percent
+  - op margin
+  - EBIT margin
+  - operating profit margin
+  - operating income margin
+  output_format: percentage
+  output_suffix: '%'
+  calculation_notes: Operating income as a percentage of revenue
+ebitda_margin_pct:
+  display_name: EBITDA Margin %
+  type: computed
+  statement: null
+  category: profitability
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: ebitda / revenue * 100
+  dependencies:
+  - ebitda
+  - revenue
+  synonyms:
+  - EBITDA margin
+  - EBITDA margin percent
+  - cash margin
+  - EBITDA as percent of revenue
+  output_format: percentage
+  output_suffix: '%'
+  calculation_notes: EBITDA as a percentage of revenue
+net_margin_pct:
+  display_name: Net Margin %
+  type: computed
+  statement: null
+  category: profitability
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: net_income / revenue * 100
+  dependencies:
+  - net_income
+  - revenue
+  synonyms:
+  - net margin
+  - net profit margin
+  - net margin percent
+  - bottom line margin
+  - profit margin
+  - net income margin
+  output_format: percentage
+  output_suffix: '%'
+  calculation_notes: Net income as a percentage of revenue
+return_on_equity:
+  display_name: Return on Equity
+  type: computed
+  statement: null
+  category: profitability
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: net_income / total_equity * 100
+  dependencies:
+  - net_income
+  - total_equity
+  synonyms:
+  - ROE
+  - return on equity
+  - equity return
+  - return on shareholders equity
+  - return on book equity
+  output_format: percentage
+  output_suffix: '%'
+  interpretation:
+    strong: '> 15%'
+    adequate: 10% - 15%
+    weak: < 10%
+  calculation_notes: Net income divided by average total equity
+return_on_assets:
+  display_name: Return on Assets
+  type: computed
+  statement: null
+  category: profitability
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: net_income / total_assets * 100
+  dependencies:
+  - net_income
+  - total_assets
+  synonyms:
+  - ROA
+  - return on assets
+  - asset return
+  - return on total assets
+  output_format: percentage
+  output_suffix: '%'
+  calculation_notes: Net income divided by average total assets
+return_on_invested_capital:
+  display_name: Return on Invested Capital
+  type: computed
+  statement: null
+  category: profitability
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: nopat / invested_capital * 100
+  dependencies:
+  - operating_income
+  - income_taxes
+  - total_equity
+  - long_term_debt
+  synonyms:
+  - ROIC
+  - return on invested capital
+  - return on capital
+  - ROCE
+  - return on capital employed
+  - return on total capital
+  output_format: percentage
+  output_suffix: '%'
+  interpretation:
+    value_creating: '> WACC'
+    strong: '> 15%'
+    adequate: 10% - 15%
+  calculation_notes: NOPAT (operating income * (1 - tax rate)) divided by invested capital (equity + debt)
+net_debt:
+  display_name: Net Debt
+  type: computed
+  statement: null
+  category: leverage
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: total_debt - cash_and_cash_equivalents
+  dependencies:
+  - long_term_debt
+  - short_term_debt
+  - cash_and_cash_equivalents
+  synonyms:
+  - net debt
+  - net borrowings
+  - net leverage amount
+  - debt net of cash
+  - debt minus cash
+  - net financial debt
+  output_format: currency
+  calculation_notes: Total debt (short-term + long-term) minus cash and equivalents
+total_debt:
+  display_name: Total Debt
+  type: computed
+  statement: null
+  category: leverage
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: long_term_debt + short_term_debt
+  dependencies:
+  - long_term_debt
+  - short_term_debt
+  synonyms:
+  - total debt
+  - total borrowings
+  - gross debt
+  - total indebtedness
+  - aggregate debt
+  - funded debt
+  output_format: currency
+  calculation_notes: Sum of short-term and long-term debt
+net_debt_to_ebitda:
+  display_name: Net Debt / EBITDA
+  type: computed
+  statement: null
+  category: leverage
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: net_debt / ebitda
+  dependencies:
+  - net_debt
+  - ebitda
+  synonyms:
+  - net debt to EBITDA
+  - net leverage ratio
+  - leverage ratio
+  - leverage multiple
+  - ND/EBITDA
+  - net leverage
+  - net debt EBITDA
+  - turns of leverage
+  - how levered
+  output_format: ratio
+  output_suffix: x
+  interpretation:
+    healthy: < 2.0x
+    moderate: 2.0x - 4.0x
+    elevated: '> 4.0x'
+  calculation_notes: Primary leverage metric; net debt divided by LTM EBITDA
+debt_to_equity:
+  display_name: Debt / Equity
+  type: computed
+  statement: null
+  category: leverage
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: total_debt / total_equity
+  dependencies:
+  - total_debt
+  - total_equity
+  synonyms:
+  - debt to equity
+  - D/E ratio
+  - debt equity ratio
+  - leverage D/E
+  - gearing ratio
+  - financial gearing
+  - debt to book
+  output_format: ratio
+  output_suffix: x
+  interpretation:
+    conservative: < 0.5x
+    moderate: 0.5x - 1.5x
+    aggressive: '> 1.5x'
+  calculation_notes: Total debt divided by total shareholders equity
+debt_to_total_assets:
+  display_name: Debt / Total Assets
+  type: computed
+  statement: null
+  category: leverage
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: total_debt / total_assets
+  dependencies:
+  - total_debt
+  - total_assets
+  synonyms:
+  - debt to assets
+  - debt to total assets
+  - debt ratio
+  - asset leverage
+  - financial leverage ratio
+  output_format: ratio
+  output_suffix: x
+  calculation_notes: Total debt divided by total assets
+interest_coverage:
+  display_name: Interest Coverage Ratio
+  type: computed
+  statement: null
+  category: leverage
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: ebitda / interest_expense
+  dependencies:
+  - ebitda
+  - interest_expense
+  synonyms:
+  - interest coverage
+  - interest coverage ratio
+  - EBITDA to interest
+  - times interest earned
+  - TIE ratio
+  - debt service coverage
+  - EBITDA coverage
+  - coverage ratio
+  output_format: ratio
+  output_suffix: x
+  interpretation:
+    healthy: '> 5.0x'
+    adequate: 3.0x - 5.0x
+    distressed: < 2.0x
+  calculation_notes: EBITDA divided by interest expense; measures ability to service debt
+debt_to_ebitda:
+  display_name: Total Debt / EBITDA
+  type: computed
+  statement: null
+  category: leverage
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: total_debt / ebitda
+  dependencies:
+  - total_debt
+  - ebitda
+  synonyms:
+  - debt to EBITDA
+  - gross leverage
+  - total leverage ratio
+  - gross debt to EBITDA
+  - total debt EBITDA
+  output_format: ratio
+  output_suffix: x
+  calculation_notes: Total debt (gross) divided by EBITDA
+current_ratio:
+  display_name: Current Ratio
+  type: computed
+  statement: null
+  category: liquidity
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: total_current_assets / total_current_liabilities
+  dependencies:
+  - total_current_assets
+  - total_current_liabilities
+  synonyms:
+  - current ratio
+  - working capital ratio
+  - liquidity ratio
+  - current assets to current liabilities
+  output_format: ratio
+  output_suffix: x
+  interpretation:
+    healthy: '> 1.5x'
+    adequate: 1.0x - 1.5x
+    tight: < 1.0x
+  calculation_notes: Current assets divided by current liabilities
+quick_ratio:
+  display_name: Quick Ratio
+  type: computed
+  statement: null
+  category: liquidity
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: (cash_and_cash_equivalents + accounts_receivable + short_term_investments) / total_current_liabilities
+  dependencies:
+  - cash_and_cash_equivalents
+  - accounts_receivable
+  - short_term_investments
+  - total_current_liabilities
+  synonyms:
+  - quick ratio
+  - acid test
+  - acid test ratio
+  - liquid ratio
+  - quick assets ratio
+  output_format: ratio
+  output_suffix: x
+  interpretation:
+    healthy: '> 1.0x'
+    adequate: 0.5x - 1.0x
+    tight: < 0.5x
+  calculation_notes: Liquid assets (cash + receivables + short-term investments) divided by current liabilities
+cash_ratio:
+  display_name: Cash Ratio
+  type: computed
+  statement: null
+  category: liquidity
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: cash_and_cash_equivalents / total_current_liabilities
+  dependencies:
+  - cash_and_cash_equivalents
+  - total_current_liabilities
+  synonyms:
+  - cash ratio
+  - absolute liquidity ratio
+  - cash to current liabilities
+  - cash coverage ratio
+  output_format: ratio
+  output_suffix: x
+  calculation_notes: Cash and equivalents divided by current liabilities; most conservative liquidity measure
+working_capital:
+  display_name: Working Capital
+  type: computed
+  statement: null
+  category: liquidity
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: total_current_assets - total_current_liabilities
+  dependencies:
+  - total_current_assets
+  - total_current_liabilities
+  synonyms:
+  - working capital
+  - net working capital
+  - NWC
+  - current net assets
+  - operating working capital
+  output_format: currency
+  calculation_notes: Current assets minus current liabilities
+asset_turnover:
+  display_name: Asset Turnover
+  type: computed
+  statement: null
+  category: efficiency
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: revenue / total_assets
+  dependencies:
+  - revenue
+  - total_assets
+  synonyms:
+  - asset turnover
+  - total asset turnover
+  - asset utilization
+  - revenue to assets
+  output_format: ratio
+  output_suffix: x
+  calculation_notes: Revenue divided by average total assets
+inventory_turnover:
+  display_name: Inventory Turnover
+  type: computed
+  statement: null
+  category: efficiency
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: cost_of_goods_sold / inventory
+  dependencies:
+  - cost_of_goods_sold
+  - inventory
+  synonyms:
+  - inventory turnover
+  - inventory turns
+  - stock turnover
+  - COGS to inventory
+  - inventory velocity
+  output_format: ratio
+  output_suffix: x
+  calculation_notes: COGS divided by average inventory
+days_sales_outstanding:
+  display_name: Days Sales Outstanding
+  type: computed
+  statement: null
+  category: efficiency
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: accounts_receivable / revenue * 365
+  dependencies:
+  - accounts_receivable
+  - revenue
+  synonyms:
+  - DSO
+  - days sales outstanding
+  - receivable days
+  - days receivable
+  - collection period
+  - average collection period
+  - AR days
+  output_format: days
+  output_suffix: ' days'
+  calculation_notes: Average number of days to collect receivables
+days_payable_outstanding:
+  display_name: Days Payable Outstanding
+  type: computed
+  statement: null
+  category: efficiency
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: accounts_payable / cost_of_goods_sold * 365
+  dependencies:
+  - accounts_payable
+  - cost_of_goods_sold
+  synonyms:
+  - DPO
+  - days payable outstanding
+  - payable days
+  - days payable
+  - payment period
+  - AP days
+  output_format: days
+  output_suffix: ' days'
+  calculation_notes: Average number of days to pay suppliers
+days_inventory_outstanding:
+  display_name: Days Inventory Outstanding
+  type: computed
+  statement: null
+  category: efficiency
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: inventory / cost_of_goods_sold * 365
+  dependencies:
+  - inventory
+  - cost_of_goods_sold
+  synonyms:
+  - DIO
+  - days inventory outstanding
+  - inventory days
+  - days inventory
+  - days of inventory
+  - inventory holding period
+  output_format: days
+  output_suffix: ' days'
+  calculation_notes: Average number of days inventory is held before sale
+cash_conversion_cycle:
+  display_name: Cash Conversion Cycle
+  type: computed
+  statement: null
+  category: efficiency
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: days_sales_outstanding + days_inventory_outstanding - days_payable_outstanding
+  dependencies:
+  - days_sales_outstanding
+  - days_inventory_outstanding
+  - days_payable_outstanding
+  synonyms:
+  - CCC
+  - cash conversion cycle
+  - cash cycle
+  - operating cycle net
+  - working capital cycle
+  - cash to cash cycle
+  output_format: days
+  output_suffix: ' days'
+  calculation_notes: DSO + DIO - DPO; measures days between paying suppliers and collecting from customers
+enterprise_value:
+  display_name: Enterprise Value
+  type: computed
+  statement: null
+  category: valuation
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: market_cap + total_debt - cash_and_cash_equivalents
+  dependencies:
+  - market_cap
+  - total_debt
+  - cash_and_cash_equivalents
+  synonyms:
+  - EV
+  - enterprise value
+  - firm value
+  - total enterprise value
+  - TEV
+  output_format: currency
+  calculation_notes: Market cap plus net debt (total debt minus cash)
+ev_to_ebitda:
+  display_name: EV / EBITDA
+  type: computed
+  statement: null
+  category: valuation
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: enterprise_value / ebitda
+  dependencies:
+  - enterprise_value
+  - ebitda
+  synonyms:
+  - EV/EBITDA
+  - EV to EBITDA
+  - enterprise value to EBITDA
+  - EBITDA multiple
+  - EV EBITDA
+  - enterprise multiple
+  output_format: ratio
+  output_suffix: x
+  interpretation:
+    cheap: < 8x
+    fair: 8x - 15x
+    expensive: '> 15x'
+  calculation_notes: Enterprise value divided by EBITDA; primary valuation multiple
+ev_to_revenue:
+  display_name: EV / Revenue
+  type: computed
+  statement: null
+  category: valuation
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: enterprise_value / revenue
+  dependencies:
+  - enterprise_value
+  - revenue
+  synonyms:
+  - EV/Revenue
+  - EV to revenue
+  - EV/Sales
+  - EV to sales
+  - revenue multiple
+  - sales multiple
+  - enterprise value to revenue
+  output_format: ratio
+  output_suffix: x
+  calculation_notes: Enterprise value divided by revenue
+ev_to_ebit:
+  display_name: EV / EBIT
+  type: computed
+  statement: null
+  category: valuation
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: enterprise_value / operating_income
+  dependencies:
+  - enterprise_value
+  - operating_income
+  synonyms:
+  - EV/EBIT
+  - EV to EBIT
+  - enterprise value to EBIT
+  - operating income multiple
+  output_format: ratio
+  output_suffix: x
+  calculation_notes: Enterprise value divided by operating income
+price_to_earnings:
+  display_name: Price / Earnings
+  type: computed
+  statement: null
+  category: valuation
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: market_cap / net_income
+  dependencies:
+  - market_cap
+  - net_income
+  synonyms:
+  - P/E
+  - PE ratio
+  - price to earnings
+  - price earnings ratio
+  - earnings multiple
+  - PE multiple
+  - P/E ratio
+  - trailing PE
+  output_format: ratio
+  output_suffix: x
+  calculation_notes: Market cap divided by net income (or price per share / EPS)
+price_to_book:
+  display_name: Price / Book
+  type: computed
+  statement: null
+  category: valuation
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: market_cap / total_equity
+  dependencies:
+  - market_cap
+  - total_equity
+  synonyms:
+  - P/B
+  - PB ratio
+  - price to book
+  - price to book value
+  - market to book
+  - PBV ratio
+  output_format: ratio
+  output_suffix: x
+  calculation_notes: Market cap divided by book value of equity
+price_to_sales:
+  display_name: Price / Sales
+  type: computed
+  statement: null
+  category: valuation
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: market_cap / revenue
+  dependencies:
+  - market_cap
+  - revenue
+  synonyms:
+  - P/S
+  - PS ratio
+  - price to sales
+  - price sales ratio
+  - PSR
+  output_format: ratio
+  output_suffix: x
+  calculation_notes: Market cap divided by revenue
+price_to_free_cash_flow:
+  display_name: Price / Free Cash Flow
+  type: computed
+  statement: null
+  category: valuation
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: market_cap / free_cash_flow
+  dependencies:
+  - market_cap
+  - free_cash_flow
+  synonyms:
+  - P/FCF
+  - price to FCF
+  - price to free cash flow
+  - FCF multiple
+  - cash flow multiple
+  - price to cash flow
+  output_format: ratio
+  output_suffix: x
+  calculation_notes: Market cap divided by free cash flow
+fcf_yield_pct:
+  display_name: Free Cash Flow Yield
+  type: computed
+  statement: null
+  category: valuation
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: free_cash_flow / market_cap * 100
+  dependencies:
+  - free_cash_flow
+  - market_cap
+  synonyms:
+  - FCF yield
+  - free cash flow yield
+  - cash flow yield
+  - cash yield
+  - FCF yield percent
+  output_format: percentage
+  output_suffix: '%'
+  calculation_notes: Free cash flow divided by market cap; inverse of P/FCF
+dividend_yield:
+  display_name: Dividend Yield
+  type: computed
+  statement: null
+  category: valuation
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: dividends_paid_common / market_cap * 100
+  dependencies:
+  - dividends_paid_common
+  - market_cap
+  synonyms:
+  - dividend yield
+  - div yield
+  - yield
+  - annual dividend yield
+  - forward yield
+  - trailing yield
+  output_format: percentage
+  output_suffix: '%'
+  calculation_notes: Annual dividends per share divided by share price
+earnings_yield:
+  display_name: Earnings Yield
+  type: computed
+  statement: null
+  category: valuation
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: net_income / market_cap * 100
+  dependencies:
+  - net_income
+  - market_cap
+  synonyms:
+  - earnings yield
+  - E/P
+  - earnings price ratio
+  - inverse PE
+  - earnings to price
+  output_format: percentage
+  output_suffix: '%'
+  calculation_notes: Net income divided by market cap; inverse of P/E
+free_cash_flow:
+  display_name: Free Cash Flow
+  type: computed
+  statement: null
+  category: cash_flow
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: net_cash_provided_by_operating_activities - capital_expenditures
+  dependencies:
+  - net_cash_provided_by_operating_activities
+  - capital_expenditures
+  synonyms:
+  - free cash flow
+  - FCF
+  - cash flow after capex
+  - discretionary cash flow
+  - available cash flow
+  - owner earnings proxy
+  output_format: currency
+  calculation_notes: Operating cash flow minus capital expenditures
+capex_to_revenue:
+  display_name: CapEx / Revenue
+  type: computed
+  statement: null
+  category: capital_allocation
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: capital_expenditures / revenue * 100
+  dependencies:
+  - capital_expenditures
+  - revenue
+  synonyms:
+  - capex to revenue
+  - capex intensity
+  - capital intensity
+  - capex as percent of revenue
+  - capex ratio
+  - investment intensity
+  output_format: percentage
+  output_suffix: '%'
+  calculation_notes: Capital expenditures as percentage of revenue; measures capital intensity
+capex_to_depreciation:
+  display_name: CapEx / Depreciation
+  type: computed
+  statement: null
+  category: capital_allocation
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: capital_expenditures / depreciation_amortization
+  dependencies:
+  - capital_expenditures
+  - depreciation_amortization
+  synonyms:
+  - capex to D&A
+  - capex to depreciation
+  - reinvestment ratio
+  - capex depreciation ratio
+  - maintenance vs growth capex indicator
+  output_format: ratio
+  output_suffix: x
+  calculation_notes: CapEx divided by D&A; >1x suggests growth investment, <1x may indicate underinvestment
+payout_ratio:
+  display_name: Payout Ratio
+  type: computed
+  statement: null
+  category: capital_allocation
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: dividends_paid_common / net_income * 100
+  dependencies:
+  - dividends_paid_common
+  - net_income
+  synonyms:
+  - payout ratio
+  - dividend payout ratio
+  - payout
+  - dividend coverage inverse
+  - earnings payout
+  output_format: percentage
+  output_suffix: '%'
+  calculation_notes: Dividends as percentage of net income
+buyback_yield:
+  display_name: Buyback Yield
+  type: computed
+  statement: null
+  category: capital_allocation
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: equity_repurchased / market_cap * 100
+  dependencies:
+  - equity_repurchased
+  - market_cap
+  synonyms:
+  - buyback yield
+  - share repurchase yield
+  - repurchase yield
+  - buyback ratio
+  output_format: percentage
+  output_suffix: '%'
+  calculation_notes: Share repurchases divided by market cap
+total_shareholder_yield:
+  display_name: Total Shareholder Yield
+  type: computed
+  statement: null
+  category: capital_allocation
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: (dividends_paid_common + equity_repurchased) / market_cap * 100
+  dependencies:
+  - dividends_paid_common
+  - equity_repurchased
+  - market_cap
+  synonyms:
+  - total shareholder yield
+  - total yield
+  - shareholder yield
+  - cash return yield
+  - total return to shareholders
+  output_format: percentage
+  output_suffix: '%'
+  calculation_notes: Dividends plus buybacks divided by market cap
+revenue_cagr_3yr:
+  display_name: Revenue CAGR (3-Year)
+  type: computed
+  statement: null
+  category: growth
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: (revenue_current / revenue_3yr_ago) ^ (1/3) - 1
+  dependencies:
+  - revenue
+  synonyms:
+  - revenue CAGR
+  - 3 year revenue growth
+  - revenue CAGR 3yr
+  - sales CAGR
+  - top line CAGR
+  - revenue compound growth
+  output_format: percentage
+  output_suffix: '%'
+  calculation_notes: Compound annual growth rate of revenue over 3 fiscal years
+earnings_per_share:
+  display_name: Earnings Per Share
+  type: computed
+  statement: null
+  category: per_share
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: net_income / diluted_shares_outstanding
+  dependencies:
+  - net_income
+  - diluted_shares_outstanding
+  synonyms:
+  - EPS
+  - earnings per share
+  - diluted EPS
+  - basic EPS
+  - net income per share
+  - profit per share
+  output_format: currency_per_share
+  calculation_notes: Net income divided by diluted weighted average shares outstanding
+revenue_per_share:
+  display_name: Revenue Per Share
+  type: computed
+  statement: null
+  category: per_share
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: revenue / diluted_shares_outstanding
+  dependencies:
+  - revenue
+  - diluted_shares_outstanding
+  synonyms:
+  - revenue per share
+  - sales per share
+  - RPS
+  - top line per share
+  output_format: currency_per_share
+  calculation_notes: Revenue divided by diluted shares outstanding
+fcf_per_share:
+  display_name: Free Cash Flow Per Share
+  type: computed
+  statement: null
+  category: per_share
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  formula: free_cash_flow / diluted_shares_outstanding
+  dependencies:
+  - free_cash_flow
+  - diluted_shares_outstanding
+  synonyms:
+  - FCF per share
+  - free cash flow per share
+  - cash flow per share
+  output_format: currency_per_share
+  calculation_notes: Free cash flow divided by diluted shares outstanding

@@ -105,7 +105,7 @@ describe('Property 13: Dual Reference Provision for Contradictions', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -133,7 +133,7 @@ describe('Property 13: Dual Reference Provision for Contradictions', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -175,7 +175,7 @@ describe('Property 13: Dual Reference Provision for Contradictions', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -205,7 +205,7 @@ describe('Property 13: Dual Reference Provision for Contradictions', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 });

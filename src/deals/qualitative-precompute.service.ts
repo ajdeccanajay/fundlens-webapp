@@ -5,43 +5,37 @@ import { BedrockService } from '../rag/bedrock.service';
 import { MDAIntelligenceService } from './mda-intelligence.service';
 import { MetricHierarchyService } from './metric-hierarchy.service';
 
-// Predefined qualitative questions for company analysis
+// Predefined qualitative questions for company analysis — deep value oriented
 const QUALITATIVE_QUESTIONS = {
-  companyDescription: [
-    "What exactly does {ticker} do? Describe the company's business model.",
-    "What products and services does {ticker} offer?",
+  managementCredibility: [
+    "Compare {ticker} management's forward-looking guidance from the past 4 quarters against actual reported results. Where have they consistently over-promised or under-delivered?",
+    "What are the largest insider transactions (buys, sells, grants) for {ticker} in the last 12 months, and how do they correlate with the timing of material disclosures in 8-Ks?",
   ],
-  revenueBreakdown: [
-    "How much revenue comes from each product or revenue source for {ticker}?",
-    "How much of {ticker}'s revenue is from US vs international markets?",
+  balanceSheetProtection: [
+    "Identify all off-balance sheet obligations, contingent liabilities, and guarantees disclosed across {ticker}'s most recent 10-K and 10-Q footnotes. Quantify total exposure relative to equity.",
+    "What is {ticker}'s maturity schedule of all outstanding debt, and what covenants or cross-default provisions could be triggered under a 20% revenue decline scenario?",
   ],
-  growthDrivers: [
-    "What are the main growth drivers for {ticker}'s business?",
-    "What new products or services is {ticker} planning to launch?",
+  capitalAllocation: [
+    "Over the past 3 years, how has {ticker} management allocated free cash flow between buybacks, dividends, M&A, capex, and debt paydown? Calculate the implied return on each allocation.",
+    "Identify all acquisitions {ticker} has made in the past 5 years. For each, compare the stated strategic rationale at announcement to the actual financial performance disclosed in subsequent filings.",
   ],
-  competitiveDynamics: [
-    "What industry is {ticker} in and who are the main competitors?",
-    "What are {ticker}'s competitive advantages?",
+  earningsQuality: [
+    "Flag any changes in {ticker}'s accounting policies, critical estimates, or revenue recognition methods disclosed in the past 3 years. What was the stated justification and quantified impact for each?",
+    "Calculate the divergence between {ticker}'s reported net income and operating cash flow over the past 8 quarters. Identify the primary drivers of any widening gap.",
   ],
-  thesis: [
-    "What are the potential risks for owning {ticker}?",
-    "What are the potential opportunities for {ticker}?",
-  ],
-  industry: [
-    "What is {ticker}'s total addressable market (TAM)?",
-  ],
-  management: [
-    "Who is on {ticker}'s management team?",
+  competitiveRisk: [
+    "Compare {ticker}'s Risk Factors section across the last 3 annual filings. What risks were added, removed, or materially re-worded, and what business developments explain the changes?",
+    "From {ticker}'s most recent earnings call, identify every question where management gave a non-answer, deflected, or pivoted away from the analyst's actual question. What topics were they avoiding?",
   ],
 };
 
 // Priority categories to precompute (most important first)
 const PRIORITY_CATEGORIES = [
-  'companyDescription',
-  'revenueBreakdown',
-  'competitiveDynamics',
-  'growthDrivers',
-  'thesis',
+  'managementCredibility',
+  'balanceSheetProtection',
+  'capitalAllocation',
+  'earningsQuality',
+  'competitiveRisk',
 ];
 
 export interface PrecomputeResult {
@@ -439,7 +433,7 @@ export class QualitativePrecomputeService {
     const { narratives, contextualMetrics, summary } = await this.semanticRetriever.retrieveWithContext({
       query: question,
       tickers: [ticker],
-      numberOfResults: 5,
+      numberOfResults: 8,
     });
 
     let answer = 'No relevant information found in SEC filings.';
@@ -450,6 +444,25 @@ export class QualitativePrecomputeService {
         const generated = await this.bedrockService.generate(question, {
           metrics: contextualMetrics,
           narratives: narratives,
+          systemPrompt: `You are a senior equity research analyst at a deep-value investment fund. Your analysis must be institutional-grade.
+
+FORMATTING REQUIREMENTS:
+- Use markdown headers (##, ###) to structure your response into clear sections
+- Use markdown tables (with | separators and --- header rows) for any quantitative comparisons, financial data, or multi-period data
+- Use bold (**text**) for key findings, red flags, and critical numbers
+- Use bullet points for lists of items
+- Include specific dollar amounts, percentages, and dates from the filings
+- When comparing periods, ALWAYS use a markdown table with columns for each period
+- When listing items (risks, acquisitions, changes), use a structured format with clear categorization
+- Aim for 400-800 words of substantive analysis
+- End with a "Key Takeaway" section summarizing the investment implications in 2-3 sentences
+
+ANALYSIS REQUIREMENTS:
+- Cite specific filing types and periods (e.g., "per the FY2024 10-K")
+- Quantify everything possible — avoid vague language
+- Flag contradictions between management statements and actual results
+- Highlight material changes year-over-year
+- Note what is NOT disclosed that should be (gaps in disclosure)`,
         });
         answer = generated.answer;
         confidence = summary.avgScore > 0.6 ? 'high' : summary.avgScore > 0.4 ? 'medium' : 'low';
@@ -463,7 +476,7 @@ export class QualitativePrecomputeService {
 
     return {
       answer,
-      sources: narratives.slice(0, 3).map(n => ({
+      sources: narratives.slice(0, 5).map(n => ({
         section: n.metadata.sectionType,
         filingType: n.metadata.filingType,
         fiscalPeriod: n.metadata.fiscalPeriod,

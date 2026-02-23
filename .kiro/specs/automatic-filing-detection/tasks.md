@@ -194,20 +194,20 @@
 
 ### 12. Deployment
 - [ ] 12.1 Deploy to staging
-  - [~] 12.1.1 Run database migrations
-  - [~] 12.1.2 Deploy backend services
-  - [~] 12.1.3 Deploy frontend updates
-  - [~] 12.1.4 Run smoke tests
+  - [ ] 12.1.1 Run database migrations
+  - [ ] 12.1.2 Deploy backend services
+  - [ ] 12.1.3 Deploy frontend updates
+  - [ ] 12.1.4 Run smoke tests
 - [ ] 12.2 Production deployment
-  - [~] 12.2.1 Enable feature flag
-  - [~] 12.2.2 Monitor detection runs
-  - [~] 12.2.3 Monitor error rates
-  - [~] 12.2.4 Monitor user engagement
+  - [ ] 12.2.1 Enable feature flag
+  - [ ] 12.2.2 Monitor detection runs
+  - [ ] 12.2.3 Monitor error rates
+  - [ ] 12.2.4 Monitor user engagement
 - [ ] 12.3 Post-deployment validation
-  - [~] 12.3.1 Verify detection runs daily
-  - [~] 12.3.2 Verify notifications created
-  - [~] 12.3.3 Verify tenant isolation
-  - [~] 12.3.4 Gather user feedback
+  - [ ] 12.3.1 Verify detection runs daily
+  - [ ] 12.3.2 Verify notifications created
+  - [ ] 12.3.3 Verify tenant isolation
+  - [ ] 12.3.4 Gather user feedback
 
 ## Success Criteria
 

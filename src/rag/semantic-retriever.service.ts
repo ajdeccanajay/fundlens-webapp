@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { StructuredRetrieverService } from './structured-retriever.service';
 import { AdvancedRetrievalService, AdvancedRetrievalConfig } from './advanced-retrieval.service';
 import { DocumentType } from './types/query-intent';
+import { MetricResolution } from './metric-resolution/types';
 
 export interface SemanticQuery {
   query: string;
@@ -809,9 +810,22 @@ export class SemanticRetrieverService {
       }
 
       // Build structured query for contextual metrics
+      // Create lightweight MetricResolution objects for each metric name
+      const metricResolutions: MetricResolution[] = metrics.map(m => ({
+        canonical_id: m,
+        display_name: m.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+        type: 'atomic' as const,
+        confidence: 'exact' as const,
+        fuzzy_score: null,
+        original_query: m,
+        match_source: 'semantic_retriever_contextual',
+        suggestions: null,
+        db_column: m,
+      }));
+
       const structuredQuery = {
         tickers,
-        metrics,
+        metrics: metricResolutions,
         periods: ['FY2024', 'FY2023'], // Recent periods for context
         filingTypes: ['10-K', '10-Q'] as DocumentType[], // Include both annual and quarterly
         includeComputed: false,

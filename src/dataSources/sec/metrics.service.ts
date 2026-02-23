@@ -1,9 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional, Inject } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { IngestionValidationService } from '../../s3/ingestion-validation.service';
 
 @Injectable()
 export class MetricsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Optional() @Inject(IngestionValidationService) private readonly ingestionValidator?: IngestionValidationService,
+  ) {}
 
   async createSampleMappings() {
     const sampleMappings = [
@@ -83,9 +87,31 @@ export class MetricsService {
     const saved: any[] = [];
     
     for (const metric of metrics) {
-      // Normalize metric name to lowercase
-      const normalizedMetric = metric.normalized_metric.toLowerCase();
-      
+      // Run ingestion validation before writing (Requirement 19)
+      let normalizedMetric = metric.normalized_metric.toLowerCase();
+      let value = metric.value;
+      let confidenceScore = metric.confidence_score || 1.0;
+      let xbrlTag: string | undefined;
+
+      if (this.ingestionValidator) {
+        const validation = await this.ingestionValidator.validate({
+          ticker: metric.ticker,
+          normalizedMetric: metric.normalized_metric,
+          rawLabel: metric.raw_label,
+          value: metric.value,
+          fiscalPeriod: metric.fiscal_period,
+          filingType: metric.filing_type,
+          statementType: metric.statement_type,
+          confidenceScore: metric.confidence_score || 1.0,
+          xbrlTag: metric.xbrl_tag,
+        });
+
+        normalizedMetric = validation.normalizedMetric;
+        value = validation.value;
+        confidenceScore = validation.confidenceScore;
+        xbrlTag = validation.xbrlTag;
+      }
+
       // Use upsert to avoid duplicates
       const result = await this.prisma.financialMetric.upsert({
         where: {
@@ -97,27 +123,28 @@ export class MetricsService {
           },
         },
         update: {
-          // Update if exists and new confidence is higher
           rawLabel: metric.raw_label,
-          value: metric.value,
+          value: value,
           periodType: metric.period_type,
           statementType: metric.statement_type,
           filingDate: new Date(metric.filing_date || Date.now()),
           statementDate: new Date(metric.statement_date || Date.now()),
-          confidenceScore: metric.confidence_score || 1.0,
+          confidenceScore: confidenceScore,
+          xbrlTag: xbrlTag || metric.xbrl_tag || undefined,
         },
         create: {
           ticker: metric.ticker,
           normalizedMetric: normalizedMetric,
           rawLabel: metric.raw_label,
-          value: metric.value,
+          value: value,
           fiscalPeriod: metric.fiscal_period,
           periodType: metric.period_type,
           filingType: metric.filing_type,
           statementType: metric.statement_type,
           filingDate: new Date(metric.filing_date || Date.now()),
           statementDate: new Date(metric.statement_date || Date.now()),
-          confidenceScore: metric.confidence_score || 1.0,
+          confidenceScore: confidenceScore,
+          xbrlTag: xbrlTag || metric.xbrl_tag || undefined,
         },
       });
       saved.push(result);

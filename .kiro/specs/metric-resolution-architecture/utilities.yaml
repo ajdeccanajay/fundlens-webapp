@@ -1,0 +1,59 @@
+# FundLens Metric Registry
+# Auto-generated from existing metrics mapping + GICS expansion
+# Source: mini_MVP_metrics.xlsx + manual curation
+
+rate_base:
+  display_name: Rate Base
+  type: atomic
+  statement: supplemental
+  category: regulatory
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: utilities
+  synonyms:
+  - rate base
+  - regulated rate base
+  - invested capital regulated
+  - rate base assets
+  - net plant in service
+  xbrl_tags: []
+  calculation_notes: Value of utility assets on which regulators allow the company to earn a return
+allowed_roe:
+  display_name: Allowed ROE
+  type: atomic
+  statement: supplemental
+  category: regulatory
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: utilities
+  synonyms:
+  - allowed ROE
+  - authorized return on equity
+  - regulatory ROE
+  - allowed return
+  - authorized ROE
+  - rate case ROE
+  xbrl_tags: []
+  calculation_notes: Return on equity authorized by regulators in rate case proceedings
+generation_capacity:
+  display_name: Generation Capacity
+  type: atomic
+  statement: supplemental
+  category: capacity
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: utilities
+  synonyms:
+  - generation capacity
+  - installed capacity
+  - megawatts
+  - MW
+  - GW
+  - nameplate capacity
+  - total capacity
+  - renewable capacity
+  xbrl_tags: []
+  calculation_notes: Total electricity generation capacity in megawatts (MW) or gigawatts (GW)

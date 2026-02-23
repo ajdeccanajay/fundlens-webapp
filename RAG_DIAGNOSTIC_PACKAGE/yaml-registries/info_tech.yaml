@@ -1,0 +1,153 @@
+# FundLens Metric Registry
+# Auto-generated from existing metrics mapping + GICS expansion
+# Source: mini_MVP_metrics.xlsx + manual curation
+
+annual_recurring_revenue:
+  display_name: Annual Recurring Revenue
+  type: atomic
+  statement: supplemental
+  category: revenue
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: saas_software
+  synonyms:
+  - ARR
+  - annual recurring revenue
+  - annualized recurring revenue
+  - run-rate revenue
+  - subscription ARR
+  - cloud ARR
+  - total ARR
+  xbrl_tags: []
+  calculation_notes: Annualized value of active recurring subscription contracts at period end
+net_revenue_retention:
+  display_name: Net Revenue Retention
+  type: atomic
+  statement: supplemental
+  category: retention
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: saas_software
+  synonyms:
+  - NRR
+  - net revenue retention
+  - net dollar retention
+  - NDR
+  - net retention rate
+  - dollar-based net retention
+  - DBNR
+  - expansion rate
+  - net expansion rate
+  xbrl_tags: []
+  calculation_notes: Revenue from existing customers this period vs same cohort last year; >100% indicates expansion
+gross_revenue_retention:
+  display_name: Gross Revenue Retention
+  type: atomic
+  statement: supplemental
+  category: retention
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: saas_software
+  synonyms:
+  - GRR
+  - gross retention
+  - gross revenue retention
+  - logo retention
+  - gross dollar retention
+  xbrl_tags: []
+  calculation_notes: Revenue retained from existing customers excluding expansion; measures churn
+customer_acquisition_cost:
+  display_name: Customer Acquisition Cost
+  type: atomic
+  statement: supplemental
+  category: unit_economics
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: saas_software
+  synonyms:
+  - CAC
+  - customer acquisition cost
+  - cost to acquire
+  - acquisition cost
+  - cost per customer
+  - sales and marketing per new customer
+  xbrl_tags: []
+  calculation_notes: Total sales and marketing spend divided by new customers acquired
+ltv_to_cac:
+  display_name: LTV/CAC Ratio
+  type: atomic
+  statement: supplemental
+  category: unit_economics
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: saas_software
+  synonyms:
+  - LTV CAC
+  - LTV to CAC
+  - lifetime value to CAC
+  - LTV/CAC ratio
+  - customer lifetime value ratio
+  - unit economics ratio
+  xbrl_tags: []
+  calculation_notes: Customer lifetime value divided by acquisition cost; >3x generally considered healthy
+rule_of_40:
+  display_name: Rule of 40
+  type: atomic
+  statement: supplemental
+  category: efficiency
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: saas_software
+  synonyms:
+  - rule of 40
+  - rule of forty
+  - growth plus margin
+  - revenue growth plus FCF margin
+  - growth efficiency
+  xbrl_tags: []
+  calculation_notes: Revenue growth rate plus FCF margin (or EBITDA margin); >40% considered efficient
+monthly_active_users:
+  display_name: Monthly Active Users
+  type: atomic
+  statement: supplemental
+  category: engagement
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: info_tech
+  synonyms:
+  - MAU
+  - monthly active users
+  - active users
+  - DAU
+  - daily active users
+  - user count
+  - registered users
+  - active accounts
+  xbrl_tags: []
+  calculation_notes: Unique users engaging with product in a given period
+average_revenue_per_user:
+  display_name: Average Revenue Per User
+  type: atomic
+  statement: supplemental
+  category: unit_economics
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: info_tech
+  synonyms:
+  - ARPU
+  - average revenue per user
+  - revenue per user
+  - ARPA
+  - average revenue per account
+  - revenue per subscriber
+  - RPU
+  xbrl_tags: []
+  calculation_notes: Total revenue divided by average number of users or accounts

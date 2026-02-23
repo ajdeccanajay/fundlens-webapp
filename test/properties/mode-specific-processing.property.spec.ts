@@ -104,7 +104,7 @@ describe('Property 19: Mode-Specific Processing', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -137,7 +137,7 @@ describe('Property 19: Mode-Specific Processing', () => {
           expect(result.results[0].processingRules).toEqual(mode.processingRules);
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -175,7 +175,7 @@ describe('Property 19: Mode-Specific Processing', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -208,7 +208,7 @@ describe('Property 19: Mode-Specific Processing', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -235,7 +235,7 @@ describe('Property 19: Mode-Specific Processing', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 });

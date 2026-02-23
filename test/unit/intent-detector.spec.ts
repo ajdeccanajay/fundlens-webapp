@@ -7,13 +7,78 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { IntentDetectorService } from '../../src/rag/intent-detector.service';
 import { BedrockService } from '../../src/rag/bedrock.service';
 import { IntentAnalyticsService } from '../../src/rag/intent-analytics.service';
+import { MetricRegistryService } from '../../src/rag/metric-resolution/metric-registry.service';
 
 describe('IntentDetectorService', () => {
   let service: IntentDetectorService;
   let bedrockService: BedrockService;
   let analyticsService: IntentAnalyticsService;
 
+  // Helper to build a mock MetricResolution
+  const buildResolution = (
+    canonicalId: string,
+    displayName: string,
+    confidence: 'exact' | 'fuzzy_auto' | 'unresolved',
+    dbColumn?: string,
+  ) => ({
+    canonical_id: canonicalId,
+    display_name: displayName,
+    type: 'atomic' as const,
+    confidence,
+    fuzzy_score: confidence === 'fuzzy_auto' ? 0.88 : null,
+    original_query: canonicalId,
+    match_source: confidence === 'unresolved' ? 'none' : 'synonym_index',
+    suggestions: null,
+    db_column: dbColumn || canonicalId,
+  });
+
+  const unresolvedResult = () => buildResolution('', '', 'unresolved');
+
   beforeEach(async () => {
+    // Mock MetricRegistryService that resolves common financial metrics
+    const mockMetricRegistry = {
+      resolve: jest.fn().mockImplementation((query: string) => {
+        const q = query.toLowerCase();
+        if (q.includes('revenue') || q === 'sales' || q.includes('top line')) {
+          return buildResolution('revenue', 'Revenue', 'exact', 'revenue');
+        }
+        if (q.includes('net income') || q === 'profit' || q === 'earnings' || q.includes('bottom line')) {
+          return buildResolution('net_income', 'Net Income', 'exact', 'net_income');
+        }
+        if (q.includes('gross profit')) {
+          return buildResolution('gross_profit', 'Gross Profit', 'exact', 'gross_profit');
+        }
+        if (q.includes('gross margin')) {
+          return buildResolution('gross_margin', 'Gross Margin', 'exact', 'gross_margin');
+        }
+        if (q.includes('operating margin')) {
+          return buildResolution('operating_margin', 'Operating Margin', 'exact', 'operating_margin');
+        }
+        if (q.includes('operating income') || q === 'ebit') {
+          return buildResolution('operating_income', 'Operating Income', 'exact', 'operating_income');
+        }
+        if (q.includes('ebitda')) {
+          return buildResolution('ebitda', 'EBITDA', 'exact', 'ebitda');
+        }
+        if (q.includes('total assets') || q === 'assets') {
+          return buildResolution('total_assets', 'Total Assets', 'exact', 'total_assets');
+        }
+        if (q.includes('cash flow') || q === 'ocf' || q === 'cfo') {
+          return buildResolution('operating_cash_flow', 'Operating Cash Flow', 'exact', 'operating_cash_flow');
+        }
+        if (q.includes('free cash flow') || q === 'fcf') {
+          return buildResolution('free_cash_flow', 'Free Cash Flow', 'exact', 'free_cash_flow');
+        }
+        if (q.includes('capex') || q.includes('capital expenditure')) {
+          return buildResolution('capital_expenditure', 'Capital Expenditure', 'exact', 'capital_expenditure');
+        }
+        return unresolvedResult();
+      }),
+      resolveMultiple: jest.fn().mockReturnValue([]),
+      getKnownMetricNames: jest.fn().mockReturnValue(new Map()),
+      normalizeMetricName: jest.fn((name: string) => name),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         IntentDetectorService,
@@ -21,12 +86,10 @@ describe('IntentDetectorService', () => {
           provide: BedrockService,
           useValue: {
             invokeClaude: jest.fn().mockImplementation((params) => {
-              // Extract ticker from the prompt
               const prompt = params.prompt;
               const tickerMatch = prompt.match(/Query: "([^"]+)"/);
               if (tickerMatch) {
                 const query = tickerMatch[1];
-                // Extract ticker from query
                 const tickers = ['NVDA', 'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'META', 'CRM', 'ORCL', 'ADBE'];
                 for (const ticker of tickers) {
                   if (query.toUpperCase().includes(ticker)) {
@@ -34,7 +97,6 @@ describe('IntentDetectorService', () => {
                   }
                 }
               }
-              // Default fallback
               return Promise.resolve('{"ticker":"NVDA","confidence":0.8}');
             }),
           },
@@ -45,6 +107,7 @@ describe('IntentDetectorService', () => {
             logDetection: jest.fn().mockResolvedValue(undefined),
           },
         },
+        { provide: MetricRegistryService, useValue: mockMetricRegistry },
       ],
     }).compile();
 
@@ -192,7 +255,8 @@ describe('IntentDetectorService', () => {
         expect(result.confidence).toBeGreaterThan(0.7);
         expect(result.ticker).toBe('NVDA');
         expect(result.metrics).toBeDefined();
-        expect(result.metrics).toContain('Revenue');
+        // Now uses canonical_id from MetricRegistryService
+        expect(result.metrics!.some(m => m.toLowerCase().includes('revenue'))).toBe(true);
       });
 
       it('should use regex for query with ticker + period = 0.8', async () => {
@@ -230,7 +294,8 @@ describe('IntentDetectorService', () => {
         const result = await service.detectIntent(query);
         
         expect(result.ticker).toBe('NVDA');
-        expect(result.metrics).toContain('Revenue');
+        expect(result.metrics).toBeDefined();
+        expect(result.metrics!.some(m => m.toLowerCase().includes('revenue'))).toBe(true);
       });
     });
   });
@@ -321,9 +386,9 @@ describe('IntentDetectorService', () => {
         expect(result.needsClarification).toBeFalsy();
         expect(result.ticker).toBe('NVDA');
         
-        // Should have specific metrics
+        // Should have specific metrics (canonical_id from registry)
         expect(result.metrics).toBeDefined();
-        expect(result.metrics).toContain('Revenue');
+        expect(result.metrics!.some(m => m.toLowerCase().includes('revenue'))).toBe(true);
       });
 
       it('should NOT detect "NVDA\'s risk factors" as ambiguous', async () => {
@@ -418,6 +483,110 @@ describe('IntentDetectorService', () => {
         expect(result.ticker).toBe('AAPL');
         expect(result.period).toBeDefined();
       });
+    });
+  });
+
+  describe('Multi-Year Period Extraction (Req 4.1-4.5)', () => {
+    it('should extract "past 5 years" as a range', async () => {
+      const result = await service.detectIntent('What is NVDA revenue over the past 5 years?');
+      const currentYear = new Date().getFullYear();
+      expect(result.periodType).toBe('range');
+      expect(result.periodStart).toBe(`FY${currentYear - 5}`);
+      expect(result.periodEnd).toBe(`FY${currentYear}`);
+      expect(result.period).toBeUndefined();
+    });
+
+    it('should extract "last 3 years" as a range', async () => {
+      const result = await service.detectIntent('Show me AAPL earnings last 3 years');
+      const currentYear = new Date().getFullYear();
+      expect(result.periodType).toBe('range');
+      expect(result.periodStart).toBe(`FY${currentYear - 3}`);
+      expect(result.periodEnd).toBe(`FY${currentYear}`);
+    });
+
+    it('should extract "5-year trend" as a range (Req 4.2)', async () => {
+      const result = await service.detectIntent('MSFT 5-year revenue trend');
+      const currentYear = new Date().getFullYear();
+      expect(result.periodType).toBe('range');
+      expect(result.periodStart).toBe(`FY${currentYear - 5}`);
+      expect(result.periodEnd).toBe(`FY${currentYear}`);
+    });
+
+    it('should extract "over the past decade" as 10-year range (Req 4.3)', async () => {
+      const result = await service.detectIntent('AAPL revenue over the past decade');
+      const currentYear = new Date().getFullYear();
+      expect(result.periodType).toBe('range');
+      expect(result.periodStart).toBe(`FY${currentYear - 10}`);
+      expect(result.periodEnd).toBe(`FY${currentYear}`);
+    });
+
+    it('should extract "yoy" as at least 2-year range (Req 4.4)', async () => {
+      const result = await service.detectIntent('NVDA revenue yoy');
+      const currentYear = new Date().getFullYear();
+      expect(result.periodType).toBe('range');
+      expect(result.periodStart).toBe(`FY${currentYear - 2}`);
+      expect(result.periodEnd).toBe(`FY${currentYear}`);
+    });
+
+    it('should prioritize specific FY over multi-year phrase (Req 4.5)', async () => {
+      const result = await service.detectIntent('NVDA FY2023 revenue');
+      expect(result.period).toBe('FY2023');
+      expect(result.periodType).toBe('annual');
+      expect(result.periodStart).toBeUndefined();
+      expect(result.periodEnd).toBeUndefined();
+    });
+
+    it('should cap N at 30 years', async () => {
+      const result = await service.detectIntent('AAPL revenue past 50 years');
+      const currentYear = new Date().getFullYear();
+      expect(result.periodType).toBe('range');
+      expect(result.periodStart).toBe(`FY${currentYear - 30}`);
+      expect(result.periodEnd).toBe(`FY${currentYear}`);
+    });
+
+    it('should still extract single year when no multi-year phrase', async () => {
+      const result = await service.detectIntent('NVDA revenue 2024');
+      expect(result.period).toBe('FY2024');
+      expect(result.periodType).toBe('annual');
+    });
+
+    it('should still extract "latest" period', async () => {
+      const result = await service.detectIntent('NVDA latest revenue');
+      expect(result.period).toBe('latest');
+      expect(result.periodType).toBe('latest');
+    });
+  });
+
+  describe('Expanded Trend Detection (Req 5.1-5.2)', () => {
+    const trendQueries = [
+      { query: 'how has NVDA revenue changed', keyword: 'how has' },
+      { query: 'how have margins evolved for AAPL', keyword: 'how have' },
+      { query: 'MSFT year over year revenue', keyword: 'year over year' },
+      { query: 'NVDA yoy growth', keyword: 'yoy' },
+      { query: 'multi-year AAPL revenue analysis', keyword: 'multi-year' },
+      { query: 'multi year MSFT trend', keyword: 'multi year' },
+      { query: 'NVDA revenue over the past few quarters', keyword: 'over the past' },
+      { query: 'AAPL earnings over the last period', keyword: 'over the last' },
+      { query: 'NVDA revenue past 5 years', keyword: 'past N years regex' },
+      { query: 'AAPL 5-year revenue', keyword: 'N-year regex' },
+      { query: 'MSFT revenue past decade', keyword: 'past decade regex' },
+    ];
+
+    trendQueries.forEach(({ query, keyword }) => {
+      it(`should detect trend for "${keyword}"`, async () => {
+        const result = await service.detectIntent(query);
+        expect(result.needsTrend).toBe(true);
+      });
+    });
+
+    it('should still detect existing trend keywords', async () => {
+      const result = await service.detectIntent('NVDA revenue trend');
+      expect(result.needsTrend).toBe(true);
+    });
+
+    it('should not detect trend for non-trend queries', async () => {
+      const result = await service.detectIntent('What is NVDA revenue for FY2024?');
+      expect(result.needsTrend).toBe(false);
     });
   });
 });

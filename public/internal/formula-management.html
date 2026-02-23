@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Formula Management — FundLens Admin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/design-system.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+
+        /* Auth */
+        .auth-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+        .auth-box { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 40px; width: 100%; max-width: 400px; }
+        .auth-box h1 { font-size: 24px; margin-bottom: 8px; color: #f8fafc; }
+        .auth-box p { color: #94a3b8; margin-bottom: 24px; font-size: 14px; }
+
+        /* Layout */
+        .page-header { background: #1e293b; border-bottom: 1px solid #334155; padding: 16px 32px; display: flex; justify-content: space-between; align-items: center; }
+        .page-header h1 { font-size: 20px; color: #f8fafc; }
+        .page-header a { color: #94a3b8; text-decoration: none; font-size: 14px; }
+        .page-header a:hover { color: #f8fafc; }
+        .container { max-width: 1100px; margin: 0 auto; padding: 32px; }
+
+        /* Forms & Inputs */
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; margin-bottom: 6px; font-size: 13px; color: #94a3b8; font-weight: 500; }
+        input, select, textarea { width: 100%; padding: 10px 12px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #e2e8f0; font-size: 14px; font-family: inherit; }
+        input:focus, select:focus, textarea:focus { outline: none; border-color: #3b82f6; }
+        textarea { resize: vertical; min-height: 60px; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+        /* Buttons */
+        .btn { padding: 10px 20px; border: none; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+        .btn-primary { background: #3b82f6; color: white; }
+        .btn-primary:hover { background: #2563eb; }
+        .btn-secondary { background: #334155; color: #e2e8f0; }
+        .btn-secondary:hover { background: #475569; }
+        .btn-success { background: #16a34a; color: white; }
+        .btn-success:hover { background: #15803d; }
+        .btn-danger { background: #dc2626; color: white; }
+        .btn-danger:hover { background: #b91c1c; }
+        .btn-sm { padding: 6px 14px; font-size: 13px; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Cards */
+        .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 24px; margin-bottom: 20px; }
+        .card h2 { font-size: 18px; color: #f8fafc; margin-bottom: 16px; }
+        .card h3 { font-size: 16px; color: #f8fafc; margin-bottom: 12px; }
+
+        /* Tabs */
+        .tabs { display: flex; gap: 4px; margin-bottom: 24px; background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 4px; }
+        .tab { padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; color: #94a3b8; transition: all 0.2s; border: none; background: none; font-family: inherit; }
+        .tab:hover { color: #f8fafc; }
+        .tab.active { background: #3b82f6; color: white; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* Table */
+        .data-table { width: 100%; border-collapse: collapse; }
+        .data-table th, .data-table td { padding: 12px; text-align: left; border-bottom: 1px solid #334155; }
+        .data-table th { color: #94a3b8; font-weight: 500; font-size: 12px; text-transform: uppercase; }
+        .data-table td { color: #e2e8f0; font-size: 14px; }
+        .data-table tr:hover { background: #334155; }
+</style>
+</head>
+<body>
+    <!-- Auth Screen -->
+    <div id="authScreen" class="auth-screen">
+        <div class="auth-box">
+            <h1>🧮 Formula Management</h1>
+            <p>Enter your admin API key to manage computed metric formulas.</p>
+            <div class="form-group">
+                <label for="adminKey">Admin API Key</label>
+                <input type="password" id="adminKey" placeholder="Enter your admin key">
+            </div>
+            <button id="authBtn" class="btn btn-primary" style="width: 100%;">Authenticate</button>
+            <div id="authError" style="color: #f87171; font-size: 14px; margin-top: 12px; display: none;"></div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div id="mainContent" style="display: none;">
+        <div class="page-header">
+            <h1>🧮 Formula Management</h1>
+            <div style="display: flex; gap: 16px; align-items: center;">
+                <a href="/internal/platform-admin.html">← Back to Admin</a>
+                <button id="logoutBtn" class="btn btn-secondary btn-sm">Logout</button>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="tabs">
+                <button class="tab active" data-tab="submit">Submit Formula</button>
+                <button class="tab" data-tab="pending">Pending Review</button>
+            </div>
+
+            <!-- Submit Formula Tab -->
+            <div id="submitTab" class="tab-content active">
+                <div class="card">
+                    <h2>Submit New Computed Metric Formula</h2>
+                    <p style="color: #94a3b8; margin-bottom: 20px; font-size: 14px;">
+                        Define a new formula. It will be validated against the Python calculation engine before saving.
+                    </p>
+                    <form id="formulaForm">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="canonicalId">Canonical ID *</label>
+                                <input type="text" id="canonicalId" required placeholder="e.g. custom_leverage_ratio" style="font-family: 'JetBrains Mono', monospace;">
+                            </div>
+                            <div class="form-group">
+                                <label for="displayName">Display Name *</label>
+                                <input type="text" id="displayName" required placeholder="e.g. Custom Leverage Ratio">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="formula">Formula Expression *</label>
+                            <input type="text" id="formula" required placeholder="e.g. net_debt / ebitda" style="font-family: 'JetBrains Mono', monospace;">
+                            <div style="font-size: 12px; color: #64748b; margin-top: 4px;">
+                                Use canonical metric IDs as variables. Supports: +, -, *, /, **, (). Named functions: cagr(), irr(), compound_growth()
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="dependencies">Dependencies (comma-separated canonical IDs) *</label>
+                            <input type="text" id="dependencies" required placeholder="e.g. net_debt, ebitda" style="font-family: 'JetBrains Mono', monospace;">
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="outputFormat">Output Format *</label>
+                                <select id="outputFormat" required>
+                                    <option value="ratio">Ratio (x)</option>
+                                    <option value="percentage">Percentage (%)</option>
+                                    <option value="currency">Currency ($)</option>
+                                    <option value="days">Days</option>
+                                    <option value="currency_per_share">Currency per Share</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="category">Category *</label>
+                                <select id="category" required>
+                                    <option value="leverage">Leverage</option>
+                                    <option value="profitability">Profitability</option>
+                                    <option value="liquidity">Liquidity</option>
+                                    <option value="efficiency">Efficiency</option>
+                                    <option value="valuation">Valuation</option>
+                                    <option value="growth">Growth</option>
+                                    <option value="capital_allocation">Capital Allocation</option>
+                                    <option value="earnings_quality">Earnings Quality</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="industry">Industry</label>
+                                <select id="industry">
+                                    <option value="all">All Industries</option>
+                                    <option value="energy">Energy</option>
+                                    <option value="financials">Financials</option>
+                                    <option value="healthcare">Healthcare</option>
+                                    <option value="info_tech">Info Tech</option>
+                                    <option value="real_estate">Real Estate</option>
+                                    <option value="utilities">Utilities</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="submittedBy">Submitted By *</label>
+                                <input type="text" id="submittedBy" required placeholder="your-email@company.com">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="synonyms">Synonyms (comma-separated, optional)</label>
+                            <input type="text" id="synonyms" placeholder="e.g. custom ratio, my leverage metric">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="calculationNotes">Calculation Notes (optional)</label>
+                            <textarea id="calculationNotes" rows="2" placeholder="Explain what this metric measures..."></textarea>
+                        </div>
+
+                        <div id="submitError" style="color: #f87171; font-size: 14px; margin-bottom: 12px; display: none;"></div>
+                        <div id="submitSuccess" style="color: #4ade80; font-size: 14px; margin-bottom: 12px; display: none;"></div>
+
+                        <button type="submit" class="btn btn-primary" id="submitBtn">Validate & Submit</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Pending Review Tab -->
+            <div id="pendingTab" class="tab-content">
+                <div class="card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <h2 style="margin: 0;">Pending Formulas</h2>
+                        <button class="btn btn-secondary btn-sm" onclick="loadPending()">🔄 Refresh</button>
+                    </div>
+                    <div id="pendingList">
+                        <div style="text-align: center; padding: 40px; color: #94a3b8;">Loading...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detail Modal -->
+    <div id="detailModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; display: none; align-items: center; justify-content: center;">
+        <div style="background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 24px; width: 100%; max-width: 700px; max-height: 90vh; overflow-y: auto;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 id="modalTitle" style="color: #f8fafc; margin: 0;"></h2>
+                <button onclick="closeModal()" style="background: none; border: none; color: #94a3b8; font-size: 24px; cursor: pointer;">&times;</button>
+            </div>
+            <div id="modalContent"></div>
+        </div>
+    </div>
+
+    <script>
+        let adminKey = '';
+
+        // Auth
+        document.getElementById('authBtn').addEventListener('click', authenticate);
+        document.getElementById('adminKey').addEventListener('keypress', e => { if (e.key === 'Enter') authenticate(); });
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            adminKey = '';
+            document.getElementById('mainContent').style.display = 'none';
+            document.getElementById('authScreen').style.display = 'flex';
+            document.getElementById('adminKey').value = '';
+        });
+
+        async function authenticate() {
+            const key = document.getElementById('adminKey').value.trim();
+            if (!key) { showMsg('authError', 'Please enter your admin key'); return; }
+            adminKey = key;
+            try {
+                // Test auth by hitting the rebuild-index endpoint info (or pending list)
+                await apiFetch('/api/admin/formulas/pending');
+                document.getElementById('authScreen').style.display = 'none';
+                document.getElementById('mainContent').style.display = 'block';
+                loadPending();
+            } catch (e) {
+                showMsg('authError', 'Invalid admin key');
+                adminKey = '';
+            }
+        }
+
+        // Tabs
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById(tab.dataset.tab + 'Tab').classList.add('active');
+                if (tab.dataset.tab === 'pending') loadPending();
+            });
+        });
+
+        // Submit Formula
+        document.getElementById('formulaForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            hideMsg('submitError');
+            hideMsg('submitSuccess');
+            const btn = document.getElementById('submitBtn');
+            btn.disabled = true;
+            btn.textContent = 'Validating...';
+
+            const deps = document.getElementById('dependencies').value.split(',').map(s => s.trim()).filter(Boolean);
+            const syns = document.getElementById('synonyms').value.split(',').map(s => s.trim()).filter(Boolean);
+
+            const body = {
+                canonicalId: document.getElementById('canonicalId').value.trim(),
+                displayName: document.getElementById('displayName').value.trim(),
+                formula: document.getElementById('formula').value.trim(),
+                dependencies: deps,
+                outputFormat: document.getElementById('outputFormat').value,
+                category: document.getElementById('category').value,
+                industry: document.getElementById('industry').value,
+                submittedBy: document.getElementById('submittedBy').value.trim(),
+                synonyms: syns.length ? syns : undefined,
+                calculationNotes: document.getElementById('calculationNotes').value.trim() || undefined,
+            };
+
+            try {
+                const result = await apiFetch('/api/admin/formulas', 'POST', body);
+                showMsg('submitSuccess', `Formula "${result.formula.displayName}" submitted for review (ID: ${result.formula.id.slice(0, 8)}...)`);
+                document.getElementById('formulaForm').reset();
+            } catch (err) {
+                showMsg('submitError', err.message || 'Submission failed');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Validate & Submit';
+            }
+        });
+
+        // Load Pending
+        async function loadPending() {
+            const list = document.getElementById('pendingList');
+            try {
+                const data = await apiFetch('/api/admin/formulas/pending');
+                const formulas = data.formulas;
+                if (!formulas.length) {
+                    list.innerHTML = '<div style="text-align: center; padding: 40px; color: #94a3b8;">✨ No pending formulas</div>';
+                    return;
+                }
+                list.innerHTML = `
+                    <table class="data-table">
+                        <thead><tr><th>Canonical ID</th><th>Display Name</th><th>Formula</th><th>Category</th><th>Submitted</th><th>Actions</th></tr></thead>
+                        <tbody>${formulas.map(f => `
+                            <tr>
+                                <td><code style="font-family: 'JetBrains Mono', monospace; font-size: 13px;">${esc(f.canonicalId)}</code></td>
+                                <td>${esc(f.displayName)}</td>
+                                <td><code style="font-family: 'JetBrains Mono', monospace; font-size: 13px;">${esc(f.formula)}</code></td>
+                                <td>${esc(f.category)}</td>
+                                <td>${fmtDate(f.submittedAt)}</td>
+                                <td style="white-space: nowrap;">
+                                    <button class="btn btn-secondary btn-sm" onclick="viewFormula('${f.id}')">View</button>
+                                    <button class="btn btn-success btn-sm" onclick="approveFormula('${f.id}')">Approve</button>
+                                    <button class="btn btn-danger btn-sm" onclick="rejectFormula('${f.id}')">Reject</button>
+                                </td>
+                            </tr>
+                        `).join('')}</tbody>
+                    </table>`;
+            } catch (err) {
+                list.innerHTML = `<div style="color: #f87171; padding: 20px;">Failed to load: ${err.message}</div>`;
+            }
+        }
+
+        async function viewFormula(id) {
+            try {
+                const data = await apiFetch(`/api/admin/formulas/${id}`);
+                const f = data.formula;
+                document.getElementById('modalTitle').textContent = f.displayName;
+                document.getElementById('modalContent').innerHTML = `
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                        <div><span style="color: #94a3b8; font-size: 12px;">Canonical ID</span><br><code style="font-family: 'JetBrains Mono', monospace;">${esc(f.canonicalId)}</code></div>
+                        <div><span style="color: #94a3b8; font-size: 12px;">Status</span><br><span style="color: ${f.status === 'approved' ? '#4ade80' : f.status === 'rejected' ? '#f87171' : '#fbbf24'};">${f.status}</span></div>
+                        <div><span style="color: #94a3b8; font-size: 12px;">Category</span><br>${esc(f.category)}</div>
+                        <div><span style="color: #94a3b8; font-size: 12px;">Output Format</span><br>${esc(f.outputFormat)}</div>
+                        <div><span style="color: #94a3b8; font-size: 12px;">Industry</span><br>${esc(f.industry)}</div>
+                        <div><span style="color: #94a3b8; font-size: 12px;">Submitted By</span><br>${esc(f.submittedBy)}</div>
+                    </div>
+                    <div style="margin-bottom: 16px;">
+                        <span style="color: #94a3b8; font-size: 12px;">Formula</span><br>
+                        <code style="font-family: 'JetBrains Mono', monospace; background: #0f172a; padding: 8px 12px; border-radius: 6px; display: block; margin-top: 4px;">${esc(f.formula)}</code>
+                    </div>
+                    <div style="margin-bottom: 16px;">
+                        <span style="color: #94a3b8; font-size: 12px;">Dependencies</span><br>
+                        <code style="font-family: 'JetBrains Mono', monospace;">${Array.isArray(f.dependencies) ? f.dependencies.join(', ') : f.dependencies}</code>
+                    </div>
+                    ${f.synonyms ? `<div style="margin-bottom: 16px;"><span style="color: #94a3b8; font-size: 12px;">Synonyms</span><br>${Array.isArray(f.synonyms) ? f.synonyms.join(', ') : f.synonyms}</div>` : ''}
+                    ${f.calculationNotes ? `<div style="margin-bottom: 16px;"><span style="color: #94a3b8; font-size: 12px;">Notes</span><br>${esc(f.calculationNotes)}</div>` : ''}
+                    ${f.rejectionReason ? `<div style="margin-bottom: 16px;"><span style="color: #94a3b8; font-size: 12px;">Rejection Reason</span><br><span style="color: #f87171;">${esc(f.rejectionReason)}</span></div>` : ''}
+                    <div style="margin-top: 16px; font-size: 12px; color: #64748b;">
+                        Submitted: ${fmtDate(f.submittedAt)}${f.reviewedAt ? ` · Reviewed: ${fmtDate(f.reviewedAt)} by ${esc(f.reviewedBy || '')}` : ''}
+                    </div>
+                `;
+                document.getElementById('detailModal').style.display = 'flex';
+            } catch (err) {
+                alert('Failed to load formula: ' + err.message);
+            }
+        }
+
+        async function approveFormula(id) {
+            const reviewedBy = prompt('Your name (reviewer):');
+            if (!reviewedBy) return;
+            try {
+                await apiFetch(`/api/admin/formulas/${id}/approve`, 'POST', { reviewedBy });
+                alert('Formula approved and index rebuild triggered.');
+                loadPending();
+            } catch (err) {
+                alert('Failed to approve: ' + err.message);
+            }
+        }
+
+        async function rejectFormula(id) {
+            const rejectionReason = prompt('Rejection reason:');
+            if (!rejectionReason) return;
+            const reviewedBy = prompt('Your name (reviewer):');
+            if (!reviewedBy) return;
+            try {
+                await apiFetch(`/api/admin/formulas/${id}/reject`, 'POST', { rejectionReason, reviewedBy });
+                alert('Formula rejected.');
+                loadPending();
+            } catch (err) {
+                alert('Failed to reject: ' + err.message);
+            }
+        }
+
+        function closeModal() { document.getElementById('detailModal').style.display = 'none'; }
+        document.getElementById('detailModal').addEventListener('click', e => { if (e.target === document.getElementById('detailModal')) closeModal(); });
+
+        // Helpers
+        async function apiFetch(url, method = 'GET', body = null) {
+            const opts = { method, headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey } };
+            if (body) opts.body = JSON.stringify(body);
+            const res = await fetch(url, opts);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.message || 'Request failed');
+            return data;
+        }
+        function showMsg(id, msg) { const el = document.getElementById(id); el.textContent = msg; el.style.display = 'block'; }
+        function hideMsg(id) { document.getElementById(id).style.display = 'none'; }
+        function esc(s) { if (!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+        function fmtDate(d) { if (!d) return '-'; return new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }); }
+    </script>
+</body>
+</html>

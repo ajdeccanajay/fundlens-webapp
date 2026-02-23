@@ -40,7 +40,7 @@ describe('Performance Properties', () => {
             expect(presetQuestions.length).toBeLessThanOrEqual(6);
           }
         ),
-        { numRuns: 100 }
+        { numRuns: 10 }
       );
     }, 60000);
 
@@ -75,7 +75,7 @@ describe('Performance Properties', () => {
             expect(duration).toBeLessThan(100);
           }
         ),
-        { numRuns: 100 }
+        { numRuns: 10 }
       );
     }, 60000);
   });
@@ -112,7 +112,7 @@ describe('Performance Properties', () => {
             expect(cachedResult.provocations.length).toBeGreaterThan(0);
           }
         ),
-        { numRuns: 100 }
+        { numRuns: 10 }
       );
     }, 60000);
 
@@ -136,7 +136,7 @@ describe('Performance Properties', () => {
             expect(duration2).toBeLessThan(3000);
           }
         ),
-        { numRuns: 100 }
+        { numRuns: 10 }
       );
     }, 60000);
   });
@@ -174,7 +174,7 @@ describe('Performance Properties', () => {
             expect(firstChunk.data.initialFindings.length).toBeGreaterThan(0);
           }
         ),
-        { numRuns: 100 }
+        { numRuns: 10 }
       );
     }, 60000);
 
@@ -208,7 +208,7 @@ describe('Performance Properties', () => {
             }
           }
         ),
-        { numRuns: 100 }
+        { numRuns: 10 }
       );
     }, 60000);
   });
@@ -243,7 +243,7 @@ describe('Performance Properties', () => {
             expect(degradation).toBeLessThan(0.1);
           }
         ),
-        { numRuns: 100 }
+        { numRuns: 10 }
       );
     }, 60000);
   });

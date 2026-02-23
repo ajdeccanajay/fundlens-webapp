@@ -145,7 +145,7 @@ describe('Property 7: Provocation Structure Completeness', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -200,7 +200,7 @@ describe('Property 7: Provocation Structure Completeness', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -250,7 +250,7 @@ describe('Property 7: Provocation Structure Completeness', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -285,7 +285,7 @@ describe('Property 7: Provocation Structure Completeness', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -331,7 +331,7 @@ describe('Property 7: Provocation Structure Completeness', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 });

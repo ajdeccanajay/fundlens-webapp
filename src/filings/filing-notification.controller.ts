@@ -31,7 +31,7 @@ import { TENANT_CONTEXT_KEY, TenantContext } from '../tenant/tenant-context';
  * - GET  /api/filings/detection-status        - Get detection state for all tickers (admin only)
  * - GET  /api/filings/detection-summary       - Get detection summary (admin only)
  */
-@Controller('api/filings')
+@Controller('filings')
 @UseGuards(TenantGuard)
 export class FilingNotificationController {
   private readonly logger = new Logger(FilingNotificationController.name);

@@ -54,7 +54,7 @@ import { ProvocationsController } from './provocations.controller';
 @Module({
   imports: [
     HttpModule,
-    RAGModule,
+    forwardRef(() => RAGModule),
     TenantModule,
     forwardRef(() => S3Module),
     EventEmitterModule.forRoot(),

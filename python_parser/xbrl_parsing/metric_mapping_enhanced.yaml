@@ -216,6 +216,7 @@ metrics:
   - id: capex
     name: Capital Expenditures
     canonical_name: Capital Expenditures
+    db_column: capital_expenditures
     statement_type: cash_flow
     period_type: duration
     synonyms:
@@ -260,6 +261,7 @@ metrics:
   - id: cash
     name: Cash
     canonical_name: Cash and Cash Equivalents
+    db_column: cash_and_equivalents
     statement_type: balance_sheet
     period_type: instant
     synonyms:
@@ -297,6 +299,7 @@ metrics:
   - id: change_in_working_capital
     name: Change in Working Capital
     canonical_name: Change in Working Capital
+    db_column: changes_in_working_capital
     statement_type: cash_flow
     period_type: duration
     synonyms:
@@ -561,6 +564,7 @@ metrics:
   - id: deferred_taxes_cf
     name: Deferred Taxes (CF)
     canonical_name: Deferred Taxes (CF)
+    db_column: deferred_taxes
     statement_type: cash_flow
     period_type: duration
     synonyms:
@@ -743,6 +747,7 @@ metrics:
   - id: eps_basic
     name: EPS (Basic)
     canonical_name: Earnings Per Share - Basic
+    db_column: earnings_per_share_basic
     statement_type: income_statement
     period_type: duration
     synonyms:
@@ -765,6 +770,7 @@ metrics:
   - id: eps_diluted
     name: EPS (Diluted)
     canonical_name: Earnings Per Share - Diluted
+    db_column: earnings_per_share_diluted
     statement_type: income_statement
     period_type: duration
     synonyms:
@@ -1531,6 +1537,7 @@ metrics:
   - id: ppe_net
     name: PP&E Net
     canonical_name: Property, Plant & Equipment (Net)
+    db_column: property_plant_equipment
     statement_type: balance_sheet
     period_type: instant
     synonyms:
@@ -1692,6 +1699,7 @@ metrics:
   - id: r_and_d
     name: R&D
     canonical_name: Research & Development
+    db_column: research_and_development
     statement_type: income_statement
     period_type: duration
     synonyms:
@@ -1989,6 +1997,7 @@ metrics:
   - id: sga
     name: SG&A
     canonical_name: Selling, General & Administrative
+    db_column: selling_general_admin
     statement_type: income_statement
     period_type: duration
     synonyms:

@@ -1,0 +1,27 @@
+# FundLens Tenant Overlay — Third Avenue Management
+# PE-specific synthesis overlay for HybridSynthesisService
+# Loaded by HybridSynthesisService.loadTenantOverlay()
+
+tenant_id: third_avenue
+display_name: Third Avenue Management
+asset_class: private_equity
+
+synthesis_instructions: |
+  You are advising a deep-value private equity analyst at Third Avenue Management.
+  Apply the following PE-specific lens to your analysis:
+  - Emphasize balance sheet protection, margin of safety, and management alignment.
+  - Prioritize free cash flow generation and capital allocation discipline over revenue growth.
+  - Use Marty Whitman value investing terminology where appropriate (e.g., "owner earnings", "asset discount").
+  - Evaluate management credibility through insider ownership and capital allocation track record.
+  - Frame conclusions in terms of intrinsic value vs. market price, not momentum or sentiment.
+  - When discussing leverage, focus on net debt / EBITDA and interest coverage as safety metrics.
+  - Highlight any divergence between GAAP earnings and economic reality (e.g., non-cash charges, restructuring).
+
+synonym_mappings:
+  distributable_cash: free_cash_flow
+  owner_earnings: net_income
+  cash_operating_profit: ebitda
+  discount_to_nav: price_to_book
+  leverage_safety: net_debt_to_ebitda
+  debt_coverage: net_debt_to_ebitda
+  asset_discount: price_to_book

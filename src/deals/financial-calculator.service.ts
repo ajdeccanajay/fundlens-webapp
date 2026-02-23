@@ -777,4 +777,52 @@ export class FinancialCalculatorService {
       where: { ticker: ticker.toUpperCase() },
     });
   }
+
+  /**
+   * Evaluates a formula expression with named inputs via the Python /calculate endpoint.
+   * Uses simpleeval on the Python side for safe, sandboxed evaluation.
+   *
+   * @param formula - Formula string, e.g. "gross_profit / revenue * 100"
+   * @param inputs - Named numeric inputs, e.g. { gross_profit: 50000000, revenue: 120000000 }
+   * @param outputFormat - Output format hint (percentage, ratio, currency, days)
+   * @returns Object with result and audit trail, or null with error explanation
+   */
+  async evaluateFormula(
+    formula: string,
+    inputs: Record<string, number>,
+    outputFormat: string = 'ratio',
+  ): Promise<{ result: number; audit_trail: any } | { result: null; error: string }> {
+    this.logger.debug(
+      `Evaluating formula: ${formula} with ${Object.keys(inputs).length} inputs`,
+    );
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+
+      const response = await fetch(`${PYTHON_PARSER_URL}/calculate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ formula, inputs }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      const data = await response.json();
+
+      if (data.error) {
+        this.logger.warn(`Formula evaluation error: ${data.error}`);
+        return { result: null, error: data.error };
+      }
+
+      return {
+        result: data.result,
+        audit_trail: data.audit_trail,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to evaluate formula via Python: ${error.message}`);
+      return { result: null, error: `Python calculator unreachable: ${error.message}` };
+    }
+  }
+
 }

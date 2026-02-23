@@ -1,0 +1,32 @@
+# FundLens Metric Registry
+# Auto-generated from existing metrics mapping + GICS expansion
+# Source: mini_MVP_metrics.xlsx + manual curation
+
+client: third_avenue_management
+notes: Third Avenue is a deep value fund. They emphasize balance sheet protection, margin of safety, and management alignment.
+  Terminology reflects Marty Whitman value investing philosophy.
+overrides:
+  net_income:
+    additional_synonyms:
+    - owner earnings
+    - real economic earnings
+    - Whitman earnings
+  ebitda:
+    additional_synonyms:
+    - cash operating profit
+    - operating cash earnings
+  free_cash_flow:
+    additional_synonyms:
+    - distributable cash
+    - true free cash flow
+    - owner free cash flow
+  price_to_book:
+    additional_synonyms:
+    - discount to NAV
+    - book value discount
+    - asset discount
+  net_debt_to_ebitda:
+    additional_synonyms:
+    - leverage safety
+    - debt coverage
+    - debt safety ratio

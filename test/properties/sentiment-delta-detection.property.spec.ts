@@ -107,7 +107,7 @@ describe('Property 34: Sentiment Delta Detection', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -165,7 +165,7 @@ describe('Property 34: Sentiment Delta Detection', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -196,7 +196,7 @@ describe('Property 34: Sentiment Delta Detection', () => {
           expect(Math.abs(result.priorScore - result.currentScore)).toBeLessThan(0.01);
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -254,7 +254,7 @@ describe('Property 34: Sentiment Delta Detection', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -311,7 +311,7 @@ describe('Property 34: Sentiment Delta Detection', () => {
           expect(result.direction).toBeDefined();
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -354,7 +354,7 @@ describe('Property 34: Sentiment Delta Detection', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 });

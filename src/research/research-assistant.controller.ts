@@ -92,6 +92,19 @@ export class ResearchAssistantController {
   }
 
   /**
+   * Get messages for a conversation
+   * GET /api/research/conversations/:id/messages
+   */
+  @Get('conversations/:id/messages')
+  async getConversationMessages(@Param('id') conversationId: string) {
+    const messages = await this.researchService.getConversationMessages(conversationId);
+    return {
+      success: true,
+      data: messages,
+    };
+  }
+
+  /**
    * Update conversation
    * PATCH /api/research/conversations/:id
    */

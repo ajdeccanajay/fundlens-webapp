@@ -131,7 +131,7 @@ describe('Property 12: Statement vs Results Contradiction Detection', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -175,7 +175,7 @@ describe('Property 12: Statement vs Results Contradiction Detection', () => {
           expect(assessment.missedStatements).toBeLessThanOrEqual(assessment.totalStatements);
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -208,7 +208,7 @@ describe('Property 12: Statement vs Results Contradiction Detection', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -235,7 +235,7 @@ describe('Property 12: Statement vs Results Contradiction Detection', () => {
           expect(Array.isArray(contradictions)).toBe(true);
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 });

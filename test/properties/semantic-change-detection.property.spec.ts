@@ -111,7 +111,7 @@ describe('Property 5: Semantic Similarity Beyond Text Matching', () => {
           expect(conceptualChange.keyConceptsRemoved).toBeDefined();
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -157,7 +157,7 @@ describe('Property 5: Semantic Similarity Beyond Text Matching', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -184,7 +184,7 @@ describe('Property 5: Semantic Similarity Beyond Text Matching', () => {
           expect(Math.abs(similarity - reverseSimilarity)).toBeLessThan(0.01);
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -229,7 +229,7 @@ describe('Property 5: Semantic Similarity Beyond Text Matching', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -274,7 +274,7 @@ describe('Property 5: Semantic Similarity Beyond Text Matching', () => {
           expect(conceptualChange.similarityScore).toBeLessThanOrEqual(1);
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 });

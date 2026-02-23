@@ -19,11 +19,13 @@ import {
   Put, 
   Delete, 
   Body, 
-  Param, 
+  Param,
+  Query,
   Logger, 
   HttpCode, 
   HttpStatus, 
   HttpException,
+  BadRequestException,
   UseGuards,
 } from '@nestjs/common';
 import { DealService, type CreateDealDto, type UpdateDealDto } from './deal.service';
@@ -102,6 +104,50 @@ export class DealController {
       };
     }
   }
+  /**
+   * Get deal by ticker
+   * GET /api/deals/by-ticker/:ticker
+   *
+   * Returns the deal for the given ticker within the current tenant.
+   * Also aliased as GET /api/deals/info?ticker=:ticker for backwards compatibility.
+   */
+  @Get('by-ticker/:ticker')
+  async getDealByTicker(@Param('ticker') ticker: string) {
+    try {
+      const deal = await this.dealService.getDealByTicker(ticker);
+      return {
+        success: true,
+        data: deal,
+        message: `Retrieved deal for ticker ${ticker}`,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to fetch deal by ticker: ${error.message}`);
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      return {
+        success: false,
+        error: error.message,
+        message: 'Failed to fetch deal',
+      };
+    }
+  }
+
+  /**
+   * Get deal info by ticker (alias for by-ticker endpoint)
+   * GET /api/deals/info?ticker=:ticker
+   */
+  @Get('info')
+  async getDealInfo(@Query('ticker') ticker: string) {
+    if (!ticker) {
+      throw new BadRequestException('ticker query parameter is required');
+    }
+    const deal = await this.dealService.getDealByTicker(ticker);
+    // Return the deal directly (not wrapped) for backwards compatibility
+    return deal;
+  }
+
+
 
   /**
    * Get deal statistics for the authenticated tenant

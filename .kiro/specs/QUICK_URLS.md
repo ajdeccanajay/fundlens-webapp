@@ -26,10 +26,11 @@ http://localhost:3000/app/deals/workspace.html?ticker=NVDA
 
 ## Other Testing URLs
 
-### Research Assistant
+### Research Assistant (inside Workspace)
 ```
-http://localhost:3000/app/research/index.html
+http://localhost:3000/app/deals/workspace.html?ticker=AAPL
 ```
+The research assistant is the chat panel within the workspace — there is no separate research page.
 
 ### Deal Dashboard
 ```

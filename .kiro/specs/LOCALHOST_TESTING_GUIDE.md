@@ -113,42 +113,19 @@ http://localhost:3000/comprehensive-financial-analysis.html
 
 ---
 
-## 🔬 Research Assistant (Phase 1, 2 & 3 Complete!)
+## 🔬 Research Assistant (inside Workspace)
 
-### 8. Research Assistant with Scratchpad
+### 8. Research Assistant
 ```
-http://localhost:3000/app/research/
+http://localhost:3000/app/deals/workspace.html?ticker=AAPL
 ```
-**Features** (✅ **FULLY TESTED**):
-- ✅ Create conversations
-- ✅ Send messages with streaming responses
-- ✅ Pin/unpin conversations
-- ✅ Delete conversations
-- ✅ Welcome screen with quick queries
-- ✅ Markdown rendering
-- ✅ Mobile responsive
-- ✅ **NEW: Simple Scratchpad**
-  - ✅ Save favorite answers
-  - ✅ Add personal notes
-  - ✅ View saved items
-  - ✅ Export to Markdown
-  - ✅ Delete items
-- ✅ 32 automated tests (21 frontend + 11 scratchpad)
+The research assistant is the chat panel within the workspace — there is no separate research page.
 
 **Testing**:
-1. Open Research Assistant
-2. Click "New Conversation"
-3. Type a query (e.g., "What is AAPL revenue?")
-4. Press Enter or click Send
-5. Watch streaming response
-6. **NEW: Click "Save" button below response**
-7. **NEW: Add notes (optional) and click "Save"**
-8. **NEW: Click "Scratchpad" button in top nav**
-9. **NEW: Verify item appears in scratchpad panel**
-10. **NEW: Click "Export to Markdown" to download**
-11. **NEW: Delete item with trash icon**
-12. Try quick query cards on welcome screen
-13. Test pin/unpin/delete operations
+1. Open the workspace for any ticker
+2. Use the chat panel to ask questions (e.g., "What is AAPL revenue?")
+3. Watch streaming response
+4. Test scratchpad save/export features from the workspace
 
 ---
 
@@ -468,15 +445,11 @@ psql -U postgres -d fundlens
 
 ## 📝 Test Checklist
 
-### Research Assistant (Phase 1 & 2)
-- [ ] Open http://localhost:3000/app/research/
-- [ ] Create new conversation
+### Research Assistant (inside Workspace)
+- [ ] Open http://localhost:3000/app/deals/workspace.html?ticker=AAPL
+- [ ] Use the chat panel to ask questions
 - [ ] Send message and verify streaming
-- [ ] Test quick query cards
-- [ ] Pin/unpin conversation
-- [ ] Delete conversation
-- [ ] Test on mobile viewport
-- [ ] Run automated tests: `npm run test:e2e:frontend`
+- [ ] Test scratchpad save/export
 
 ### Financial Statement Export
 - [ ] Open http://localhost:3000/deal-analysis.html
@@ -509,16 +482,16 @@ psql -U postgres -d fundlens
 
 ## 🚀 Quick Start Testing
 
-### 1-Minute Test (Research Assistant)
+### 1-Minute Test (Research Assistant in Workspace)
 ```bash
 # Start backend
 npm run start:dev
 
 # Open browser
-open http://localhost:3000/app/research/
+open http://localhost:3000/app/deals/workspace.html?ticker=AAPL
 
 # Test:
-# 1. Click "New Conversation"
+# 1. Use the chat panel
 # 2. Type "What is AAPL revenue?"
 # 3. Press Enter
 # 4. Verify streaming response
@@ -579,9 +552,8 @@ npm run test:e2e:frontend
 
 ## 🎯 Priority Testing Order
 
-1. **Research Assistant** (http://localhost:3000/app/research/)
-   - Most complete feature
-   - 21 automated tests
+1. **Research Assistant** (http://localhost:3000/app/deals/workspace.html?ticker=AAPL)
+   - Chat panel inside the workspace
    - Full UI implementation
 
 2. **Financial Statement Export** (http://localhost:3000/deal-analysis.html)

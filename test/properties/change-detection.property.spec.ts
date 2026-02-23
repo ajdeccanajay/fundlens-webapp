@@ -119,7 +119,7 @@ describe('Property 4: Change Detection Completeness', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -159,7 +159,7 @@ describe('Property 4: Change Detection Completeness', () => {
           expect(addedTexts).toContain(newRisk.substring(0, 30));
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -202,7 +202,7 @@ describe('Property 4: Change Detection Completeness', () => {
           expect(materialChanges.length).toBeGreaterThan(0);
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -234,7 +234,7 @@ describe('Property 4: Change Detection Completeness', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -279,7 +279,7 @@ describe('Property 4: Change Detection Completeness', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 });

@@ -23,21 +23,27 @@ export class ScratchpadItemService {
    * Requirements: 2.1
    */
   async getItems(workspaceId: string): Promise<ScratchpadItem[]> {
-    const items = await this.prisma.scratchpadItem.findMany({
-      where: { workspaceId },
-      orderBy: { savedAt: 'desc' },
-    });
+    try {
+      const items = await this.prisma.scratchpadItem.findMany({
+        where: { workspaceId },
+        orderBy: { savedAt: 'desc' },
+      });
 
-    return items.map((item) => ({
-      id: item.id,
-      workspaceId: item.workspaceId,
-      type: item.type as ItemType,
-      content: item.content as any,
-      sources: (item.sources as any) || [],
-      savedAt: item.savedAt.toISOString(),
-      savedFrom: (item.savedFrom as any) || {},
-      metadata: (item.metadata as any) || {},
-    }));
+      return items.map((item) => ({
+        id: item.id,
+        workspaceId: item.workspaceId,
+        type: item.type as ItemType,
+        content: item.content as any,
+        sources: (item.sources as any) || [],
+        savedAt: item.savedAt.toISOString(),
+        savedFrom: (item.savedFrom as any) || {},
+        metadata: (item.metadata as any) || {},
+      }));
+    } catch (error) {
+      // Log error but return empty array instead of throwing
+      console.error('Error fetching scratchpad items:', error);
+      return [];
+    }
   }
 
   /**

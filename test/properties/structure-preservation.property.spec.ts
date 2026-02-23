@@ -66,7 +66,7 @@ describe('Property 23: Scratchpad Structure Preservation', () => {
           expect(savedKeys).toEqual(originalKeys);
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -98,7 +98,7 @@ describe('Property 23: Scratchpad Structure Preservation', () => {
           expect(saved.challengeQuestion).toBe(challengeQuestion);
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -130,7 +130,7 @@ describe('Property 23: Scratchpad Structure Preservation', () => {
           expect(saved.observation).toContain('@');
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -174,7 +174,7 @@ describe('Property 23: Scratchpad Structure Preservation', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 });

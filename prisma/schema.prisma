@@ -969,3 +969,222 @@ model FilingNotification {
   @@index([createdAt], map: "idx_filing_notifs_created")
   @@map("filing_notifications")
 }
+
+
+// ============================================================
+// INSTANT RAG DOCUMENT PROCESSING MODELS
+// ============================================================
+
+// Instant RAG Sessions - tracks active upload and Q&A sessions
+model InstantRagSession {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String   @map("tenant_id") @db.Uuid
+  dealId            String   @map("deal_id") @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  ticker            String   @db.VarChar(10)
+  status            String   @default("active") @db.VarChar(20)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastActivityAt    DateTime @default(now()) @map("last_activity_at") @db.Timestamptz(6)
+  expiresAt         DateTime @map("expires_at") @db.Timestamptz(6)
+  
+  // Model usage tracking
+  sonnetCalls       Int      @default(0) @map("sonnet_calls")
+  opusCalls         Int      @default(0) @map("opus_calls")
+  totalInputTokens  Int      @default(0) @map("total_input_tokens")
+  totalOutputTokens Int      @default(0) @map("total_output_tokens")
+  
+  // Processing status
+  filesTotal        Int      @default(0) @map("files_total")
+  filesProcessed    Int      @default(0) @map("files_processed")
+  filesFailed       Int      @default(0) @map("files_failed")
+  
+  // Relations
+  documents         InstantRagDocument[]
+  qaLog             InstantRagQaLog[]
+  syncEnvelopes     InstantRagSyncEnvelope[]
+
+  @@index([tenantId], map: "idx_instant_rag_sessions_tenant")
+  @@index([dealId], map: "idx_instant_rag_sessions_deal")
+  @@index([userId], map: "idx_instant_rag_sessions_user")
+  @@index([status], map: "idx_instant_rag_sessions_status")
+  @@index([expiresAt], map: "idx_instant_rag_sessions_expires")
+  @@map("instant_rag_sessions")
+}
+
+// Instant RAG Documents - documents uploaded within a session
+model InstantRagDocument {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sessionId           String   @map("session_id") @db.Uuid
+  tenantId            String   @map("tenant_id") @db.Uuid
+  fileName            String   @map("file_name") @db.VarChar(255)
+  fileType            String   @map("file_type") @db.VarChar(20)
+  fileSizeBytes       BigInt   @map("file_size_bytes")
+  contentHash         String   @map("content_hash") @db.VarChar(64)
+  s3Key               String   @map("s3_key") @db.VarChar(500)
+  
+  // Extracted content
+  extractedText       String?  @map("extracted_text") @db.Text
+  extractedTables     Json     @default("[]") @map("extracted_tables")
+  pageCount           Int?     @map("page_count")
+  pageImages          Json     @default("[]") @map("page_images")
+  
+  // Processing status
+  processingStatus    String   @default("pending") @map("processing_status") @db.VarChar(20)
+  processingError     String?  @map("processing_error") @db.Text
+  processingDurationMs Int?    @map("processing_duration_ms")
+  
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  
+  // Relations
+  session             InstantRagSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  intakeSummary       InstantRagIntakeSummary?
+
+  @@index([tenantId, contentHash], map: "idx_instant_rag_documents_content_hash")
+  @@index([sessionId], map: "idx_instant_rag_documents_session")
+  @@index([processingStatus], map: "idx_instant_rag_documents_status")
+  @@map("instant_rag_documents")
+}
+
+// Instant RAG Q&A Log - conversation log for sessions
+model InstantRagQaLog {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sessionId    String   @map("session_id") @db.Uuid
+  role         String   @db.VarChar(20)
+  content      String   @db.Text
+  modelUsed    String?  @map("model_used") @db.VarChar(100)
+  inputTokens  Int?     @map("input_tokens")
+  outputTokens Int?     @map("output_tokens")
+  citations    Json     @default("[]")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  
+  // Relations
+  session      InstantRagSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId], map: "idx_instant_rag_qa_log_session")
+  @@index([createdAt], map: "idx_instant_rag_qa_log_created")
+  @@map("instant_rag_qa_log")
+}
+
+// Instant RAG Intake Summaries - auto-generated document summaries
+model InstantRagIntakeSummary {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  documentId           String   @unique @map("document_id") @db.Uuid
+  documentType         String?  @map("document_type") @db.VarChar(50)
+  reportingEntity      String?  @map("reporting_entity") @db.VarChar(255)
+  periodCovered        String?  @map("period_covered") @db.VarChar(100)
+  keySections          Json     @default("[]") @map("key_sections")
+  headlineMetrics      Json     @default("[]") @map("headline_metrics")
+  notableItems         Json     @default("[]") @map("notable_items")
+  extractionConfidence String?  @map("extraction_confidence") @db.VarChar(20)
+  extractionNotes      String?  @map("extraction_notes") @db.Text
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  
+  // Relations
+  document             InstantRagDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId], map: "idx_instant_rag_intake_summaries_document")
+  @@map("instant_rag_intake_summaries")
+}
+
+// Instant RAG Rate Limits - rate limiting for concurrent sessions
+model InstantRagRateLimit {
+  id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId              String   @map("tenant_id") @db.Uuid
+  userId                String?  @map("user_id") @db.Uuid
+  dealId                String?  @map("deal_id") @db.Uuid
+  limitType             String   @map("limit_type") @db.VarChar(50)
+  currentCount          Int      @default(0) @map("current_count")
+  maxCount              Int      @map("max_count")
+  windowStart           DateTime @default(now()) @map("window_start") @db.Timestamptz(6)
+  windowDurationSeconds Int      @map("window_duration_seconds")
+
+  @@unique([tenantId, userId, dealId, limitType], map: "uq_instant_rag_rate_limits")
+  @@index([tenantId], map: "idx_instant_rag_rate_limits_tenant")
+  @@index([tenantId, userId, dealId, limitType], map: "idx_instant_rag_rate_limits_lookup")
+  @@map("instant_rag_rate_limits")
+}
+
+// Instant RAG Sync Envelopes - sync envelopes for persisting session data
+model InstantRagSyncEnvelope {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sessionId          String    @map("session_id") @db.Uuid
+  tenantId           String    @map("tenant_id") @db.Uuid
+  dealId             String    @map("deal_id") @db.Uuid
+  ticker             String    @db.VarChar(10)
+  
+  // Sync status
+  status             String    @default("pending") @db.VarChar(20)
+  s3UploadStatus     String    @default("pending") @map("s3_upload_status") @db.VarChar(20)
+  kbIngestionStatus  String    @default("pending") @map("kb_ingestion_status") @db.VarChar(20)
+  rdsSyncStatus      String    @default("pending") @map("rds_sync_status") @db.VarChar(20)
+  
+  // Sync metadata
+  s3Path             String?   @map("s3_path") @db.VarChar(500)
+  kbDataSourceId     String?   @map("kb_data_source_id") @db.VarChar(100)
+  retryCount         Int       @default(0) @map("retry_count")
+  errorMessage       String?   @map("error_message") @db.Text
+  
+  // Envelope content
+  envelopeData       Json      @map("envelope_data")
+  
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  completedAt        DateTime? @map("completed_at") @db.Timestamptz(6)
+  
+  // Relations
+  session            InstantRagSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId], map: "idx_instant_rag_sync_envelopes_session")
+  @@index([status], map: "idx_instant_rag_sync_envelopes_status")
+  @@index([tenantId], map: "idx_instant_rag_sync_envelopes_tenant")
+  @@map("instant_rag_sync_envelopes")
+}
+
+
+// ============================================================
+// METRIC RESOLUTION ARCHITECTURE MODELS
+// Feature: metric-resolution-architecture
+// Requirements: 12.1, 12.2
+// ============================================================
+
+// Metric Resolution Log - tracks all metric resolution attempts for the learning loop
+model MetricResolutionLog {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String   @map("tenant_id")
+  rawQuery    String   @map("raw_query") @db.Text
+  confidence  String   @db.VarChar(20)
+  resolvedTo  String?  @map("resolved_to") @db.VarChar(255)
+  suggestions String[] @default([])
+  userChoice  String?  @map("user_choice") @db.VarChar(255)
+  timestamp   DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([tenantId, timestamp], map: "idx_metric_resolution_log_tenant_ts")
+  @@index([confidence, timestamp], map: "idx_metric_resolution_log_confidence_ts")
+  @@map("metric_resolution_log")
+}
+
+// Pending Formula - admin formula submissions awaiting human review before production deployment
+// Requirements: 17.8
+model PendingFormula {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  canonicalId      String    @map("canonical_id") @db.VarChar(255)
+  displayName      String    @map("display_name") @db.VarChar(255)
+  formula          String    @db.Text
+  dependencies     Json      @default("[]")
+  outputFormat     String    @map("output_format") @db.VarChar(50)
+  category         String    @db.VarChar(100)
+  industry         String    @default("all") @db.VarChar(100)
+  assetClass       Json      @default("[\"public_equity\"]") @map("asset_class")
+  interpretation   Json?
+  synonyms         Json?
+  calculationNotes String?   @map("calculation_notes") @db.Text
+  submittedBy      String    @map("submitted_by") @db.VarChar(255)
+  reviewedBy       String?   @map("reviewed_by") @db.VarChar(255)
+  status           String    @default("pending_review") @db.VarChar(30)
+  rejectionReason  String?   @map("rejection_reason") @db.Text
+  submittedAt      DateTime  @default(now()) @map("submitted_at") @db.Timestamptz(6)
+  reviewedAt       DateTime? @map("reviewed_at") @db.Timestamptz(6)
+
+  @@index([status], map: "idx_pending_formulas_status")
+  @@index([submittedAt], map: "idx_pending_formulas_submitted_at")
+  @@map("pending_formulas")
+}

@@ -1,0 +1,349 @@
+# FundLens Metric Registry
+# Auto-generated from existing metrics mapping + GICS expansion
+# Source: mini_MVP_metrics.xlsx + manual curation
+
+revenue:
+  display_name: Revenue
+  type: atomic
+  statement: income_statement
+  category: revenue
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Revenue
+  - Revenues
+  - Total Revenue(s)
+  - Net Revenue(s)
+  - Sales
+  - Net Sales
+  - Total Sales
+  - Operating Revenue(s)
+  - Turnover
+  xbrl_tags: []
+  calculation_notes: Primary top-line reported on income statement; prefer us-gaap:Revenues or us-gaap:SalesRevenueNet if
+    tagged
+subscription_revenue:
+  display_name: Subscription Revenue
+  type: atomic
+  statement: income_statement
+  category: revenue
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: saas_software
+  synonyms:
+  - Subscription Revenue
+  - Recurring Revenue
+  - License Revenue
+  - Cloud Revenue
+  - Hosted Services Revenue
+  - Term License Revenue
+  - Perpetual License Revenue
+  - PCS Revenue
+  xbrl_tags: []
+  calculation_notes: Revenue from recurring contracts; often disaggregated under ASC 606 'revenue from contracts with customers'
+service_revenue:
+  display_name: Service Revenue
+  type: atomic
+  statement: income_statement
+  category: revenue
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: saas_software
+  synonyms:
+  - Service Revenue
+  - Professional Services Revenue
+  - Implementation Revenue
+  - Support & Maintenance Revenue
+  xbrl_tags: []
+  calculation_notes: Services recognized at point in time or over time under ASC 606
+advertising_revenue:
+  display_name: Advertising Revenue
+  type: atomic
+  statement: income_statement
+  category: revenue
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: internet_media
+  synonyms:
+  - Advertising Revenue
+  - Ad Revenue
+  - Marketing Services Revenue
+  - Performance Marketing Revenue
+  - Sponsorship Revenue
+  - Media Rights Revenue
+  xbrl_tags: []
+  calculation_notes: Revenue from advertising contracts, ad placement, sponsorship, content licensing
+transaction_revenue:
+  display_name: Transaction Revenue
+  type: atomic
+  statement: income_statement
+  category: revenue
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: fintech_payments
+  synonyms:
+  - Transaction Revenue
+  - Transaction-based Revenue
+  - Processing Revenue
+  - Network Revenue
+  - Take Rate Revenue
+  - Commission Revenue
+  xbrl_tags: []
+  calculation_notes: Usually TPV * take rate; net of interchange/partner costs if net revenue presentation
+interchange_fees:
+  display_name: Interchange Fees
+  type: atomic
+  statement: income_statement
+  category: revenue
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: fintech_payments
+  synonyms:
+  - Interchange Fees
+  - Assessment Fees
+  - Card Fees
+  xbrl_tags: []
+  calculation_notes: Gross interchange billed; often recorded net of network fees per ASC 606 principal vs agent test
+product_revenue:
+  display_name: Product Revenue
+  type: atomic
+  statement: income_statement
+  category: revenue
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: healthcare_pharma
+  synonyms:
+  - Product Sales
+  - Net Product Revenues
+  - Merchandise Sales
+  - Net Merchandise Sales
+  xbrl_tags: []
+  calculation_notes: Net of chargebacks, rebates, returns, discounts
+collaboration_revenue:
+  display_name: Collaboration Revenue
+  type: atomic
+  statement: income_statement
+  category: revenue
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: healthcare_pharma
+  synonyms:
+  - Collaboration Revenue
+  - License Revenue
+  - Milestone Revenue
+  - Royalties Revenue
+  - Data Licensing Revenue
+  - API Revenue
+  xbrl_tags: []
+  calculation_notes: Non-product contracts; often multiple-element arrangements under ASC 606
+patient_service_revenue:
+  display_name: Patient Service Revenue
+  type: atomic
+  statement: income_statement
+  category: revenue
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: healthcare_pharma
+  synonyms:
+  - Patient Service Revenue
+  - Payor Reimbursement Revenue
+  - Third-party Reimbursement Revenue
+  xbrl_tags: []
+  calculation_notes: Reported net of contractual allowances and implicit price concessions
+premiums_earned:
+  display_name: Premiums Earned
+  type: atomic
+  statement: income_statement
+  category: revenue
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: insurance
+  synonyms:
+  - Premiums Earned
+  - Net Premiums Earned
+  - Premiums and Policy Fees
+  - Reinsurance Premiums Assumed
+  - Reinsurance Premiums Ceded
+  xbrl_tags: []
+  calculation_notes: Premiums written adjusted for unearned premium reserve; NPE flows into revenue
+net_interest_income:
+  display_name: Net Interest Income
+  type: atomic
+  statement: income_statement
+  category: revenue
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: banking
+  synonyms:
+  - Net Interest Income
+  - NII
+  xbrl_tags: []
+  calculation_notes: Interest income - interest expense; core revenue line for banks
+noninterest_income:
+  display_name: Noninterest Income
+  type: atomic
+  statement: income_statement
+  category: revenue
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: banking
+  synonyms:
+  - Noninterest Income
+  - Fee Income
+  - Commission Income
+  - Service Charges on Deposits
+  - Advisory Fees
+  - Underwriting Fees
+  - Trading Revenue
+  xbrl_tags: []
+  calculation_notes: Aggregate of all non-interest revenues; included in total net revenues
+rental_revenue:
+  display_name: Rental Revenue
+  type: atomic
+  statement: income_statement
+  category: revenue
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: real_estate
+  synonyms:
+  - Rental Revenue
+  - Rental and Other Property Revenue
+  - Minimum Rents
+  - Percentage Rents
+  - CAM & Reimbursement Revenue
+  xbrl_tags: []
+  calculation_notes: Lease income recognized straight-line over lease term; variable rent recognized as earned
+transportation_revenue:
+  display_name: Transportation Revenue
+  type: atomic
+  statement: income_statement
+  category: revenue
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: transportation
+  synonyms:
+  - Passenger Revenue
+  - Cargo Revenue
+  - Freight Revenue
+  - Ticket Revenue
+  - Ancillary Revenue
+  - Charter Revenue
+  - Logistics Revenue
+  xbrl_tags: []
+  calculation_notes: Recognized when service rendered; passenger revenue often deferred until flight taken
+gaming_revenue:
+  display_name: Gaming Revenue
+  type: atomic
+  statement: income_statement
+  category: revenue
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: gaming
+  synonyms:
+  - Gaming Revenue
+  - Wagering Revenue
+  - Sports Betting Revenue
+  xbrl_tags: []
+  calculation_notes: Gross wagers less payouts to customers; reported net as gaming revenue
+utility_revenue:
+  display_name: Utility Revenue
+  type: atomic
+  statement: income_statement
+  category: revenue
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: utilities_telecom
+  synonyms:
+  - Operating Revenues
+  - Transmission Revenue
+  - Distribution Revenue
+  - Regulated Revenue
+  - Service Revenue (utilities)
+  - Equipment Revenue (telecom)
+  - Network Access Revenue
+  xbrl_tags: []
+  calculation_notes: Regulated revenue based on tariff; telecom splits service/equipment revenue
+commodity_revenue:
+  display_name: Commodity Revenue
+  type: atomic
+  statement: income_statement
+  category: revenue
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: energy_commodities
+  synonyms:
+  - Oil & Gas Sales
+  - Hydrocarbon Sales
+  - Commodity Sales
+  - Refined Product Sales
+  - Wholesale Sales
+  - Chemicals Net Sales
+  xbrl_tags: []
+  calculation_notes: Recognized when control transfers; may include midstream gathering/processing fees
+agribusiness_revenue:
+  display_name: Agribusiness Revenue
+  type: atomic
+  statement: income_statement
+  category: revenue
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: agriculture
+  synonyms:
+  - Agricultural Commodity Sales
+  - Net Sales (agriculture)
+  - Processing Sales
+  - Ingredient Sales
+  xbrl_tags: []
+  calculation_notes: Primarily sale of crops, livestock, or processed goods
+contract_revenue:
+  display_name: Contract Revenue
+  type: atomic
+  statement: income_statement
+  category: revenue
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: gov_contractors
+  synonyms:
+  - Contract Revenue
+  - Program Revenue
+  - Project Revenue
+  xbrl_tags: []
+  calculation_notes: Recognized over time using cost-to-cost or input/output method per ASC 606
+other_revenue:
+  display_name: Other Revenue
+  type: atomic
+  statement: income_statement
+  category: revenue
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Other Revenue
+  - Miscellaneous Revenue
+  - Franchise Fees
+  - Royalties
+  - Leasing Revenue
+  - Data Licensing Revenue
+  xbrl_tags: []
+  calculation_notes: Residual category; should check placement in P&L to avoid misclassifying other income

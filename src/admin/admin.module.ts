@@ -22,6 +22,9 @@ import { PlatformAdminGuard } from './platform-admin.guard';
 import { ParsingReviewController } from './parsing-review.controller';
 import { ParsingReviewService } from './parsing-review.service';
 import { IntentAnalyticsController } from './intent-analytics.controller';
+import { MetricAdminController } from './metric-admin.controller';
+import { FormulaManagementController } from './formula-management.controller';
+import { FormulaManagementService } from './formula-management.service';
 
 @Module({
   imports: [
@@ -34,11 +37,14 @@ import { IntentAnalyticsController } from './intent-analytics.controller';
     PlatformAdminController,
     ParsingReviewController,
     IntentAnalyticsController,
+    MetricAdminController,
+    FormulaManagementController,
   ],
   providers: [
     PlatformAdminService,
     PlatformAdminGuard,
     ParsingReviewService,
+    FormulaManagementService,
   ],
   exports: [PlatformAdminService, ParsingReviewService],
 })

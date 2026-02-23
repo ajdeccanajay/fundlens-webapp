@@ -9,7 +9,11 @@ import { StructuredRetrieverService } from './structured-retriever.service';
 import { SemanticRetrieverService } from './semantic-retriever.service';
 import { BedrockService } from './bedrock.service';
 import { PromptLibraryService } from './prompt-library.service';
-import { MetricMappingService } from './metric-mapping.service';
+import { MetricRegistryService } from './metric-resolution/metric-registry.service';
+import { FormulaResolutionService } from './metric-resolution/formula-resolution.service';
+import { ConceptRegistryService } from './metric-resolution/concept-registry.service';
+import { MetricCorrectionController } from './metric-resolution/metric-correction.controller';
+import { MetricCorrectionService } from './metric-resolution/metric-correction.service';
 import { MetricLearningService } from './metric-learning.service';
 import { DocumentRAGService } from './document-rag.service';
 import { CitationService } from './citation.service';
@@ -28,13 +32,25 @@ import { QueryDecompositionService } from './query-decomposition.service';
 import { ContextualExpansionService } from './contextual-expansion.service';
 import { IterativeRetrievalService } from './iterative-retrieval.service';
 import { AdvancedRetrievalService } from './advanced-retrieval.service';
+import { ResponseEnrichmentService } from './response-enrichment.service';
+import { VisualizationGeneratorService } from './visualization-generator.service';
+import { FinancialCalculatorService } from '../deals/financial-calculator.service';
+import { HybridSynthesisService } from './hybrid-synthesis.service';
+import { QueryDecomposerService } from './query-decomposer.service';
+import { PeerComparisonService } from './peer-comparison.service';
+import { HaikuIntentParserService } from './haiku-intent-parser.service';
+import { IntentValidatorService } from './intent-validator.service';
+import { FastPathCache } from './intent-detection/fast-path-cache';
+import { CompanyTickerMapService } from './intent-detection/company-ticker-map.service';
+import { IntentFeedbackService } from './intent-detection/intent-feedback.service';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { SecModule } from '../dataSources/sec/sec.module';
 import { S3Module } from '../s3/s3.module';
+import { InstantRAGModule } from '../instant-rag/instant-rag.module';
 
 @Module({
-  imports: [PrismaModule, SecModule, forwardRef(() => S3Module), HttpModule],
-  controllers: [RAGController, ChunkExportController, KBSyncController, SectionExportController],
+  imports: [PrismaModule, SecModule, forwardRef(() => S3Module), forwardRef(() => InstantRAGModule), HttpModule],
+  controllers: [RAGController, ChunkExportController, KBSyncController, SectionExportController, MetricCorrectionController],
   providers: [
     RAGService,
     QueryRouterService,
@@ -44,7 +60,7 @@ import { S3Module } from '../s3/s3.module';
     SemanticRetrieverService,
     BedrockService,
     PromptLibraryService,
-    MetricMappingService,
+    MetricRegistryService,
     MetricLearningService,
     DocumentRAGService,
     CitationService,
@@ -60,6 +76,26 @@ import { S3Module } from '../s3/s3.module';
     ContextualExpansionService,
     IterativeRetrievalService,
     AdvancedRetrievalService,
+    // Phase 4: Multimodal Research Responses
+    ResponseEnrichmentService,
+    VisualizationGeneratorService,
+    FinancialCalculatorService,
+    FormulaResolutionService,
+    ConceptRegistryService,
+    MetricCorrectionService,
+    // Intent Detection subsystem
+    FastPathCache,
+    CompanyTickerMapService,
+    IntentFeedbackService,
+    // Haiku-first intent detection pipeline
+    HaikuIntentParserService,
+    IntentValidatorService,
+    // Sprint 2: Hybrid Synthesis Intelligence Layer
+    HybridSynthesisService,
+    // Sprint 3: Query Decomposition
+    QueryDecomposerService,
+    // Sprint 3: Peer Comparison Engine
+    PeerComparisonService,
   ],
   exports: [
     RAGService,
@@ -69,7 +105,7 @@ import { S3Module } from '../s3/s3.module';
     SemanticRetrieverService,
     BedrockService,
     PromptLibraryService,
-    MetricMappingService,
+    MetricRegistryService,
     MetricLearningService,
     DocumentRAGService,
     CitationService,
@@ -85,6 +121,15 @@ import { S3Module } from '../s3/s3.module';
     ContextualExpansionService,
     IterativeRetrievalService,
     AdvancedRetrievalService,
+    // Phase 4: Multimodal Research Responses
+    ResponseEnrichmentService,
+    VisualizationGeneratorService,
+    FormulaResolutionService,
+    ConceptRegistryService,
+    FinancialCalculatorService,
+    HybridSynthesisService,
+    QueryDecomposerService,
+    PeerComparisonService,
   ],
 })
 export class RAGModule {}

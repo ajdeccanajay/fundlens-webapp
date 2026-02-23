@@ -1,0 +1,140 @@
+# FundLens Metric Registry
+# Auto-generated from existing metrics mapping + GICS expansion
+# Source: mini_MVP_metrics.xlsx + manual curation
+
+proved_reserves:
+  display_name: Proved Reserves
+  type: atomic
+  statement: supplemental
+  category: reserves
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: energy
+  synonyms:
+  - proved reserves
+  - P1 reserves
+  - 1P reserves
+  - proven reserves
+  - estimated proved reserves
+  - total proved reserves
+  - proved developed reserves
+  - proved undeveloped reserves
+  - PDP reserves
+  - PUD reserves
+  xbrl_tags:
+  - us-gaap:ProvedDevelopedReserves
+  calculation_notes: Oil and gas reserves with reasonable certainty of recovery; disclosed per SEC rules (FASB ASC 932)
+reserve_life_index:
+  display_name: Reserve Life Index
+  type: atomic
+  statement: supplemental
+  category: reserves
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: energy
+  synonyms:
+  - reserve life
+  - reserve life index
+  - RLI
+  - years of reserves
+  - reserve to production ratio
+  - R/P ratio
+  - reserves to production
+  xbrl_tags: []
+  calculation_notes: Proved reserves divided by annual production; indicates years of production at current rates
+production_volume:
+  display_name: Production Volume
+  type: atomic
+  statement: supplemental
+  category: production
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: energy
+  synonyms:
+  - production
+  - daily production
+  - production volume
+  - BOE production
+  - barrels of oil equivalent
+  - oil production
+  - gas production
+  - NGL production
+  - total production
+  - output
+  xbrl_tags: []
+  calculation_notes: Total production in barrels of oil equivalent (BOE) or MCF for gas
+finding_and_development_cost:
+  display_name: Finding & Development Cost
+  type: atomic
+  statement: supplemental
+  category: efficiency
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: energy
+  synonyms:
+  - F&D cost
+  - finding cost
+  - finding and development
+  - FD cost per BOE
+  - exploration cost per barrel
+  - discovery cost
+  xbrl_tags: []
+  calculation_notes: Capital spent on exploration and development per BOE of reserves added
+realized_price:
+  display_name: Realized Price
+  type: atomic
+  statement: supplemental
+  category: pricing
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: energy
+  synonyms:
+  - realized price
+  - average realized price
+  - realized oil price
+  - realized gas price
+  - average selling price
+  - netback price
+  - wellhead price
+  xbrl_tags: []
+  calculation_notes: Average price received per unit of production after hedging and differentials
+ebitdax:
+  display_name: EBITDAX
+  type: atomic
+  statement: income_statement
+  category: non_gaap
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: energy
+  synonyms:
+  - EBITDAX
+  - EBITDA before exploration
+  - adjusted EBITDA energy
+  - EBITDA excluding exploration expense
+  xbrl_tags: []
+  calculation_notes: EBITDA before exploration expense; standard profitability metric for E&P companies
+lease_operating_expense:
+  display_name: Lease Operating Expense
+  type: atomic
+  statement: income_statement
+  category: operating_expenses
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: energy
+  synonyms:
+  - LOE
+  - lease operating expense
+  - lifting cost
+  - production cost
+  - operating cost per BOE
+  - cash operating cost
+  xbrl_tags:
+  - us-gaap:LeaseOperatingExpense
+  calculation_notes: Direct costs of producing oil and gas from existing wells

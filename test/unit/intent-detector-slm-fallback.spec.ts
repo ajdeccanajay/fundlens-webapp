@@ -1,0 +1,265 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { IntentDetectorService } from '../../src/rag/intent-detector.service';
+import { BedrockService } from '../../src/rag/bedrock.service';
+import { IntentAnalyticsService } from '../../src/rag/intent-analytics.service';
+import { MetricRegistryService } from '../../src/rag/metric-resolution/metric-registry.service';
+
+/**
+ * IntentDetectorService — MetricRegistryService Integration Tests
+ *
+ * Post metric-resolution-architecture: the old regex metricPatterns map and
+ * resolveMetricsWithSLM() are deleted. ALL metric extraction now goes through
+ * MetricRegistryService.resolve(). These tests verify:
+ *
+ * 1. Standard metrics (revenue, net income, FCF) resolve via the registry
+ * 2. Industry-specific metrics (rate base, load factor) resolve via the registry
+ * 3. Qualitative questions (debt instruments, types of...) skip metric extraction
+ *    entirely and route to semantic/RAG pipeline
+ * 4. Graceful degradation when registry is unavailable
+ */
+describe('IntentDetectorService - MetricRegistry Integration', () => {
+  let service: IntentDetectorService;
+  let metricRegistry: jest.Mocked<MetricRegistryService>;
+
+  const buildResolution = (
+    canonicalId: string,
+    displayName: string,
+    confidence: 'exact' | 'fuzzy_auto' | 'unresolved',
+    dbColumn?: string,
+  ) => ({
+    canonical_id: canonicalId,
+    display_name: displayName,
+    type: 'atomic' as const,
+    confidence,
+    fuzzy_score: confidence === 'fuzzy_auto' ? 0.88 : null,
+    original_query: canonicalId,
+    match_source: confidence === 'unresolved' ? 'none' : 'synonym_index',
+    suggestions: null,
+    db_column: dbColumn || canonicalId,
+  });
+
+  const unresolvedResult = (query: string) => buildResolution('', '', 'unresolved');
+
+  beforeEach(async () => {
+    const mockBedrock = {
+      invokeModel: jest.fn(),
+    };
+
+    const mockAnalytics = {
+      logDetection: jest.fn().mockResolvedValue(undefined),
+    };
+
+    const mockMetricRegistry = {
+      resolve: jest.fn().mockReturnValue(unresolvedResult('')),
+      resolveMultiple: jest.fn().mockReturnValue([]),
+      getKnownMetricNames: jest.fn().mockReturnValue(new Map()),
+      normalizeMetricName: jest.fn((name: string) => name),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        IntentDetectorService,
+        { provide: BedrockService, useValue: mockBedrock },
+        { provide: IntentAnalyticsService, useValue: mockAnalytics },
+        { provide: MetricRegistryService, useValue: mockMetricRegistry },
+      ],
+    }).compile();
+
+    service = module.get<IntentDetectorService>(IntentDetectorService);
+    metricRegistry = module.get(MetricRegistryService);
+  });
+
+  // -------------------------------------------------------------------------
+  // Standard metrics resolve via MetricRegistryService
+  // -------------------------------------------------------------------------
+  describe('Standard metrics resolve via registry', () => {
+    it('should resolve "revenue" through MetricRegistryService', async () => {
+      metricRegistry.resolve.mockImplementation((query: string) => {
+        if (query.includes('revenue')) {
+          return buildResolution('revenue', 'Revenue', 'exact', 'revenue');
+        }
+        return unresolvedResult(query);
+      });
+
+      const intent = await service.detectIntent('What is the revenue for AAPL in 2023?');
+
+      expect(intent.metrics).toBeDefined();
+      expect(intent.metrics).toContain('revenue');
+      expect(intent.ticker).toBe('AAPL');
+      expect(metricRegistry.resolve).toHaveBeenCalled();
+    });
+
+    it('should resolve "free cash flow" through MetricRegistryService', async () => {
+      metricRegistry.resolve.mockImplementation((query: string) => {
+        if (query.includes('free') && query.includes('cash') && query.includes('flow')) {
+          return buildResolution('free_cash_flow', 'Free Cash Flow', 'exact', 'free_cash_flow');
+        }
+        return unresolvedResult(query);
+      });
+
+      const intent = await service.detectIntent('What is the free cash flow for MSFT?');
+
+      expect(intent.metrics).toBeDefined();
+      expect(intent.metrics).toContain('free_cash_flow');
+    });
+
+    it('should resolve multiple metrics from a single query', async () => {
+      metricRegistry.resolve.mockImplementation((query: string) => {
+        if (query.includes('revenue')) {
+          return buildResolution('revenue', 'Revenue', 'exact', 'revenue');
+        }
+        if (query.includes('operating') && query.includes('margin')) {
+          return buildResolution('operating_margin', 'Operating Margin', 'exact', 'operating_margin');
+        }
+        return unresolvedResult(query);
+      });
+
+      const intent = await service.detectIntent('Show me revenue and operating margin for AAPL');
+
+      expect(intent.metrics).toBeDefined();
+      expect(intent.metrics!.length).toBeGreaterThanOrEqual(1);
+      expect(metricRegistry.resolve).toHaveBeenCalled();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Industry-specific metrics resolve via registry
+  // -------------------------------------------------------------------------
+  describe('Industry-specific metrics resolve via registry', () => {
+    it('should resolve energy metric "rate base" via registry', async () => {
+      metricRegistry.resolve.mockImplementation((query: string) => {
+        if (query.includes('rate') && query.includes('base')) {
+          return buildResolution('rate_base', 'Rate Base', 'exact', 'rate_base');
+        }
+        return unresolvedResult(query);
+      });
+
+      const intent = await service.detectIntent('What is the rate base for this utility company?');
+
+      expect(intent.metrics).toBeDefined();
+      expect(intent.metrics).toContain('rate_base');
+      expect(metricRegistry.resolve).toHaveBeenCalled();
+    });
+
+    it('should resolve "load factor" via fuzzy match', async () => {
+      metricRegistry.resolve.mockImplementation((query: string) => {
+        if (query.includes('load') && query.includes('factor')) {
+          return buildResolution('load_factor', 'Load Factor', 'fuzzy_auto', 'load_factor');
+        }
+        return unresolvedResult(query);
+      });
+
+      const intent = await service.detectIntent('What is the load factor?');
+
+      expect(intent.metrics).toBeDefined();
+      expect(intent.metrics).toContain('load_factor');
+      // Must use db_column, not display_name
+      expect(intent.metrics).not.toContain('Load Factor');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Qualitative questions skip metric extraction → route to semantic/RAG
+  // -------------------------------------------------------------------------
+  describe('Qualitative questions route to semantic pipeline (TYPE D)', () => {
+    it('should NOT extract metrics for "what types of debt instruments" query', async () => {
+      const intent = await service.detectIntent(
+        'What types of debt instruments does the company use (revolving credit, bonds, term loans)?',
+      );
+
+      // No metrics — this is a qualitative question
+      expect(intent.metrics).toBeUndefined();
+      // Should route to semantic (RAG) pipeline
+      expect(intent.type).toBe('semantic');
+      // Should detect debt-related sections
+      expect(intent.sectionTypes).toBeDefined();
+      expect(intent.sectionTypes).toContain('item_7');
+      expect(intent.sectionTypes).toContain('item_8');
+      // Registry should NOT be called — qualitative guard fires first
+      expect(metricRegistry.resolve).not.toHaveBeenCalled();
+    });
+
+    it('should NOT extract metrics for "what kind of" questions', async () => {
+      const intent = await service.detectIntent(
+        'What kind of revenue recognition policy does AAPL use?',
+      );
+
+      expect(intent.metrics).toBeUndefined();
+      expect(intent.type).toBe('semantic');
+    });
+
+    it('should NOT extract metrics for "describe the" questions', async () => {
+      const intent = await service.detectIntent(
+        'Describe the capital structure of AMZN',
+      );
+
+      expect(intent.metrics).toBeUndefined();
+      expect(intent.type).toBe('semantic');
+    });
+
+    it('should NOT extract metrics for "how does the company" questions', async () => {
+      const intent = await service.detectIntent(
+        'How does the company manage its interest rate risk?',
+      );
+
+      expect(intent.metrics).toBeUndefined();
+      expect(intent.type).toBe('semantic');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Section detection for debt/capital structure topics
+  // -------------------------------------------------------------------------
+  describe('Debt/capital structure section detection', () => {
+    it('should detect item_7 and item_8 for revolving credit queries', async () => {
+      const intent = await service.detectIntent(
+        'Tell me about the revolving credit facility',
+      );
+
+      expect(intent.sectionTypes).toContain('item_7');
+      expect(intent.sectionTypes).toContain('item_8');
+    });
+
+    it('should detect item_7 and item_8 for term loan queries', async () => {
+      const intent = await service.detectIntent(
+        'What are the term loans outstanding?',
+      );
+
+      expect(intent.sectionTypes).toContain('item_7');
+      expect(intent.sectionTypes).toContain('item_8');
+    });
+
+    it('should detect item_7 and item_8 for covenant queries', async () => {
+      const intent = await service.detectIntent(
+        'Are there any debt covenants the company must comply with?',
+      );
+
+      expect(intent.sectionTypes).toContain('item_7');
+      expect(intent.sectionTypes).toContain('item_8');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Graceful degradation when registry is unavailable
+  // -------------------------------------------------------------------------
+  describe('Graceful degradation', () => {
+    it('should return empty metrics when registry returns unresolved for all candidates', async () => {
+      metricRegistry.resolve.mockReturnValue(unresolvedResult(''));
+
+      const intent = await service.detectIntent('Tell me about the company strategy');
+
+      expect(intent.metrics).toBeUndefined();
+    });
+
+    it('should not crash when registry throws an error', async () => {
+      metricRegistry.resolve.mockImplementation(() => {
+        throw new Error('Registry unavailable');
+      });
+
+      const intent = await service.detectIntent('What is the rate base for this utility?');
+
+      expect(intent).toBeDefined();
+      expect(intent.originalQuery).toBe('What is the rate base for this utility?');
+    });
+  });
+});

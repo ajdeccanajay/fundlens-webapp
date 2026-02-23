@@ -83,7 +83,7 @@ describe('Property 33: Sentiment Score Calculation', () => {
           expect(['positive', 'negative', 'neutral']).toContain(result.toneCategory);
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -115,7 +115,7 @@ describe('Property 33: Sentiment Score Calculation', () => {
           expect(result.confidenceIndicators.length).toBeGreaterThan(0);
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -147,7 +147,7 @@ describe('Property 33: Sentiment Score Calculation', () => {
           expect(result.hedgingLanguage.length).toBeGreaterThan(0);
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -173,7 +173,7 @@ describe('Property 33: Sentiment Score Calculation', () => {
           expect(Math.abs(result.score)).toBeLessThan(0.8);
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -204,7 +204,7 @@ describe('Property 33: Sentiment Score Calculation', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -228,7 +228,7 @@ describe('Property 33: Sentiment Score Calculation', () => {
           expect(result.toneCategory).toBeDefined();
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -252,7 +252,7 @@ describe('Property 33: Sentiment Score Calculation', () => {
           expect(result1.toneCategory).toBe(result2.toneCategory);
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 });

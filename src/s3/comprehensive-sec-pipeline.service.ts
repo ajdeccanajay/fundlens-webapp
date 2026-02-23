@@ -5,6 +5,7 @@ import { IngestionService } from '../dataSources/sec/ingestion.service';
 import { HistoricalHydrationService } from '../dataSources/sec/historical-hydration.service';
 import { S3DataLakeService } from './s3-data-lake.service';
 import { ChunkExporterService } from '../rag/chunk-exporter.service';
+import { PerformanceOptimizerService } from '../rag/performance-optimizer.service';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 
@@ -60,6 +61,7 @@ export class ComprehensiveSECPipelineService {
     private readonly s3DataLake: S3DataLakeService,
     private readonly chunkExporter: ChunkExporterService,
     private readonly http: HttpService,
+    private readonly performanceOptimizer: PerformanceOptimizerService,
   ) {}
 
   /**
@@ -233,6 +235,14 @@ export class ComprehensiveSECPipelineService {
       }
 
       result.processingTime = Date.now() - startTime;
+      
+      // Invalidate cached RAG responses for this ticker since new data was ingested
+      if (result.processedFilings > 0) {
+        const invalidated = this.performanceOptimizer.invalidateByTicker(ticker);
+        if (invalidated > 0) {
+          this.logger.log(`🗑️ Invalidated ${invalidated} cached RAG responses for ${ticker}`);
+        }
+      }
       
       this.logger.log(
         `✅ ${ticker} complete: ${result.processedFilings}/${result.totalFilings} filings, ` +

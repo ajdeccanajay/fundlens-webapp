@@ -1,6 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional, Inject } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { S3DataLakeService } from './s3-data-lake.service';
+import { PerformanceOptimizerService } from '../rag/performance-optimizer.service';
+import { IngestionValidationService } from './ingestion-validation.service';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 
@@ -45,6 +47,8 @@ export class SECProcessingService {
     private readonly prisma: PrismaService,
     private readonly s3: S3DataLakeService,
     private readonly http: HttpService,
+    private readonly performanceOptimizer: PerformanceOptimizerService,
+    @Optional() @Inject(IngestionValidationService) private readonly ingestionValidator?: IngestionValidationService,
   ) {}
 
   /**
@@ -124,6 +128,9 @@ export class SECProcessingService {
 
       // 7. Mark filing as processed
       await this.markFilingAsProcessed(ticker, filingType, accessionNumber);
+
+      // 8. Invalidate cached RAG responses for this ticker
+      this.performanceOptimizer.invalidateByTicker(ticker);
 
       result.processingTime = Date.now() - startTime;
       this.logger.log(
@@ -461,37 +468,72 @@ export class SECProcessingService {
   ): Promise<void> {
     for (const metric of metrics) {
       try {
+        // Run ingestion validation before writing (Requirement 19)
+        let normalizedMetric = metric.normalizedMetric;
+        let value = metric.value;
+        let confidenceScore = metric.confidence;
+        let xbrlTag: string | undefined;
+        let canonicalId: string | undefined;
+
+        if (this.ingestionValidator) {
+          const validation = await this.ingestionValidator.validate({
+            ticker,
+            normalizedMetric: metric.normalizedMetric,
+            rawLabel: metric.rawLabel,
+            value: metric.value,
+            fiscalPeriod: metric.period,
+            filingType,
+            statementType: 'income_statement',
+            confidenceScore: metric.confidence,
+            xbrlTag: undefined, // XBRL tag from extraction if available
+          });
+
+          normalizedMetric = validation.normalizedMetric;
+          value = validation.value;
+          confidenceScore = validation.confidenceScore;
+          xbrlTag = validation.xbrlTag;
+          canonicalId = validation.canonicalId;
+
+          if (validation.flags.length > 0) {
+            this.logger.debug(
+              `Validation flags for ${ticker}/${normalizedMetric}: ${validation.flags.map((f) => f.message).join('; ')}`,
+            );
+          }
+        }
+
         await this.prisma.financialMetric.upsert({
           where: {
             ticker_normalizedMetric_fiscalPeriod_filingType: {
               ticker,
-              normalizedMetric: metric.normalizedMetric,
+              normalizedMetric,
               fiscalPeriod: metric.period,
               filingType,
             },
           },
           create: {
             ticker,
-            normalizedMetric: metric.normalizedMetric,
+            normalizedMetric,
             rawLabel: metric.rawLabel,
-            value: metric.value,
+            value,
             fiscalPeriod: metric.period,
             periodType: filingType === '10-K' ? 'annual' : 'quarterly',
             filingType,
-            statementType: 'income_statement', // Default, could be improved
-            filingDate: new Date(), // Should be actual filing date
-            statementDate: new Date(), // Should be actual statement date
-            confidenceScore: metric.confidence,
+            statementType: 'income_statement',
+            filingDate: new Date(),
+            statementDate: new Date(),
+            confidenceScore,
             dataSourceId: accessionNumber,
+            xbrlTag: xbrlTag || undefined,
           },
           update: {
             rawLabel: metric.rawLabel,
-            value: metric.value,
-            confidenceScore: metric.confidence,
-            statementType: 'income_statement', // Default, could be improved
-            filingDate: new Date(), // Should be actual filing date
-            statementDate: new Date(), // Should be actual statement date
+            value,
+            confidenceScore,
+            statementType: 'income_statement',
+            filingDate: new Date(),
+            statementDate: new Date(),
             updatedAt: new Date(),
+            xbrlTag: xbrlTag || undefined,
           },
         });
       } catch (error) {

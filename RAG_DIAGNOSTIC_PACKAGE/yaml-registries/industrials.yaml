@@ -1,0 +1,60 @@
+# FundLens Metric Registry
+# Auto-generated from existing metrics mapping + GICS expansion
+# Source: mini_MVP_metrics.xlsx + manual curation
+
+backlog:
+  display_name: Backlog
+  type: atomic
+  statement: supplemental
+  category: orders
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: industrials
+  synonyms:
+  - backlog
+  - order backlog
+  - total backlog
+  - remaining performance obligations
+  - RPO
+  - unfilled orders
+  - book of business
+  - contracted backlog
+  xbrl_tags: []
+  calculation_notes: Total value of orders received but not yet fulfilled or recognized as revenue
+book_to_bill_ratio:
+  display_name: Book-to-Bill Ratio
+  type: atomic
+  statement: supplemental
+  category: orders
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: industrials
+  synonyms:
+  - book to bill
+  - book-to-bill ratio
+  - B/B ratio
+  - orders to revenue ratio
+  - booking ratio
+  - order intake ratio
+  xbrl_tags: []
+  calculation_notes: New orders divided by revenue; >1.0 indicates growing demand
+capacity_utilization:
+  display_name: Capacity Utilization
+  type: atomic
+  statement: supplemental
+  category: efficiency
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: industrials
+  synonyms:
+  - capacity utilization
+  - utilization rate
+  - plant utilization
+  - factory utilization
+  - production capacity used
+  - throughput rate
+  xbrl_tags: []
+  calculation_notes: Actual output as percentage of maximum potential output

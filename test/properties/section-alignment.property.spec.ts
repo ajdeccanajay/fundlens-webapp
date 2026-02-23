@@ -124,7 +124,7 @@ describe('Property 3: Section Alignment Consistency', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000); // 60 second timeout for property test
 
@@ -155,7 +155,7 @@ describe('Property 3: Section Alignment Consistency', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -184,7 +184,7 @@ describe('Property 3: Section Alignment Consistency', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 });

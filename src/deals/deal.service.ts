@@ -331,6 +331,64 @@ export class DealService {
 
     return this.mapDealToResponse(deals[0]);
   }
+  /**
+   * Get deal by ticker
+   * Returns the deal for the given ticker within the current tenant
+   */
+  async getDealByTicker(ticker: string): Promise<DealWithSession> {
+    const tenantId = this.getTenantId();
+    const isPlatformAdmin = this.isPlatformAdmin();
+    const upperTicker = ticker.toUpperCase();
+
+    this.logger.log(`Fetching deal by ticker: ${upperTicker} for tenant: ${tenantId}`);
+
+    let deals: any[];
+
+    if (isPlatformAdmin) {
+      deals = await this.prisma.$queryRaw`
+        SELECT
+          d.id, d.name, d.description, d.deal_type as "dealType", d.ticker, d.company_name as "companyName",
+          d.years, d.status, d.processing_message as "processingMessage", d.news_data as "newsData",
+          d.created_at as "createdAt", d.updated_at as "updatedAt",
+          d.tenant_id as "tenantId",
+          t.name as "tenantName", t.slug as "tenantSlug",
+          s.id as session_id, s.system_prompt as system_prompt,
+          (SELECT COUNT(*) FROM chat_messages WHERE session_id = s.id) as message_count,
+          sp.id as scratch_pad_id, sp.content as scratch_pad_content, sp.auto_saved_at as scratch_pad_saved
+        FROM deals d
+        LEFT JOIN tenants t ON d.tenant_id = t.id
+        LEFT JOIN analysis_sessions s ON d.id = s.deal_id AND s.is_active = true
+        LEFT JOIN scratch_pads sp ON d.id = sp.deal_id
+        WHERE UPPER(d.ticker) = ${upperTicker}
+        ORDER BY d.created_at DESC
+        LIMIT 1
+      ` as any[];
+    } else {
+      deals = await this.prisma.$queryRaw`
+        SELECT
+          d.id, d.name, d.description, d.deal_type as "dealType", d.ticker, d.company_name as "companyName",
+          d.years, d.status, d.processing_message as "processingMessage", d.news_data as "newsData",
+          d.created_at as "createdAt", d.updated_at as "updatedAt",
+          s.id as session_id, s.system_prompt as system_prompt,
+          (SELECT COUNT(*) FROM chat_messages WHERE session_id = s.id) as message_count,
+          sp.id as scratch_pad_id, sp.content as scratch_pad_content, sp.auto_saved_at as scratch_pad_saved
+        FROM deals d
+        LEFT JOIN analysis_sessions s ON d.id = s.deal_id AND s.is_active = true
+        LEFT JOIN scratch_pads sp ON d.id = sp.deal_id
+        WHERE UPPER(d.ticker) = ${upperTicker} AND d.tenant_id = ${tenantId}
+        ORDER BY d.created_at DESC
+        LIMIT 1
+      ` as any[];
+    }
+
+    if (!deals[0]) {
+      throw new NotFoundException(`Deal not found for ticker: ${ticker}`);
+    }
+
+    return this.mapDealToResponse(deals[0]);
+  }
+
+
 
   /**
    * Update deal

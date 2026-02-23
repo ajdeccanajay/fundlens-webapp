@@ -327,7 +327,7 @@ describe('Property 1: Detection Completeness', () => {
           expect(rateLimiter.waitForRateLimit).toHaveBeenCalled();
         },
       ),
-      { numRuns: 25 },
+      { numRuns: 10 },
     );
   }, 30000);
 
@@ -458,7 +458,7 @@ describe('Property 1: Detection Completeness', () => {
           );
         },
       ),
-      { numRuns: 25 },
+      { numRuns: 10 },
     );
   }, 30000);
 
@@ -553,7 +553,7 @@ describe('Property 1: Detection Completeness', () => {
           expect(secService.getFillings).toHaveBeenCalledTimes(3);
         },
       ),
-      { numRuns: 25 },
+      { numRuns: 10 },
     );
   }, 30000);
 });

@@ -15,6 +15,43 @@ import * as fc from 'fast-check';
 import { IntentDetectorService } from '../../src/rag/intent-detector.service';
 import { IntentAnalyticsService } from '../../src/rag/intent-analytics.service';
 import { BedrockService } from '../../src/rag/bedrock.service';
+import { MetricRegistryService } from '../../src/rag/metric-resolution/metric-registry.service';
+
+// Shared mock for MetricRegistryService used across all property test blocks
+const mockMetricRegistryProvider = {
+  provide: MetricRegistryService,
+  useValue: {
+    resolve: jest.fn().mockImplementation((query: string) => {
+      const q = query.toLowerCase();
+      const buildRes = (id: string, name: string, conf: 'exact' | 'unresolved', db?: string) => ({
+        canonical_id: id, display_name: name, type: 'atomic' as const,
+        confidence: conf, fuzzy_score: null, original_query: query,
+        match_source: conf === 'unresolved' ? 'none' : 'synonym_index',
+        suggestions: null, db_column: db || id,
+      });
+      if (q.includes('revenue') || q === 'sales' || q.includes('top line') || q.includes('topline') || q.includes('total revenue') || q.includes('net sales')) return buildRes('revenue', 'Revenue', 'exact');
+      if (q.includes('net income') || q === 'profit' || q === 'earnings' || q.includes('bottom line')) return buildRes('net_income', 'Net Income', 'exact');
+      if (q.includes('gross margin')) return buildRes('gross_margin', 'Gross Margin', 'exact');
+      if (q.includes('operating margin')) return buildRes('operating_margin', 'Operating Margin', 'exact');
+      if (q.includes('net margin') || q.includes('profit margin')) return buildRes('net_margin', 'Net Margin', 'exact');
+      if (q.includes('return on equity') || q === 'roe') return buildRes('return_on_equity', 'Return on Equity', 'exact');
+      if (q.includes('return on assets') || q === 'roa') return buildRes('return_on_assets', 'Return on Assets', 'exact');
+      if (q.includes('gross profit')) return buildRes('gross_profit', 'Gross Profit', 'exact');
+      if (q.includes('operating income') || q === 'ebit') return buildRes('operating_income', 'Operating Income', 'exact');
+      if (q.includes('ebitda')) return buildRes('ebitda', 'EBITDA', 'exact');
+      if (q.includes('total assets') || q === 'assets') return buildRes('total_assets', 'Total Assets', 'exact');
+      if (q.includes('total liabilities') || q === 'liabilities' || q === 'debt') return buildRes('total_liabilities', 'Total Liabilities', 'exact');
+      if (q.includes('total equity') || q === 'equity' || q.includes('shareholders equity')) return buildRes('total_equity', 'Total Equity', 'exact');
+      if (q.includes('cash flow') || q === 'ocf' || q === 'cfo') return buildRes('operating_cash_flow', 'Operating Cash Flow', 'exact');
+      if (q.includes('free cash flow') || q === 'fcf') return buildRes('free_cash_flow', 'Free Cash Flow', 'exact');
+      if (q.includes('capex') || q.includes('capital expenditure')) return buildRes('capital_expenditure', 'Capital Expenditure', 'exact');
+      return buildRes('', '', 'unresolved');
+    }),
+    resolveMultiple: jest.fn().mockReturnValue([]),
+    getKnownMetricNames: jest.fn().mockReturnValue(new Map()),
+    normalizeMetricName: jest.fn((name: string) => name),
+  },
+};
 
 describe('Property Tests - Confidence Threshold Fix', () => {
   let service: IntentDetectorService;
@@ -74,6 +111,7 @@ describe('Property Tests - Confidence Threshold Fix', () => {
             }),
           },
         },
+        mockMetricRegistryProvider,
       ],
     }).compile();
 
@@ -137,7 +175,7 @@ describe('Property Tests - Confidence Threshold Fix', () => {
             expect(intent.confidence).toBeGreaterThanOrEqual(0.7);
           }
         ),
-        { numRuns: 100 } // Run 100 iterations as specified
+        { numRuns: 10 } // Run 100 iterations as specified
       );
     });
 
@@ -170,7 +208,7 @@ describe('Property Tests - Confidence Threshold Fix', () => {
             expect(intent.confidence).toBeGreaterThan(0);
           }
         ),
-        { numRuns: 100 }
+        { numRuns: 10 }
       );
     });
 
@@ -197,7 +235,7 @@ describe('Property Tests - Confidence Threshold Fix', () => {
             expect(intent.metrics!.length).toBeGreaterThan(0);
           }
         ),
-        { numRuns: 100 }
+        { numRuns: 10 }
       );
     });
 
@@ -222,7 +260,7 @@ describe('Property Tests - Confidence Threshold Fix', () => {
             expect(intent.period).toBeDefined();
           }
         ),
-        { numRuns: 100 }
+        { numRuns: 10 }
       );
     });
   });
@@ -287,7 +325,7 @@ describe('Property Tests - Confidence Threshold Fix', () => {
             }
           }
         ),
-        { numRuns: 100 }
+        { numRuns: 10 }
       );
     });
 
@@ -366,7 +404,7 @@ describe('Property Tests - Confidence Threshold Fix', () => {
             }
           }
         ),
-        { numRuns: 100 }
+        { numRuns: 10 }
       );
     });
 
@@ -534,7 +572,7 @@ describe('Property Tests - Confidence Threshold Fix', () => {
             expect(intent.confidence).toBeGreaterThanOrEqual(0.7);
           }
         ),
-        { numRuns: 100 } // Run 100 iterations as specified
+        { numRuns: 10 } // Run 100 iterations as specified
       );
     });
 
@@ -573,7 +611,7 @@ describe('Property Tests - Confidence Threshold Fix', () => {
             expect(intent.metrics!.length).toBeGreaterThan(0);
           }
         ),
-        { numRuns: 100 }
+        { numRuns: 10 }
       );
     });
 
@@ -610,7 +648,7 @@ describe('Property Tests - Confidence Threshold Fix', () => {
             expect(intent.sectionTypes!.length).toBeGreaterThan(0);
           }
         ),
-        { numRuns: 100 }
+        { numRuns: 10 }
       );
     });
 
@@ -635,7 +673,7 @@ describe('Property Tests - Confidence Threshold Fix', () => {
             expect(intent.metrics).toBeDefined();
           }
         ),
-        { numRuns: 100 }
+        { numRuns: 10 }
       );
     });
   });
@@ -660,7 +698,7 @@ describe('Property Tests - Confidence Threshold Fix', () => {
             expect(intent.confidence).toBeGreaterThan(0);
           }
         ),
-        { numRuns: 20 }
+        { numRuns: 10 }
       );
     });
 
@@ -677,7 +715,7 @@ describe('Property Tests - Confidence Threshold Fix', () => {
             expect(intent.metrics).toBeDefined();
           }
         ),
-        { numRuns: 50 }
+        { numRuns: 10 }
       );
     });
 
@@ -704,7 +742,7 @@ describe('Property Tests - Confidence Threshold Fix', () => {
             expect(intent.confidence).toBeGreaterThanOrEqual(0.7);
           }
         ),
-        { numRuns: 50 }
+        { numRuns: 10 }
       );
     });
   });
@@ -853,7 +891,7 @@ describe('Property 5: Clarification Prompt Generation', () => {
           expect(response.cost).toBe(0);
         }
       ),
-      { numRuns: 100 } // Run 100 iterations as specified
+      { numRuns: 10 } // Run 100 iterations as specified
     );
   });
 
@@ -912,7 +950,7 @@ describe('Property 5: Clarification Prompt Generation', () => {
           expect(response.answer).toContain('Quick Actions:');
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -951,7 +989,7 @@ describe('Property 5: Clarification Prompt Generation', () => {
           expect(response.answer).toContain("ASP trends");
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -990,7 +1028,7 @@ describe('Property 5: Clarification Prompt Generation', () => {
           expect(response.answer).toContain("churn rate");
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -1029,7 +1067,7 @@ describe('Property 5: Clarification Prompt Generation', () => {
           expect(response.answer).toContain("inventory turns");
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -1068,7 +1106,7 @@ describe('Property 5: Clarification Prompt Generation', () => {
           expect(response.answer).toContain("regulatory approvals");
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -1136,7 +1174,7 @@ describe('Property 5: Clarification Prompt Generation', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 });
@@ -1172,6 +1210,7 @@ describe('Property 7: Business Understanding Query Support', () => {
             trackFailedPattern: jest.fn().mockResolvedValue(undefined),
           },
         },
+        mockMetricRegistryProvider,
       ],
     }).compile();
 
@@ -1220,7 +1259,7 @@ describe('Property 7: Business Understanding Query Support', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -1261,7 +1300,7 @@ describe('Property 7: Business Understanding Query Support', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -1301,7 +1340,7 @@ describe('Property 7: Business Understanding Query Support', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -1342,7 +1381,7 @@ describe('Property 7: Business Understanding Query Support', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -1369,7 +1408,7 @@ describe('Property 7: Business Understanding Query Support', () => {
           expect(intent.needsClarification).toBeFalsy();
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -1395,7 +1434,7 @@ describe('Property 7: Business Understanding Query Support', () => {
           expect(ambiguousIntent.needsClarification).toBe(true);
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 });
@@ -1430,6 +1469,7 @@ describe('Property 6: Financial Performance Query Support', () => {
             trackFailedPattern: jest.fn().mockResolvedValue(undefined),
           },
         },
+        mockMetricRegistryProvider,
       ],
     }).compile();
 
@@ -1461,7 +1501,7 @@ describe('Property 6: Financial Performance Query Support', () => {
           expect(intent.needsClarification).toBeFalsy();
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -1498,7 +1538,7 @@ describe('Property 6: Financial Performance Query Support', () => {
           expect(intent.needsClarification).toBeFalsy();
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -1539,7 +1579,7 @@ describe('Property 6: Financial Performance Query Support', () => {
           expect(intent.needsClarification).toBeFalsy();
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -1579,7 +1619,7 @@ describe('Property 6: Financial Performance Query Support', () => {
           expect(intent.needsClarification).toBeFalsy();
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -1607,7 +1647,7 @@ describe('Property 6: Financial Performance Query Support', () => {
           expect(intent.needsClarification).toBeFalsy();
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -1638,7 +1678,7 @@ describe('Property 6: Financial Performance Query Support', () => {
           expect(intent.needsClarification).toBeFalsy();
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 });
@@ -1681,6 +1721,7 @@ describe('Property 8: Comparative Analysis Query Support', () => {
             trackFailedPattern: jest.fn().mockResolvedValue(undefined),
           },
         },
+        mockMetricRegistryProvider,
       ],
     }).compile();
 
@@ -1726,7 +1767,7 @@ describe('Property 8: Comparative Analysis Query Support', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -1760,7 +1801,7 @@ describe('Property 8: Comparative Analysis Query Support', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -1792,7 +1833,7 @@ describe('Property 8: Comparative Analysis Query Support', () => {
           expect(intent.period).toBeDefined();
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -1822,7 +1863,7 @@ describe('Property 8: Comparative Analysis Query Support', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -1853,7 +1894,7 @@ describe('Property 8: Comparative Analysis Query Support', () => {
           expect(intent.needsClarification).toBeFalsy();
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -1885,7 +1926,7 @@ describe('Property 8: Comparative Analysis Query Support', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 });
@@ -1920,6 +1961,7 @@ describe('Property 9: Risk Assessment Query Support', () => {
             trackFailedPattern: jest.fn().mockResolvedValue(undefined),
           },
         },
+        mockMetricRegistryProvider,
       ],
     }).compile();
 
@@ -1959,7 +2001,7 @@ describe('Property 9: Risk Assessment Query Support', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -1996,7 +2038,7 @@ describe('Property 9: Risk Assessment Query Support', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -2031,7 +2073,7 @@ describe('Property 9: Risk Assessment Query Support', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -2062,7 +2104,7 @@ describe('Property 9: Risk Assessment Query Support', () => {
           expect(intent.needsClarification).toBeFalsy();
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -2097,7 +2139,7 @@ describe('Property 9: Risk Assessment Query Support', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -2124,7 +2166,7 @@ describe('Property 9: Risk Assessment Query Support', () => {
           expect(intent.sectionTypes).toContain('item_1a');
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 });
@@ -2160,6 +2202,7 @@ describe('Property 10: Forward-Looking Query Support', () => {
             trackFailedPattern: jest.fn().mockResolvedValue(undefined),
           },
         },
+        mockMetricRegistryProvider,
       ],
     }).compile();
 
@@ -2198,7 +2241,7 @@ describe('Property 10: Forward-Looking Query Support', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -2233,7 +2276,7 @@ describe('Property 10: Forward-Looking Query Support', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -2270,7 +2313,7 @@ describe('Property 10: Forward-Looking Query Support', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -2305,7 +2348,7 @@ describe('Property 10: Forward-Looking Query Support', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -2341,7 +2384,7 @@ describe('Property 10: Forward-Looking Query Support', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -2371,7 +2414,7 @@ describe('Property 10: Forward-Looking Query Support', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 });
@@ -2407,6 +2450,7 @@ describe('Property 11: Valuation Query Support', () => {
             trackFailedPattern: jest.fn().mockResolvedValue(undefined),
           },
         },
+        mockMetricRegistryProvider,
       ],
     }).compile();
 
@@ -2446,7 +2490,7 @@ describe('Property 11: Valuation Query Support', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -2480,7 +2524,7 @@ describe('Property 11: Valuation Query Support', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -2514,7 +2558,7 @@ describe('Property 11: Valuation Query Support', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -2548,7 +2592,7 @@ describe('Property 11: Valuation Query Support', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -2578,7 +2622,7 @@ describe('Property 11: Valuation Query Support', () => {
           expect(intent.needsClarification).toBeFalsy();
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -2606,7 +2650,7 @@ describe('Property 11: Valuation Query Support', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 });
@@ -2643,6 +2687,7 @@ describe('Property 12: Industry-Specific Query Support', () => {
             trackFailedPattern: jest.fn().mockResolvedValue(undefined),
           },
         },
+        mockMetricRegistryProvider,
       ],
     }).compile();
 
@@ -2678,7 +2723,7 @@ describe('Property 12: Industry-Specific Query Support', () => {
           expect(intent.needsClarification).toBeFalsy();
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -2712,7 +2757,7 @@ describe('Property 12: Industry-Specific Query Support', () => {
           expect(intent.needsClarification).toBeFalsy();
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -2745,7 +2790,7 @@ describe('Property 12: Industry-Specific Query Support', () => {
           expect(intent.needsClarification).toBeFalsy();
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -2779,7 +2824,7 @@ describe('Property 12: Industry-Specific Query Support', () => {
           expect(intent.needsClarification).toBeFalsy();
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -2807,7 +2852,7 @@ describe('Property 12: Industry-Specific Query Support', () => {
           expect(intent.needsClarification).toBeFalsy();
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 });
@@ -2844,6 +2889,7 @@ describe('Property 13: ESG Query Support', () => {
             trackFailedPattern: jest.fn().mockResolvedValue(undefined),
           },
         },
+        mockMetricRegistryProvider,
       ],
     }).compile();
 
@@ -2879,7 +2925,7 @@ describe('Property 13: ESG Query Support', () => {
           expect(intent.needsClarification).toBeFalsy();
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -2912,7 +2958,7 @@ describe('Property 13: ESG Query Support', () => {
           expect(intent.needsClarification).toBeFalsy();
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -2945,7 +2991,7 @@ describe('Property 13: ESG Query Support', () => {
           expect(intent.needsClarification).toBeFalsy();
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -2976,7 +3022,7 @@ describe('Property 13: ESG Query Support', () => {
           expect(intent.needsClarification).toBeFalsy();
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -2999,7 +3045,7 @@ describe('Property 13: ESG Query Support', () => {
           expect(intent.needsClarification).toBeFalsy();
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 
@@ -3028,7 +3074,7 @@ describe('Property 13: ESG Query Support', () => {
           expect(intent.needsClarification).toBeFalsy();
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   });
 });

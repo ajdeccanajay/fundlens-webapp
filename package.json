@@ -28,6 +28,8 @@
     "test:e2e:frontend:debug": "playwright test --debug",
     "test:properties": "jest --config ./test/jest-unit.json --testPathPatterns=properties",
     "test:properties:watch": "jest --config ./test/jest-unit.json --testPathPatterns=properties --watch",
+    "test:eval": "RUN_EVAL=true jest --config ./test/jest-unit.json --testPathPatterns=eval/haiku-intent-eval --runInBand --no-coverage",
+    "test:eval:scoring": "jest --config ./test/jest-unit.json --testPathPatterns=eval/haiku-intent-eval --testNamePattern='Eval Scoring Logic' --no-coverage",
     "db:setup": "./scripts/setup-db.sh",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
@@ -63,6 +65,7 @@
     "axios": "^1.6.0",
     "dotenv": "^16.4.5",
     "exceljs": "^4.4.0",
+    "js-yaml": "^4.1.1",
     "lru-cache": "^11.2.5",
     "mammoth": "^1.11.0",
     "multer": "^2.0.2",
@@ -72,6 +75,7 @@
     "pg": "^8.16.3",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "string-similarity": "^4.0.4",
     "uuid": "^13.0.0",
     "xlsx": "^0.18.5",
     "yahoo-finance2": "^2.13.3"
@@ -85,7 +89,9 @@
     "@playwright/test": "^1.58.0",
     "@types/express": "^5.0.0",
     "@types/jest": "^30.0.0",
+    "@types/jsdom": "^27.0.0",
     "@types/node": "^22.10.7",
+    "@types/string-similarity": "^4.0.2",
     "@types/supertest": "^6.0.2",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
@@ -93,6 +99,8 @@
     "fast-check": "^4.5.3",
     "globals": "^16.0.0",
     "jest": "^30.0.0",
+    "jsdom": "^28.1.0",
+    "marked": "^17.0.3",
     "prettier": "^3.4.2",
     "prisma": "^5.22.0",
     "source-map-support": "^0.5.21",
@@ -102,7 +110,8 @@
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.7.3",
-    "typescript-eslint": "^8.20.0"
+    "typescript-eslint": "^8.20.0",
+    "vitest": "^4.0.18"
   },
   "jest": {
     "moduleFileExtensions": [

@@ -1,0 +1,442 @@
+# FundLens Metric Registry
+# Auto-generated from existing metrics mapping + GICS expansion
+# Source: mini_MVP_metrics.xlsx + manual curation
+
+common_stock_beginning:
+  display_name: Common Stock Beginning
+  type: atomic
+  statement: equity_statement
+  category: other
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Common Stock - Beginning
+  - Opening Common Stock
+  - Ordinary Shares Start
+  xbrl_tags:
+  - us-gaap:CommonStockValue
+  - ifrs-full:IssuedCapital
+  calculation_notes: Beginning balance for common stock
+common_stock_issued:
+  display_name: Common Stock Issued
+  type: atomic
+  statement: equity_statement
+  category: other
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Common Stock Issued
+  - New Shares Issued
+  - Capital Raised via Common Stock
+  xbrl_tags:
+  - us-gaap:CommonStockIssued
+  - ifrs-full:IssuedShares
+  calculation_notes: Increase in common stock from issuance
+common_stock_end:
+  display_name: Common Stock End
+  type: atomic
+  statement: equity_statement
+  category: other
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Common Stock - Ending
+  - Closing Common Stock
+  - Ordinary Shares End
+  xbrl_tags:
+  - us-gaap:CommonStockValue
+  - ifrs-full:IssuedCapital
+  calculation_notes: Ending balance of common stock
+preferred_stock_beginning:
+  display_name: Preferred Stock Beginning
+  type: atomic
+  statement: equity_statement
+  category: other
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Preferred Stock - Beginning
+  - Opening Preferred Stock
+  xbrl_tags:
+  - us-gaap:PreferredStockValue
+  - ifrs-full:PreferenceShares
+  calculation_notes: Beginning balance of preferred stock
+preferred_stock_issued:
+  display_name: Preferred Stock Issued
+  type: atomic
+  statement: equity_statement
+  category: other
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Preferred Stock Issued
+  - New Preferred Shares
+  xbrl_tags:
+  - us-gaap:PreferredStockIssued
+  - ifrs-full:PreferenceSharesIssued
+  calculation_notes: Increase in preferred stock from issuance
+preferred_stock_end:
+  display_name: Preferred Stock End
+  type: atomic
+  statement: equity_statement
+  category: other
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Preferred Stock - Ending
+  - Closing Preferred Stock
+  xbrl_tags:
+  - us-gaap:PreferredStockValue
+  - ifrs-full:PreferenceShares
+  calculation_notes: Ending balance of preferred stock
+additional_paid_in_capital_beginning:
+  display_name: Additional Paid In Capital Beginning
+  type: atomic
+  statement: equity_statement
+  category: other
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - APIC - Beginning
+  - Share Premium Start
+  - Contributed Capital Beginning
+  xbrl_tags:
+  - us-gaap:AdditionalPaidInCapital
+  - ifrs-full:SharePremium
+  calculation_notes: Opening balance of APIC
+apic_increase:
+  display_name: APIC Increase
+  type: atomic
+  statement: equity_statement
+  category: other
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Additional Paid-in Capital Increase
+  - APIC from Share Issuance
+  - Capital Contributions
+  xbrl_tags:
+  - us-gaap:AdditionalPaidInCapital
+  - ifrs-full:SharePremium
+  calculation_notes: Increase from stock issuance or other contributions
+apic_decrease:
+  display_name: APIC Decrease
+  type: atomic
+  statement: equity_statement
+  category: other
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - APIC Decrease
+  - APIC Reduction
+  - Adjustments to Paid-In Capital
+  xbrl_tags:
+  - us-gaap:AdditionalPaidInCapital
+  - ifrs-full:SharePremium
+  calculation_notes: Decrease due to repurchases, stock cancellations, or adjustments
+apic_end:
+  display_name: APIC End
+  type: atomic
+  statement: equity_statement
+  category: other
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - APIC - Ending
+  - Contributed Capital End
+  xbrl_tags:
+  - us-gaap:AdditionalPaidInCapital
+  - ifrs-full:SharePremium
+  calculation_notes: Ending APIC balance
+retained_earnings_beginning:
+  display_name: Retained Earnings Beginning
+  type: atomic
+  statement: equity_statement
+  category: other
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Retained Earnings - Beginning
+  - Opening Retained Earnings
+  - Accumulated Earnings Start
+  xbrl_tags:
+  - us-gaap:RetainedEarningsAccumulatedDeficit
+  - ifrs-full:RetainedEarnings
+  calculation_notes: Opening balance of retained earnings
+net_income:
+  display_name: Net Income
+  type: atomic
+  statement: equity_statement
+  category: net_income
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Net Income
+  - Profit
+  - Earnings
+  xbrl_tags:
+  - us-gaap:NetIncomeLoss
+  - ifrs-full:ProfitLoss
+  calculation_notes: Increase in retained earnings from net income
+dividends_declared:
+  display_name: Dividends Declared
+  type: atomic
+  statement: equity_statement
+  category: other
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Dividends
+  - Cash Dividends
+  - Stock Dividends
+  - Dividend Payments
+  xbrl_tags:
+  - us-gaap:DividendsDeclared
+  - ifrs-full:DividendsDeclared
+  calculation_notes: Reduces retained earnings
+retained_earnings_end:
+  display_name: Retained Earnings End
+  type: atomic
+  statement: equity_statement
+  category: other
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Retained Earnings - Ending
+  - Closing Retained Earnings
+  - Accumulated Earnings End
+  xbrl_tags:
+  - us-gaap:RetainedEarningsAccumulatedDeficit
+  - ifrs-full:RetainedEarnings
+  calculation_notes: Ending retained earnings
+treasury_stock_beginning:
+  display_name: Treasury Stock Beginning
+  type: atomic
+  statement: equity_statement
+  category: other
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Treasury Stock - Beginning
+  - Repurchased Shares Start
+  - Own Shares Held Beginning
+  xbrl_tags:
+  - us-gaap:TreasuryStockValue
+  - ifrs-full:TreasuryShares
+  calculation_notes: Opening balance of treasury stock
+treasury_stock_purchased:
+  display_name: Treasury Stock Purchased
+  type: atomic
+  statement: equity_statement
+  category: other
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Treasury Stock Purchased
+  - Shares Repurchased
+  - Buybacks
+  xbrl_tags:
+  - us-gaap:PaymentsToAcquireTreasuryStock
+  - ifrs-full:TreasuryShares
+  calculation_notes: Increase in treasury stock reduces equity
+treasury_stock_sold:
+  display_name: Treasury Stock Sold
+  type: atomic
+  statement: equity_statement
+  category: other
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Treasury Stock Sold
+  - Reissued Treasury Shares
+  - Share Resales
+  xbrl_tags:
+  - us-gaap:ProceedsFromSalesOfTreasuryStock
+  - ifrs-full:TreasuryShares
+  calculation_notes: Decrease in treasury stock
+treasury_stock_end:
+  display_name: Treasury Stock End
+  type: atomic
+  statement: equity_statement
+  category: other
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Treasury Stock - Ending
+  - Closing Treasury Stock
+  - Own Shares Held End
+  xbrl_tags:
+  - us-gaap:TreasuryStockValue
+  - ifrs-full:TreasuryShares
+  calculation_notes: Ending balance of treasury stock
+accumulated_other_comprehensive_income_beginning:
+  display_name: Accumulated Other Comprehensive Income Beginning
+  type: atomic
+  statement: equity_statement
+  category: other
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - AOCI - Beginning
+  - Accumulated OCI Start
+  - Other Comprehensive Income Start
+  xbrl_tags:
+  - us-gaap:AccumulatedOtherComprehensiveIncomeLossNetOfTax
+  - ifrs-full:OtherReserves
+  calculation_notes: Opening balance of OCI
+oci_changes:
+  display_name: OCI Changes
+  type: atomic
+  statement: equity_statement
+  category: other
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Other Comprehensive Income Changes
+  - OCI Movements
+  - FX, Pension, Unrealized Gains/Losses
+  xbrl_tags:
+  - us-gaap:OtherComprehensiveIncome
+  - ifrs-full:OtherComprehensiveIncome
+  calculation_notes: OCI components for the period
+accumulated_other_comprehensive_income_end:
+  display_name: Accumulated Other Comprehensive Income End
+  type: atomic
+  statement: equity_statement
+  category: other
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - AOCI - Ending
+  - Accumulated OCI End
+  - Other Comprehensive Income Closing
+  xbrl_tags:
+  - us-gaap:AccumulatedOtherComprehensiveIncomeLossNetOfTax
+  - ifrs-full:OtherReserves
+  calculation_notes: Ending balance of OCI
+noncontrolling_interest_beginning:
+  display_name: Noncontrolling Interest Beginning
+  type: atomic
+  statement: equity_statement
+  category: other
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Minority Interest Beginning
+  - NCI Start
+  - Noncontrolling Equity Start
+  xbrl_tags:
+  - us-gaap:MinorityInterest
+  - ifrs-full:NoncontrollingInterests
+  calculation_notes: Opening balance of NCI
+noncontrolling_interest_changes:
+  display_name: Noncontrolling Interest Changes
+  type: atomic
+  statement: equity_statement
+  category: other
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - NCI Changes
+  - Allocation of Net Income and OCI
+  - Dividends to NCI
+  xbrl_tags:
+  - us-gaap:MinorityInterest
+  - ifrs-full:NoncontrollingInterests
+  calculation_notes: Adjustments to minority interest
+noncontrolling_interest_end:
+  display_name: Noncontrolling Interest End
+  type: atomic
+  statement: equity_statement
+  category: other
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Noncontrolling Interest Ending
+  - Minority Interest End
+  xbrl_tags:
+  - us-gaap:MinorityInterest
+  - ifrs-full:NoncontrollingInterests
+  calculation_notes: Ending balance of noncontrolling interest
+total_equity_beginning:
+  display_name: Total Equity Beginning
+  type: atomic
+  statement: equity_statement
+  category: other
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Total Equity Beginning
+  - Opening Equity
+  - Shareholders Equity Start
+  xbrl_tags:
+  - us-gaap:StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest
+  - ifrs-full:Equity
+  calculation_notes: Sum of all components at period start
+total_equity_end:
+  display_name: Total Equity End
+  type: atomic
+  statement: equity_statement
+  category: other
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Total Equity Ending
+  - Closing Equity
+  - Shareholders Equity End
+  xbrl_tags:
+  - us-gaap:StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest
+  - ifrs-full:Equity
+  calculation_notes: Sum of all components at period end

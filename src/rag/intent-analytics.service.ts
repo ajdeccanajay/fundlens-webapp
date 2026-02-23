@@ -7,12 +7,13 @@ export interface IntentDetectionLog {
   tenantId: string;
   query: string;
   detectedIntent: QueryIntent;
-  detectionMethod: 'regex' | 'llm' | 'generic';
+  detectionMethod: 'regex' | 'llm' | 'generic' | 'regex_fast_path' | 'cache_hit' | 'fallback';
   confidence: number;
   success: boolean;
   errorMessage?: string;
   latencyMs: number;
   llmCostUsd?: number;
+  detectionPath?: string;  // Full detection path e.g. "fast_path_miss → cache_miss → llm"
   createdAt: Date;
 }
 
@@ -62,18 +63,19 @@ export class IntentAnalyticsService {
     tenantId: string;
     query: string;
     detectedIntent: QueryIntent;
-    detectionMethod: 'regex' | 'llm' | 'generic';
+    detectionMethod: 'regex' | 'llm' | 'generic' | 'regex_fast_path' | 'cache_hit' | 'fallback';
     confidence: number;
     success: boolean;
     errorMessage?: string;
     latencyMs: number;
     llmCostUsd?: number;
+    detectionPath?: string;
   }): Promise<void> {
     try {
       await this.prisma.$executeRaw`
         INSERT INTO intent_detection_logs (
           tenant_id, query, detected_intent, detection_method,
-          confidence, success, error_message, latency_ms, llm_cost_usd
+          confidence, success, error_message, latency_ms, llm_cost_usd, detection_path
         ) VALUES (
           ${params.tenantId},
           ${params.query},
@@ -83,7 +85,8 @@ export class IntentAnalyticsService {
           ${params.success},
           ${params.errorMessage || null},
           ${params.latencyMs},
-          ${params.llmCostUsd || null}
+          ${params.llmCostUsd || null},
+          ${params.detectionPath || null}
         )
       `;
 
@@ -389,6 +392,11 @@ export class IntentAnalyticsService {
       avgConfidence: number;
       avgLatencyMs: number;
       llmCostUsd: number;
+      fastPathHitRate: number;
+      cacheHitRate: number;
+      llmInvocationRate: number;
+      correctionRate: number;
+      estimatedMonthlyLlmCost: number;
     };
     last7Days: {
       totalQueries: number;
@@ -397,6 +405,11 @@ export class IntentAnalyticsService {
       avgConfidence: number;
       avgLatencyMs: number;
       llmCostUsd: number;
+      fastPathHitRate: number;
+      cacheHitRate: number;
+      llmInvocationRate: number;
+      correctionRate: number;
+      estimatedMonthlyLlmCost: number;
     };
   }> {
     try {
@@ -431,12 +444,21 @@ export class IntentAnalyticsService {
     avgConfidence: number;
     avgLatencyMs: number;
     llmCostUsd: number;
+    fastPathHitRate: number;
+    cacheHitRate: number;
+    llmInvocationRate: number;
+    correctionRate: number;
+    estimatedMonthlyLlmCost: number;
   }> {
     const result = await this.prisma.$queryRaw<any[]>`
       SELECT
         COUNT(*) as total,
         SUM(CASE WHEN detection_method = 'regex' THEN 1 ELSE 0 END) as regex_count,
         SUM(CASE WHEN detection_method = 'llm' THEN 1 ELSE 0 END) as llm_count,
+        SUM(CASE WHEN detection_method = 'regex_fast_path' THEN 1 ELSE 0 END) as fast_path_count,
+        SUM(CASE WHEN detection_method = 'cache_hit' THEN 1 ELSE 0 END) as cache_hit_count,
+        SUM(CASE WHEN detection_method = 'fallback' THEN 1 ELSE 0 END) as fallback_count,
+        SUM(CASE WHEN detection_path LIKE '%correction%' THEN 1 ELSE 0 END) as correction_count,
         AVG(confidence) as avg_conf,
         AVG(latency_ms) as avg_lat,
         SUM(COALESCE(llm_cost_usd, 0)) as llm_cost
@@ -448,6 +470,15 @@ export class IntentAnalyticsService {
 
     const metric = result[0];
     const total = parseInt(metric.total) || 0;
+    const fastPathCount = parseInt(metric.fast_path_count) || 0;
+    const cacheHitCount = parseInt(metric.cache_hit_count) || 0;
+    const llmCount = parseInt(metric.llm_count) || 0;
+    const correctionCount = parseInt(metric.correction_count) || 0;
+    const llmCost = parseFloat(metric.llm_cost) || 0;
+
+    // Calculate period duration in days for monthly cost projection
+    const periodDays = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
+    const estimatedMonthlyLlmCost = periodDays > 0 ? (llmCost / periodDays) * 30 : 0;
 
     return {
       totalQueries: total,
@@ -455,7 +486,12 @@ export class IntentAnalyticsService {
       llmFallbackRate: total > 0 ? (parseInt(metric.llm_count) / total) * 100 : 0,
       avgConfidence: parseFloat(metric.avg_conf) || 0,
       avgLatencyMs: Math.round(parseFloat(metric.avg_lat) || 0),
-      llmCostUsd: parseFloat(metric.llm_cost) || 0,
+      llmCostUsd: llmCost,
+      fastPathHitRate: total > 0 ? (fastPathCount / total) * 100 : 0,
+      cacheHitRate: total > 0 ? (cacheHitCount / total) * 100 : 0,
+      llmInvocationRate: total > 0 ? (llmCount / total) * 100 : 0,
+      correctionRate: total > 0 ? (correctionCount / total) * 100 : 0,
+      estimatedMonthlyLlmCost: Math.round(estimatedMonthlyLlmCost * 10000) / 10000,
     };
   }
 }

@@ -38,6 +38,7 @@ export interface SendMessageDto {
     tickers?: string[];
     sectors?: string[];
     fiscalPeriod?: string;
+    instantRagSessionId?: string;
   };
 }
 
@@ -66,7 +67,7 @@ export interface Message {
 }
 
 export interface StreamChunk {
-  type: 'token' | 'source' | 'done' | 'error' | 'citations' | 'peerComparison';
+  type: 'token' | 'source' | 'done' | 'error' | 'citations' | 'peerComparison' | 'visualization';
   data: any;
 }
 
@@ -208,6 +209,113 @@ export class ResearchAssistantService {
     const hasMore = offset + conversations.length < total;
 
     return { conversations, total, hasMore };
+  }
+  /**
+   * Get messages for a conversation
+   * SECURITY: Verifies tenant ownership
+   */
+  async getConversationMessages(conversationId: string): Promise<any[]> {
+    const tenantId = this.getTenantId();
+    const userId = this.getUserId();
+
+    this.logger.log(`Fetching messages for conversation ${conversationId} for tenant ${tenantId}`);
+
+    // Verify conversation exists and belongs to tenant
+    const conversations = await this.prisma.$queryRaw<Conversation[]>`
+      SELECT id
+      FROM research_conversations
+      WHERE id = ${conversationId}::uuid
+        AND tenant_id = ${tenantId}::uuid
+        AND user_id = ${userId}::uuid
+    `;
+
+    if (!conversations[0]) {
+      throw new NotFoundException('Conversation not found');
+    }
+
+    // Get messages in chronological order
+    // Note: citations are stored in separate 'citations' table, visualization/peerComparison are streamed only (not persisted)
+    const messages = await this.prisma.$queryRaw<any[]>`
+      SELECT
+        id, conversation_id as "conversationId", role, content,
+        sources, metadata,
+        tokens_used as "tokensUsed", created_at as "createdAt"
+      FROM research_messages
+      WHERE conversation_id = ${conversationId}::uuid
+      ORDER BY created_at ASC
+    `;
+
+    // Get citations for all messages in this conversation from the citations table
+    const messageIds = messages.map(m => m.id);
+    let citationsMap: Map<string, any[]> = new Map();
+    
+    if (messageIds.length > 0) {
+      try {
+        const allCitations = await this.prisma.$queryRaw<any[]>`
+          SELECT 
+            c.message_id as "messageId",
+            c.document_id as "documentId",
+            c.chunk_id as "chunkId",
+            c.quote as "excerpt",
+            c.page_number as "pageNumber",
+            c.relevance_score as "relevanceScore",
+            d.title as "filename",
+            d.ticker
+          FROM citations c
+          LEFT JOIN documents d ON c.document_id = d.id
+          WHERE c.message_id = ANY(${messageIds}::uuid[])
+        `;
+        
+        // Group citations by message_id
+        for (const citation of allCitations) {
+          const msgId = citation.messageId;
+          if (!citationsMap.has(msgId)) {
+            citationsMap.set(msgId, []);
+          }
+          citationsMap.get(msgId)!.push({
+            documentId: citation.documentId,
+            chunkId: citation.chunkId,
+            excerpt: citation.excerpt,
+            pageNumber: citation.pageNumber,
+            relevanceScore: citation.relevanceScore,
+            filename: citation.filename,
+            ticker: citation.ticker,
+          });
+        }
+      } catch (error) {
+        // Citations table might not exist or query failed - continue without citations
+        this.logger.warn(`Failed to fetch citations: ${error.message}`);
+      }
+    }
+
+    // Parse JSON fields with error handling
+    return messages.map((msg) => {
+      try {
+        const sources = msg.sources ? (typeof msg.sources === 'string' ? JSON.parse(msg.sources) : msg.sources) : [];
+        const metadata = msg.metadata ? (typeof msg.metadata === 'string' ? JSON.parse(msg.metadata) : msg.metadata) : {};
+        
+        return {
+          ...msg,
+          sources,
+          // Citations come from the citations table
+          citations: citationsMap.get(msg.id) || [],
+          // visualization and peerComparison are streamed only, not persisted
+          // They could be stored in metadata if needed in the future
+          visualization: metadata.visualization || null,
+          peerComparison: metadata.peerComparison || null,
+        };
+      } catch (error) {
+        this.logger.error(`Failed to parse message ${msg.id} JSON fields:`, error);
+        // Return message with empty arrays/null for failed JSON parsing
+        return {
+          ...msg,
+          sources: [],
+          citations: [],
+          visualization: null,
+          peerComparison: null,
+        };
+      }
+    });
   }
 
   /**
@@ -415,14 +523,21 @@ export class ResearchAssistantService {
         tenantId, // Enable user document search
         ticker: primaryTicker, // Primary ticker for scoping
         tickers: tickers.length > 1 ? tickers : undefined, // Pass peer tickers for multi-ticker retrieval
+        instantRagSessionId: dto.context?.instantRagSessionId, // Cross-source retrieval from Instant RAG session
       });
 
       this.logger.log(`✅ RAG Result: ${ragResult.intent.type} query`);
       this.logger.log(`   - Structured metrics: ${ragResult.metrics?.length || 0}`);
       this.logger.log(`   - Semantic narratives: ${ragResult.narratives?.length || 0}`);
-      this.logger.log(`   - User document citations: ${ragResult.citations?.length || 0}`);
+      this.logger.log(`   - Citations: ${ragResult.citations?.length || 0}`);
+      if (ragResult.citations && ragResult.citations.length > 0) {
+        this.logger.log(`   - Citation details: ${JSON.stringify(ragResult.citations.slice(0, 2))}`);
+      }
       this.logger.log(`   - Intent: ${JSON.stringify(ragResult.intent)}`);
-
+      this.logger.log(`   - Visualization: ${ragResult.visualization ? 'present' : 'none'}`);
+      if (ragResult.visualization) {
+        this.logger.log(`   - Visualization type: ${ragResult.visualization.chartType}, title: ${ragResult.visualization.title}`);
+      }
       // Stream the response
       let fullResponse = ragResult.answer;
       const sources: any[] = ragResult.sources || [];
@@ -448,29 +563,41 @@ export class ResearchAssistantService {
 
       // Yield citations (NEW)
       if (citations.length > 0) {
+        this.logger.log(`📤 Yielding ${citations.length} citations`);
+        const mappedCitations = citations.map((c) => ({
+          // Support both formats: Bedrock citations (number) and user doc citations (citationNumber)
+          number: c.number || c.citationNumber,
+          citationNumber: c.citationNumber || c.number,
+          // SEC filing metadata (from Bedrock)
+          ticker: c.ticker,
+          filingType: c.filingType,
+          fiscalPeriod: c.fiscalPeriod,
+          section: c.section,
+          excerpt: c.excerpt,
+          relevanceScore: c.relevanceScore || c.score,
+          // User document metadata
+          documentId: c.documentId,
+          chunkId: c.chunkId,
+          filename: c.filename,
+          pageNumber: c.pageNumber,
+          snippet: c.snippet,
+          score: c.score,
+        }));
+        this.logger.log(`📤 Mapped citations: ${JSON.stringify(mappedCitations.slice(0, 2))}`);
         yield {
           type: 'citations',
           data: {
-            citations: citations.map((c) => ({
-              // Support both formats: Bedrock citations (number) and user doc citations (citationNumber)
-              number: c.number || c.citationNumber,
-              citationNumber: c.citationNumber || c.number,
-              // SEC filing metadata (from Bedrock)
-              ticker: c.ticker,
-              filingType: c.filingType,
-              fiscalPeriod: c.fiscalPeriod,
-              section: c.section,
-              excerpt: c.excerpt,
-              relevanceScore: c.relevanceScore || c.score,
-              // User document metadata
-              documentId: c.documentId,
-              chunkId: c.chunkId,
-              filename: c.filename,
-              pageNumber: c.pageNumber,
-              snippet: c.snippet,
-              score: c.score,
-            })),
+            citations: mappedCitations,
           },
+        };
+      }
+
+      // Yield visualization chunk before tokens (if present)
+      if (ragResult.visualization) {
+        this.logger.log(`📤 Yielding visualization: ${ragResult.visualization.chartType}`);
+        yield {
+          type: 'visualization' as const,
+          data: ragResult.visualization,
         };
       }
 
@@ -495,6 +622,7 @@ export class ResearchAssistantService {
           processingInfo: ragResult.processingInfo,
           latency: ragResult.latency,
           cost: ragResult.cost,
+          visualization: ragResult.visualization || undefined,
         },
         tokensUsed: (ragResult.usage?.inputTokens || 0) + (ragResult.usage?.outputTokens || 0),
       });
@@ -754,85 +882,110 @@ export class ResearchAssistantService {
    * This prevents cutting off mid-sentence and breaking markdown syntax
    */
   private splitIntoSentences(text: string): string[] {
-    const chunks: string[] = [];
-    let currentChunk = '';
-    let inCodeBlock = false;
-    let inList = false;
+      const chunks: string[] = [];
+      let currentChunk = '';
+      let inCodeBlock = false;
+      let inList = false;
+      let inTable = false;
 
-    const lines = text.split('\n');
+      const lines = text.split('\n');
 
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
 
-      // Detect code blocks
-      if (line.trim().startsWith('```')) {
-        inCodeBlock = !inCodeBlock;
-        currentChunk += line + '\n';
-        continue;
-      }
-
-      // If in code block, don't split
-      if (inCodeBlock) {
-        currentChunk += line + '\n';
-        continue;
-      }
-
-      // Detect lists
-      if (line.trim().match(/^[-*+]\s/) || line.trim().match(/^\d+\.\s/)) {
-        inList = true;
-        currentChunk += line + '\n';
-        continue;
-      }
-
-      // If in list and line is empty, end list
-      if (inList && line.trim() === '') {
-        inList = false;
-        if (currentChunk.trim()) {
-          chunks.push(currentChunk);
-          currentChunk = '';
+        // Detect code blocks
+        if (line.trim().startsWith('```')) {
+          inCodeBlock = !inCodeBlock;
+          currentChunk += line + '\n';
+          continue;
         }
-        continue;
-      }
 
-      // If in list, continue adding
-      if (inList) {
-        currentChunk += line + '\n';
-        continue;
-      }
+        // If in code block, don't split
+        if (inCodeBlock) {
+          currentChunk += line + '\n';
+          continue;
+        }
 
-      // Regular text - split by sentences
-      if (line.trim()) {
-        // Split by sentence boundaries (. ! ?)
-        const sentences = line.split(/([.!?]+\s+)/);
-        for (const sentence of sentences) {
-          if (sentence.trim()) {
-            currentChunk += sentence;
-            // If sentence ends with punctuation, yield chunk
-            if (sentence.match(/[.!?]+\s*$/)) {
-              if (currentChunk.trim()) {
-                chunks.push(currentChunk);
-                currentChunk = '';
+        // Detect markdown tables (lines starting with |)
+        const isTableRow = line.trim().startsWith('|') || /^\|[\s\-:|]+\|$/.test(line.trim());
+        if (isTableRow) {
+          if (!inTable) {
+            // Flush any pending chunk before starting table
+            if (currentChunk.trim()) {
+              chunks.push(currentChunk);
+              currentChunk = '';
+            }
+            inTable = true;
+          }
+          currentChunk += line + '\n';
+          continue;
+        }
+
+        // If we were in a table and hit a non-table line, flush the table
+        if (inTable) {
+          inTable = false;
+          if (currentChunk.trim()) {
+            chunks.push(currentChunk);
+            currentChunk = '';
+          }
+        }
+
+        // Detect lists
+        if (line.trim().match(/^[-*+]\s/) || line.trim().match(/^\d+\.\s/)) {
+          inList = true;
+          currentChunk += line + '\n';
+          continue;
+        }
+
+        // If in list and line is empty, end list
+        if (inList && line.trim() === '') {
+          inList = false;
+          if (currentChunk.trim()) {
+            chunks.push(currentChunk);
+            currentChunk = '';
+          }
+          continue;
+        }
+
+        // If in list, continue adding
+        if (inList) {
+          currentChunk += line + '\n';
+          continue;
+        }
+
+        // Regular text - split by sentences
+        if (line.trim()) {
+          // Split by sentence boundaries (. ! ?)
+          const sentences = line.split(/([.!?]+\s+)/);
+          for (const sentence of sentences) {
+            if (sentence.trim()) {
+              currentChunk += sentence;
+              // If sentence ends with punctuation, yield chunk
+              if (sentence.match(/[.!?]+\s*$/)) {
+                if (currentChunk.trim()) {
+                  chunks.push(currentChunk);
+                  currentChunk = '';
+                }
               }
             }
           }
+        } else {
+          // Empty line - yield current chunk and add newline
+          if (currentChunk.trim()) {
+            chunks.push(currentChunk);
+            currentChunk = '';
+          }
+          chunks.push('\n');
         }
-      } else {
-        // Empty line - yield current chunk and add newline
-        if (currentChunk.trim()) {
-          chunks.push(currentChunk);
-          currentChunk = '';
-        }
-        chunks.push('\n');
       }
-    }
 
-    // Add remaining chunk
-    if (currentChunk.trim()) {
-      chunks.push(currentChunk);
-    }
+      // Add remaining chunk
+      if (currentChunk.trim()) {
+        chunks.push(currentChunk);
+      }
 
-    return chunks.filter(c => c.trim() || c === '\n');
-  }
+      return chunks.filter(c => c.trim() || c === '\n');
+    }
 
   /**
    * Get available tickers from tenant's deals

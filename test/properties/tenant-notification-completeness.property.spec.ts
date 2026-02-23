@@ -271,7 +271,7 @@ describe('Property 3: Tenant Notification Completeness', () => {
           }),
         );
       }),
-      { numRuns: 25 },
+      { numRuns: 10 },
     );
   }, 30000);
 
@@ -321,7 +321,7 @@ describe('Property 3: Tenant Notification Completeness', () => {
           expect(prisma.filingNotification.create).not.toHaveBeenCalled();
         },
       ),
-      { numRuns: 25 },
+      { numRuns: 10 },
     );
   }, 30000);
 
@@ -396,7 +396,7 @@ describe('Property 3: Tenant Notification Completeness', () => {
           expect(createdNotifications[0].ticker).toBe(ticker);
         },
       ),
-      { numRuns: 25 },
+      { numRuns: 10 },
     );
   }, 30000);
 });

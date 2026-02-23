@@ -1,0 +1,497 @@
+# FundLens Metric Registry
+# Auto-generated from existing metrics mapping + GICS expansion
+# Source: mini_MVP_metrics.xlsx + manual curation
+
+revenue:
+  display_name: Revenue
+  type: atomic
+  statement: income_statement
+  category: revenue
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Revenue
+  - Revenues
+  - Net Revenue
+  - Net Revenues
+  - Sales
+  - Net Sales
+  - Total Sales
+  - Operating Revenues
+  - Turnover
+  xbrl_tags:
+  - us-gaap:Revenues
+  - us-gaap:SalesRevenueNet
+  - ifrs-full:Revenue
+  calculation_notes: Top-line inflow from operations
+premiums_earned:
+  display_name: Premiums Earned
+  type: atomic
+  statement: income_statement
+  category: revenue
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: insurance
+  synonyms:
+  - Premiums
+  - Premiums Written
+  - Earned Premiums
+  - Net Premiums
+  xbrl_tags:
+  - us-gaap:InsuranceRevenue
+  - ifrs-full:InsuranceContractRevenue
+  calculation_notes: Revenue from insurance contracts
+net_interest_income:
+  display_name: Net Interest Income
+  type: atomic
+  statement: income_statement
+  category: revenue
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: banking
+  synonyms:
+  - Net Interest Income
+  - Interest Revenue
+  - Net Interest Margin
+  xbrl_tags:
+  - us-gaap:InterestIncome
+  - us-gaap:InterestExpense
+  - ifrs-full:InterestRevenue
+  calculation_notes: Interest income minus interest expense
+subscription_revenue:
+  display_name: Subscription Revenue
+  type: atomic
+  statement: income_statement
+  category: revenue
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: saas_software
+  synonyms:
+  - Subscription Revenue
+  - Recurring Revenue
+  - SaaS Revenue
+  - Hosting Revenue
+  - Service Revenue
+  xbrl_tags:
+  - us-gaap:Revenue
+  - ifrs-full:Revenue
+  calculation_notes: Revenue from SaaS subscriptions or services
+royalties:
+  display_name: Royalties
+  type: atomic
+  statement: income_statement
+  category: revenue
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: energy_media
+  synonyms:
+  - Royalty Income
+  - Royalties Received
+  - License Revenue
+  - IP Revenue
+  xbrl_tags:
+  - us-gaap:RoyaltyRevenue
+  - ifrs-full:Revenue
+  calculation_notes: Revenue from intellectual property or mineral rights
+cost_of_goods_sold:
+  display_name: Cost of Goods Sold
+  type: atomic
+  statement: income_statement
+  category: cost_of_revenue
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - COGS
+  - Cost of Goods Sold
+  - Cost of Revenue
+  - Production Costs
+  - Cost of Services
+  xbrl_tags:
+  - us-gaap:CostOfGoodsAndServicesSold
+  - ifrs-full:CostOfSales
+  calculation_notes: Direct costs associated with producing goods/services
+claims_paid:
+  display_name: Claims Paid
+  type: atomic
+  statement: income_statement
+  category: cost_of_revenue
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: insurance
+  synonyms:
+  - Insurance Claims Paid
+  - Losses Incurred
+  - Claims Expense
+  xbrl_tags:
+  - us-gaap:InsuranceClaimsAndBenefits
+  calculation_notes: Direct insurance claims paid
+cost_of_revenue_saas:
+  display_name: Cost of Revenue SaaS
+  type: atomic
+  statement: income_statement
+  category: cost_of_revenue
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: saas_software
+  synonyms:
+  - Cost of Revenue
+  - Hosting Costs
+  - Subscription Delivery Costs
+  - Service Costs
+  xbrl_tags:
+  - us-gaap:CostOfGoodsAndServicesSold
+  calculation_notes: Costs directly associated with providing SaaS services
+gross_profit:
+  display_name: Gross Profit
+  type: atomic
+  statement: income_statement
+  category: profitability
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Gross Profit
+  - Gross Margin
+  - Gross Income
+  xbrl_tags:
+  - us-gaap:GrossProfit
+  - ifrs-full:GrossProfit
+  calculation_notes: Revenue minus COGS / cost of revenue
+sganda:
+  display_name: SG&A
+  type: atomic
+  statement: income_statement
+  category: operating_expenses
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Selling, General & Administrative
+  - SG&A
+  - Sales & Marketing
+  - Administrative Expense
+  - Distribution Expense
+  xbrl_tags:
+  - us-gaap:SellingGeneralAndAdministrativeExpense
+  calculation_notes: Operating expenses excluding R&D and D&A
+randd:
+  display_name: R&D
+  type: atomic
+  statement: income_statement
+  category: operating_expenses
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Research & Development
+  - R&D
+  - Product Development
+  - Technology Expense
+  - Engineering Expense
+  xbrl_tags:
+  - us-gaap:ResearchAndDevelopmentExpense
+  calculation_notes: Expenses related to development of new products or services
+stock_based_compensation:
+  display_name: Stock Based Compensation
+  type: atomic
+  statement: income_statement
+  category: non_cash_expenses
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Stock-based Compensation
+  - SBC
+  - Share-Based Payment
+  xbrl_tags:
+  - us-gaap:ShareBasedCompensation
+  - ifrs-full:ShareBasedPaymentTransactions
+  calculation_notes: Non-cash expense included in SG&A or R&D
+depreciation_amortization:
+  display_name: Depreciation Amortization
+  type: atomic
+  statement: income_statement
+  category: non_cash_expenses
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Depreciation & Amortization
+  - D&A
+  - Amortization of Intangibles
+  - Depreciation Expense
+  xbrl_tags:
+  - us-gaap:DepreciationAndAmortization
+  calculation_notes: Non-cash expense for tangible and intangible assets
+operating_income:
+  display_name: Operating Income
+  type: atomic
+  statement: income_statement
+  category: operating_income
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Operating Income
+  - Operating Profit
+  - EBIT
+  - Income from Operations
+  xbrl_tags:
+  - us-gaap:OperatingIncomeLoss
+  - ifrs-full:ProfitLossFromOperatingActivities
+  calculation_notes: Gross profit minus operating expenses
+other_operating_income_expense:
+  display_name: Other Operating Income Expense
+  type: atomic
+  statement: income_statement
+  category: operating_income
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Other Operating Income/Expense
+  - Non-core Operations
+  - Misc Operating Items
+  xbrl_tags:
+  - us-gaap:OtherOperatingIncomeExpense
+  - ifrs-full:OtherIncomeExpenseFromOperatingActivities
+  calculation_notes: Operating income adjustments not included in primary SG&A/R&D/COGS
+interest_income:
+  display_name: Interest Income
+  type: atomic
+  statement: income_statement
+  category: non_operating
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Interest Income
+  - Investment Income (interest portion)
+  xbrl_tags:
+  - us-gaap:InterestIncome
+  - ifrs-full:InterestIncome
+  calculation_notes: Income from interest-bearing assets
+interest_expense:
+  display_name: Interest Expense
+  type: atomic
+  statement: income_statement
+  category: non_operating
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Interest Expense
+  - Finance Costs
+  - Borrowing Costs
+  xbrl_tags:
+  - us-gaap:InterestExpense
+  - ifrs-full:FinanceCosts
+  calculation_notes: Expense on borrowings; below operating income
+other_nonoperating_income_expense:
+  display_name: Other NonOperating Income Expense
+  type: atomic
+  statement: income_statement
+  category: non_operating
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Other Income
+  - Other Expense
+  - Non-operating Income
+  - Gains/Losses
+  - FX Gains/Losses
+  xbrl_tags:
+  - us-gaap:NonoperatingIncomeExpense
+  - ifrs-full:OtherGainsLosses
+  calculation_notes: Catch-all for non-operating items
+pretax_income:
+  display_name: Pretax Income
+  type: atomic
+  statement: income_statement
+  category: pretax
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Income Before Taxes
+  - Earnings Before Taxes
+  - EBT
+  xbrl_tags:
+  - us-gaap:IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest
+  calculation_notes: Operating income plus/minus non-operating items
+income_taxes:
+  display_name: Income Taxes
+  type: atomic
+  statement: income_statement
+  category: taxes
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Provision for Income Taxes
+  - Income Tax Expense
+  - Current Tax
+  - Deferred Tax
+  xbrl_tags:
+  - us-gaap:IncomeTaxExpenseBenefit
+  - ifrs-full:IncomeTaxExpenseContinuingOperations
+  calculation_notes: Current and deferred tax expense
+net_income:
+  display_name: Net Income
+  type: atomic
+  statement: income_statement
+  category: net_income
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Net Income
+  - Net Profit
+  - Earnings
+  - Net Earnings
+  - Net Income Attributable to Shareholders
+  - Net Loss
+  xbrl_tags:
+  - us-gaap:NetIncomeLoss
+  - ifrs-full:ProfitLoss
+  calculation_notes: Pretax income minus income taxes
+noncontrolling_interest:
+  display_name: Noncontrolling Interest
+  type: atomic
+  statement: income_statement
+  category: net_income
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Minority Interest
+  - Noncontrolling Interest
+  - NCI
+  xbrl_tags:
+  - us-gaap:MinorityInterest
+  - ifrs-full:NoncontrollingInterests
+  calculation_notes: Portion of net income attributable to minority shareholders
+extraordinary_items:
+  display_name: Extraordinary Items
+  type: atomic
+  statement: income_statement
+  category: non_recurring
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Extraordinary Items
+  - Unusual Gains/Losses
+  - Nonrecurring Items
+  xbrl_tags:
+  - us-gaap:ExtraordinaryItemGainsLosses
+  - ifrs-full:ProfitLossFromNonRecurringItems
+  calculation_notes: Non-operating, infrequent items
+discontinued_operations:
+  display_name: Discontinued Operations
+  type: atomic
+  statement: income_statement
+  category: non_recurring
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Discontinued Operations
+  - Divestiture Results
+  xbrl_tags:
+  - us-gaap:IncomeLossFromDiscontinuedOperations
+  - ifrs-full:ProfitLossFromDiscontinuedOperations
+  calculation_notes: Operations sold or held for sale
+comprehensive_income:
+  display_name: Comprehensive Income
+  type: atomic
+  statement: income_statement
+  category: comprehensive_income
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Comprehensive Income
+  - Total Comprehensive Income
+  - Net + OCI
+  xbrl_tags:
+  - us-gaap:ComprehensiveIncomeNetOfTax
+  - ifrs-full:ComprehensiveIncome
+  calculation_notes: Includes net income plus other comprehensive income items
+adjusted_net_income:
+  display_name: Adjusted Net Income
+  type: atomic
+  statement: income_statement
+  category: non_gaap
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - Adjusted Net Income
+  - Non-GAAP Net Income
+  - Pro Forma Net Income
+  xbrl_tags:
+  - Non-GAAP metric, no standard XBRL tag
+  calculation_notes: Net income adjusted for non-recurring or non-cash items
+ebitda:
+  display_name: EBITDA
+  type: atomic
+  statement: income_statement
+  category: non_gaap
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - EBITDA
+  - Operating Cash Flow (proxy)
+  - Adj. Operating Profit
+  xbrl_tags:
+  - Non-GAAP metric, no standard XBRL tag
+  calculation_notes: Earnings before interest, tax, depreciation & amortization
+ebit:
+  display_name: EBIT
+  type: atomic
+  statement: income_statement
+  category: non_gaap
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - EBIT
+  - Earnings Before Interest and Taxes
+  - Operating Profit
+  xbrl_tags:
+  - us-gaap:OperatingIncomeLoss
+  - ifrs-full:ProfitLossFromOperatingActivities
+  calculation_notes: Operating income before interest and taxes

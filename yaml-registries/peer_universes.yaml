@@ -1,0 +1,35 @@
+# FundLens Peer Universe Registry
+# Defines sector-based peer groups for comparative analysis
+# Used by PeerComparisonService and QueryRouter for peer universe resolution
+#
+# Each peer group defines:
+#   display_name: Human-readable group label
+#   gics_subindustry: GICS classification for the peer group
+#   members: Array of ticker symbols in the peer universe
+#   primary_metrics: Default metrics for comparison queries
+#   normalization_basis: FY (fiscal year), LTM (last twelve months), or CY (calendar year)
+
+online_travel:
+  display_name: Online Travel & Experiences
+  gics_subindustry: Internet & Direct Marketing Retail
+  members: [ABNB, BKNG, EXPE, TRIP]
+  primary_metrics: [revenue, gross_profit_margin, take_rate]
+  normalization_basis: LTM
+
+us_mega_cap_tech:
+  display_name: US Mega-Cap Technology
+  gics_subindustry: Technology
+  members: [AAPL, MSFT, GOOGL, AMZN, META, NVDA]
+  primary_metrics: [revenue, operating_income_margin, free_cash_flow, rd_expense]
+  normalization_basis: FY
+
+third_avenue_portfolio:
+  display_name: Third Avenue Deep Value Portfolio
+  gics_subindustry: Multi-Sector
+  members: []  # Dynamically populated from tenant overlay (yaml-registries/third_avenue.yaml)
+  primary_metrics: [free_cash_flow, net_debt_to_ebitda, price_to_book, operating_income_margin]
+  normalization_basis: LTM
+  dynamic_source:
+    type: tenant_overlay
+    tenant_id: third_avenue
+    description: Members populated at runtime from Third Avenue tenant configuration

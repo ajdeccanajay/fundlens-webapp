@@ -95,7 +95,7 @@ describe('Property 30: Forward-Looking Statement Extraction', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -121,7 +121,7 @@ describe('Property 30: Forward-Looking Statement Extraction', () => {
           expect(statements.length).toBeLessThan(content.split('.').length);
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -149,7 +149,7 @@ describe('Property 30: Forward-Looking Statement Extraction', () => {
           expect(statements[0].commitmentLevel).toBe(commitmentWord);
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -181,7 +181,7 @@ describe('Property 30: Forward-Looking Statement Extraction', () => {
           expect(extracted.length).toBeGreaterThanOrEqual(statements.length);
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 });

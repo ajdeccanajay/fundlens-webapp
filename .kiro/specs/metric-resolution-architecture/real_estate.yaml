@@ -1,0 +1,99 @@
+# FundLens Metric Registry
+# Auto-generated from existing metrics mapping + GICS expansion
+# Source: mini_MVP_metrics.xlsx + manual curation
+
+funds_from_operations:
+  display_name: Funds From Operations
+  type: atomic
+  statement: supplemental
+  category: profitability
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: real_estate
+  synonyms:
+  - FFO
+  - funds from operations
+  - AFFO
+  - adjusted funds from operations
+  - core FFO
+  - FFO per share
+  - AFFO per share
+  - normalized FFO
+  xbrl_tags: []
+  calculation_notes: Net income plus depreciation of real estate assets minus gains on property sales; NAREIT definition
+net_operating_income:
+  display_name: Net Operating Income
+  type: atomic
+  statement: supplemental
+  category: profitability
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: real_estate
+  synonyms:
+  - NOI
+  - net operating income
+  - property NOI
+  - same-store NOI
+  - same property NOI
+  - cash NOI
+  - SSNOI
+  xbrl_tags: []
+  calculation_notes: Property revenue minus property operating expenses; excludes corporate overhead and financing
+occupancy_rate:
+  display_name: Occupancy Rate
+  type: atomic
+  statement: supplemental
+  category: utilization
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: real_estate
+  synonyms:
+  - occupancy
+  - occupancy rate
+  - physical occupancy
+  - economic occupancy
+  - leased percentage
+  - vacancy rate
+  - percent leased
+  - percent occupied
+  xbrl_tags: []
+  calculation_notes: Percentage of rentable space that is leased; economic occupancy accounts for rent concessions
+cap_rate:
+  display_name: Capitalization Rate
+  type: atomic
+  statement: supplemental
+  category: valuation
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: real_estate
+  synonyms:
+  - cap rate
+  - capitalization rate
+  - implied cap rate
+  - going-in cap rate
+  - exit cap rate
+  - NOI yield
+  xbrl_tags: []
+  calculation_notes: NOI divided by property value; inverse of property valuation multiple
+nav_per_share:
+  display_name: Net Asset Value Per Share
+  type: atomic
+  statement: supplemental
+  category: valuation
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: real_estate
+  synonyms:
+  - NAV
+  - NAV per share
+  - net asset value
+  - asset value per share
+  - intrinsic value REIT
+  - private market value
+  xbrl_tags: []
+  calculation_notes: Estimated market value of properties minus liabilities divided by shares

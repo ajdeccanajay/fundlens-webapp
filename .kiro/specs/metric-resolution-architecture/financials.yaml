@@ -1,0 +1,208 @@
+# FundLens Metric Registry
+# Auto-generated from existing metrics mapping + GICS expansion
+# Source: mini_MVP_metrics.xlsx + manual curation
+
+net_interest_margin:
+  display_name: Net Interest Margin
+  type: atomic
+  statement: supplemental
+  category: profitability
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: banking
+  synonyms:
+  - NIM
+  - net interest margin
+  - net interest spread
+  - interest margin
+  - earning asset yield minus cost of funds
+  - spread income margin
+  xbrl_tags: []
+  calculation_notes: Net interest income divided by average earning assets; core bank profitability metric
+provision_for_credit_losses:
+  display_name: Provision for Credit Losses
+  type: atomic
+  statement: income_statement
+  category: credit_quality
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: banking
+  synonyms:
+  - provision for credit losses
+  - PCL
+  - loan loss provision
+  - provision for loan losses
+  - allowance build
+  - credit provision
+  - CECL provision
+  - reserve build
+  xbrl_tags:
+  - us-gaap:ProvisionForLoanLeaseAndOtherLosses
+  calculation_notes: Expense recognized for estimated credit losses under CECL (ASC 326)
+tier_1_capital_ratio:
+  display_name: Tier 1 Capital Ratio
+  type: atomic
+  statement: supplemental
+  category: capital_adequacy
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: banking
+  synonyms:
+  - tier 1 ratio
+  - tier 1 capital ratio
+  - CET1
+  - CET1 ratio
+  - common equity tier 1
+  - tier one capital
+  - core capital ratio
+  - regulatory capital ratio
+  xbrl_tags: []
+  calculation_notes: Common Equity Tier 1 capital divided by risk-weighted assets; primary bank capital adequacy measure
+return_on_average_assets:
+  display_name: Return on Average Assets
+  type: atomic
+  statement: supplemental
+  category: profitability
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: banking
+  synonyms:
+  - ROAA
+  - return on average assets
+  - ROA bank
+  - asset return
+  xbrl_tags: []
+  calculation_notes: Net income divided by average total assets; bank profitability benchmark (target ~1%+)
+return_on_average_equity:
+  display_name: Return on Average Equity
+  type: atomic
+  statement: supplemental
+  category: profitability
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: banking
+  synonyms:
+  - ROAE
+  - return on average equity
+  - ROE bank
+  - equity return
+  - return on tangible common equity
+  - ROTCE
+  xbrl_tags: []
+  calculation_notes: Net income divided by average shareholders equity; bank profitability benchmark (target ~12-15%+)
+efficiency_ratio:
+  display_name: Efficiency Ratio
+  type: atomic
+  statement: supplemental
+  category: efficiency
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: banking
+  synonyms:
+  - efficiency ratio
+  - cost to income ratio
+  - operating efficiency
+  - cost income ratio
+  - overhead ratio
+  - expense ratio bank
+  xbrl_tags: []
+  calculation_notes: Non-interest expense divided by total revenue; lower is better (target <60%)
+loan_to_deposit_ratio:
+  display_name: Loan-to-Deposit Ratio
+  type: atomic
+  statement: supplemental
+  category: liquidity
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: banking
+  synonyms:
+  - LDR
+  - loan to deposit ratio
+  - loan deposit ratio
+  - loans to deposits
+  xbrl_tags: []
+  calculation_notes: Total loans divided by total deposits; indicates funding reliance and liquidity
+npl_ratio:
+  display_name: Non-Performing Loan Ratio
+  type: atomic
+  statement: supplemental
+  category: credit_quality
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: banking
+  synonyms:
+  - NPL ratio
+  - non-performing loans
+  - NPL
+  - non-performing assets
+  - NPA ratio
+  - delinquency ratio
+  - past due ratio
+  - impaired loans ratio
+  xbrl_tags: []
+  calculation_notes: Non-performing loans as percentage of total loans; indicates asset quality
+combined_ratio:
+  display_name: Combined Ratio
+  type: atomic
+  statement: supplemental
+  category: profitability
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: insurance
+  synonyms:
+  - combined ratio
+  - loss ratio plus expense ratio
+  - underwriting ratio
+  - loss ratio
+  - expense ratio insurance
+  - COR
+  xbrl_tags: []
+  calculation_notes: Loss ratio plus expense ratio; <100% indicates underwriting profit
+book_value_per_share:
+  display_name: Book Value Per Share
+  type: atomic
+  statement: supplemental
+  category: valuation
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: all
+  synonyms:
+  - book value per share
+  - BVPS
+  - tangible book value per share
+  - TBVPS
+  - NAV per share
+  - book value
+  - equity per share
+  xbrl_tags:
+  - us-gaap:BookValuePerShare
+  calculation_notes: Total equity divided by shares outstanding; tangible excludes goodwill and intangibles
+assets_under_management:
+  display_name: Assets Under Management
+  type: atomic
+  statement: supplemental
+  category: scale
+  asset_class:
+  - public_equity
+  - private_equity
+  industry: financials
+  synonyms:
+  - AUM
+  - assets under management
+  - assets managed
+  - total AUM
+  - client assets
+  - managed assets
+  - advisory assets
+  xbrl_tags: []
+  calculation_notes: Total market value of assets managed on behalf of clients

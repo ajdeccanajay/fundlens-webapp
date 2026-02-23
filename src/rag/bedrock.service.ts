@@ -121,6 +121,7 @@ export class BedrockService {
       promptVersion?: number; // Optional specific prompt version
       modelId?: string; // Optional model ID for tier selection
       isPeerComparison?: boolean; // Multi-ticker peer comparison mode
+      computedSummary?: any; // Phase 1: YoY growth data from ResponseEnrichmentService
     },
   ): Promise<{
     answer: string;
@@ -155,7 +156,10 @@ export class BedrockService {
         systemPrompt = this.buildSystemPrompt();
       }
 
-      const userMessage = this.buildUserMessage(query, context);
+      const userMessage = this.buildUserMessage(query, {
+        ...context,
+        computedSummary: context.computedSummary,
+      });
       
       // Use provided modelId or default to Claude Opus 4.5
       const selectedModelId = context.modelId || this.modelId;
@@ -425,13 +429,15 @@ export class BedrockService {
    */
   async invokeClaude(params: {
     prompt: string;
+    systemPrompt?: string;
     modelId?: string;
     max_tokens?: number;
+    temperature?: number;
   }): Promise<string> {
     try {
       const modelId = params.modelId || 'us.anthropic.claude-3-haiku-20240307-v1:0'; // Claude 3 Haiku Inference Profile
       
-      const command = new ConverseCommand({
+      const commandInput: any = {
         modelId,
         messages: [
           {
@@ -441,10 +447,16 @@ export class BedrockService {
         ],
         inferenceConfig: {
           maxTokens: params.max_tokens || 1000,
-          temperature: 0.1,
+          temperature: params.temperature ?? 0.1,
         },
-      });
+      };
 
+      // Add system prompt if provided
+      if (params.systemPrompt) {
+        commandInput.system = [{ text: params.systemPrompt }];
+      }
+
+      const command = new ConverseCommand(commandInput);
       const response = await this.bedrockRuntimeClient.send(command);
       return response.output?.message?.content?.[0]?.text || '';
     } catch (error) {
@@ -452,6 +464,59 @@ export class BedrockService {
       throw new Error(`Failed to invoke Claude: ${error.message}`);
     }
   }
+
+  /**
+   * Invoke Claude with vision (image) content for multi-modal analysis.
+   * Uses the Converse API with image content blocks alongside text.
+   * Requirements: 5.1, 5.6, 5.7
+   */
+  async invokeClaudeWithVision(params: {
+    prompt: string;
+    images: { base64: string; mediaType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp' }[];
+    systemPrompt?: string;
+    modelId?: string;
+    max_tokens?: number;
+  }): Promise<string> {
+    try {
+      const modelId = params.modelId || 'us.anthropic.claude-sonnet-4-20250514-v1:0';
+
+      // Build content blocks: images first, then text prompt
+      const contentBlocks: any[] = params.images.map(img => ({
+        image: {
+          format: img.mediaType.split('/')[1], // 'png', 'jpeg', etc.
+          source: { bytes: Buffer.from(img.base64, 'base64') },
+        },
+      }));
+      contentBlocks.push({ text: params.prompt });
+
+      const commandInput: any = {
+        modelId,
+        messages: [
+          {
+            role: 'user',
+            content: contentBlocks,
+          },
+        ],
+        inferenceConfig: {
+          maxTokens: params.max_tokens || 4000,
+          temperature: 0.1,
+        },
+      };
+
+      // Add system prompt if provided
+      if (params.systemPrompt) {
+        commandInput.system = [{ text: params.systemPrompt }];
+      }
+
+      const command = new ConverseCommand(commandInput);
+      const response = await this.bedrockRuntimeClient.send(command);
+      return response.output?.message?.content?.[0]?.text || '';
+    } catch (error) {
+      this.logger.error(`Claude vision invocation failed: ${error.message}`);
+      throw new Error(`Failed to invoke Claude with vision: ${error.message}`);
+    }
+  }
+
 
   /**
    * Extract metadata from content context (fallback method)
@@ -580,6 +645,7 @@ Now generate your investment-grade analysis.`;
       metrics?: any[];
       narratives?: ChunkResult[];
       isPeerComparison?: boolean;
+      computedSummary?: any;
     },
   ): string {
     const parts: string[] = [];
@@ -606,6 +672,36 @@ Now generate your investment-grade analysis.`;
           parts.push(`• ${metric.normalizedMetric}: ${value}`);
         });
       });
+      parts.push('');
+    }
+
+    // Add computed financial summary (YoY growth, CAGR, margins) if available
+    if (context.computedSummary) {
+      parts.push('📈 COMPUTED FINANCIAL METRICS:');
+      const summary = context.computedSummary;
+      if (summary.ticker) parts.push(`Ticker: ${summary.ticker}`);
+      if (summary.yoyGrowth && Object.keys(summary.yoyGrowth).length > 0) {
+        parts.push('YoY Growth Rates:');
+        Object.entries(summary.yoyGrowth).forEach(([metric, periods]: [string, any]) => {
+          if (Array.isArray(periods)) {
+            periods.forEach((p: any) => {
+              parts.push(`• ${metric} ${p.period}: ${(p.value * 100).toFixed(1)}%`);
+            });
+          }
+        });
+      }
+      if (summary.cagr) {
+        parts.push('CAGR:');
+        Object.entries(summary.cagr).forEach(([metric, value]: [string, any]) => {
+          parts.push(`• ${metric}: ${(Number(value) * 100).toFixed(1)}%`);
+        });
+      }
+      if (summary.margins) {
+        parts.push('Margins:');
+        Object.entries(summary.margins).forEach(([metric, value]: [string, any]) => {
+          parts.push(`• ${metric}: ${(Number(value) * 100).toFixed(1)}%`);
+        });
+      }
       parts.push('');
     }
 

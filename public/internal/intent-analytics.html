@@ -318,7 +318,7 @@
 
         async function loadMetrics(tenantId, period) {
             try {
-                const response = await fetch(`${API_BASE}/admin/intent-analytics/realtime?tenantId=${tenantId}`, {
+                const response = await fetch(`${API_BASE}/api/admin/intent-analytics/realtime?tenantId=${tenantId}`, {
                     headers: { 'x-admin-key': ADMIN_KEY }
                 });
                 
@@ -391,7 +391,7 @@
         async function loadPatterns(tenantId, status) {
             try {
                 const statusParam = status === 'all' ? '' : `&status=${status}`;
-                const response = await fetch(`${API_BASE}/admin/intent-analytics/failed-patterns?tenantId=${tenantId}${statusParam}`, {
+                const response = await fetch(`${API_BASE}/api/admin/intent-analytics/failed-patterns?tenantId=${tenantId}${statusParam}`, {
                     headers: { 'x-admin-key': ADMIN_KEY }
                 });
                 
@@ -459,7 +459,7 @@
             const reviewedBy = prompt('Your name:') || 'Admin';
             
             try {
-                const response = await fetch(`${API_BASE}/admin/intent-analytics/update-pattern`, {
+                const response = await fetch(`${API_BASE}/api/admin/intent-analytics/update-pattern`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

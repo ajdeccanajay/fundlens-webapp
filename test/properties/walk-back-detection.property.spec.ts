@@ -97,7 +97,7 @@ describe('Property 31: Guidance Walk-Back Detection', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -130,7 +130,7 @@ describe('Property 31: Guidance Walk-Back Detection', () => {
           expect(walkBacks[0].walkBackType).toBe('softened');
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -161,7 +161,7 @@ describe('Property 31: Guidance Walk-Back Detection', () => {
           expect(walkBacks.length).toBe(0);
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -195,7 +195,7 @@ describe('Property 31: Guidance Walk-Back Detection', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 });

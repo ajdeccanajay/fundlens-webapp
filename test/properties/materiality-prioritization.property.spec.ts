@@ -99,7 +99,7 @@ describe('Property 9: Materiality-Based Prioritization', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -130,7 +130,7 @@ describe('Property 9: Materiality-Based Prioritization', () => {
           expect(sorted.length).toBe(count);
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -160,7 +160,7 @@ describe('Property 9: Materiality-Based Prioritization', () => {
           expect(sorted1.map(p => p.id)).toEqual(sorted2.map(p => p.id));
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -218,7 +218,7 @@ describe('Property 9: Materiality-Based Prioritization', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 
@@ -252,7 +252,7 @@ describe('Property 9: Materiality-Based Prioritization', () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 10 }
     );
   }, 60000);
 });

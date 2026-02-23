@@ -16,6 +16,7 @@ import { AdminModule } from './admin/admin.module';
 import { TenantModule } from './tenant/tenant.module';
 import { ResearchAssistantModule } from './research/research-assistant.module';
 import { FilingsModule } from './filings/filings.module';
+import { InstantRAGModule } from './instant-rag/instant-rag.module';
 
 const publicPath = join(process.cwd(), 'public');
 console.log('📁 Serving static files from:', publicPath);
@@ -41,6 +42,7 @@ console.log('📁 Serving static files from:', publicPath);
     DealsModule,
     ResearchAssistantModule,
     FilingsModule,
+    InstantRAGModule,
   ],
 })
 export class AppModule {} 

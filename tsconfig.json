@@ -22,5 +22,5 @@
     "strictBindCallApply": false,
     "noFallthroughCasesInSwitch": false
   },
-  "exclude": ["prisma/seed.ts", "FUTURE/**/*", "dist/**/*", "test/**/*"]
+  "exclude": ["prisma/seed.ts", "FUTURE/**/*", "dist/**/*", "test/**/*", "RAG_DIAGNOSTIC_PACKAGE/**/*"]
 }

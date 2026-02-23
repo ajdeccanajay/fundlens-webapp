@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FundLens - Research Assistant</title>
+    <link rel="icon" href="/fundlens-logo.png" type="image/png">
     <link rel="stylesheet" href="/css/design-system.css">
     <link rel="stylesheet" href="/css/filing-notifications.css">
     <link rel="stylesheet" href="/css/instant-rag.css">
@@ -96,12 +97,16 @@
         _instantRagTimerInterval: null,
 
         async init() {
-            var params = new URLSearchParams(window.location.search);
-            var q = params.get('query');
-            if (q) { this.researchInput = decodeURIComponent(q); this.$nextTick(() => this.sendResearchMessage()); }
-            var conv = params.get('conv');
-            if (conv) { this.conversationId = conv; await this.loadConversationHistory(conv); }
-            document.addEventListener('citation-click', (e) => { this.handleCitationClickByNumber(e.detail.num); });
+            try {
+                var params = new URLSearchParams(window.location.search);
+                var q = params.get('query');
+                if (q) { this.researchInput = decodeURIComponent(q); this.$nextTick(() => this.sendResearchMessage()); }
+                var conv = params.get('conv');
+                if (conv) { this.conversationId = conv; await this.loadConversationHistory(conv); }
+                document.addEventListener('citation-click', (e) => { this.handleCitationClickByNumber(e.detail.num); });
+            } catch (e) {
+                console.error('Init error:', e);
+            }
         },
 
         async loadConversationHistory(convId) {
@@ -133,7 +138,7 @@
             var messageContent = this.researchInput;
             this.researchInput = '';
             var assistantMessageIndex = this.researchMessages.length;
-            this.researchMessages.push({ id: Date.now() + 1, role: 'assistant', content: '', sources: [], citations: [], visualization: null });
+            this.researchMessages.push({ id: Date.now() + 1, role: 'assistant', content: '', sources: [], citations: [], visualization: null, _rawContent: '', _lastMarkdownFlush: 0 });
             this.researchTyping = true;
             try {
                 var headers = this.getAuthHeaders();
@@ -161,21 +166,68 @@
                                 var jsonStr = line.substring(6).trim();
                                 if (!jsonStr) continue;
                                 var data = JSON.parse(jsonStr);
-                                if (currentEvent === 'token' && data.text) { self.researchMessages[assistantMessageIndex].content += data.text; self.$nextTick(function() { self.scrollResearchToBottom(); }); }
+                                if (currentEvent === 'token' && data.text) {
+                                    self.researchMessages[assistantMessageIndex]._rawContent =
+                                        (self.researchMessages[assistantMessageIndex]._rawContent || '') + data.text;
+                                    var raw = self.researchMessages[assistantMessageIndex]._rawContent;
+                                    if (self.isMarkdownBreakpoint(raw)) {
+                                        self.researchMessages[assistantMessageIndex].content = raw;
+                                        self.$nextTick(function() { self.scrollResearchToBottom(); });
+                                    }
+                                }
                                 else if (currentEvent === 'source' && data.title) { self.researchMessages[assistantMessageIndex].sources.push(data); }
-                                else if (currentEvent === 'citations' && data.citations) { self.researchMessages[assistantMessageIndex].citations = data.citations; }
+                                else if (currentEvent === 'citations' && data.citations) { 
+                                    console.log('[SSE] Received citations event:', JSON.stringify(data.citations).substring(0, 200));
+                                    self.researchMessages[assistantMessageIndex].citations = data.citations; 
+                                    console.log('[SSE] Citations set on message:', self.researchMessages[assistantMessageIndex].citations?.length || 0, 'citations');
+                                }
                                 else if (currentEvent === 'peerComparison' && data) { self.researchMessages[assistantMessageIndex].peerComparison = data; }
-                                else if (currentEvent === 'visualization' && data) { self.researchMessages[assistantMessageIndex].visualization = data; self.$nextTick(function() { self.renderChart(assistantMessageIndex, data); self.scrollResearchToBottom(); }); }
-                                else if (currentEvent === 'done' && data.complete) { self.researchTyping = false; }
+                                else if (currentEvent === 'visualization' && data) { 
+                                    console.log('[SSE] Received visualization event:', JSON.stringify(data).substring(0, 200));
+                                    console.log('[SSE] Setting visualization on message index:', assistantMessageIndex);
+                                    self.researchMessages[assistantMessageIndex].visualization = data; 
+                                    console.log('[SSE] Message visualization set:', !!self.researchMessages[assistantMessageIndex].visualization);
+                                    self.$nextTick(function() { 
+                                        console.log('[SSE] $nextTick - calling renderChart');
+                                        self.renderChart(assistantMessageIndex, data); 
+                                        self.scrollResearchToBottom(); 
+                                    }); 
+                                }
+                                else if (currentEvent === 'done' && data.complete) {
+                                    var remaining = self.researchMessages[assistantMessageIndex]._rawContent;
+                                    if (remaining) {
+                                        self.researchMessages[assistantMessageIndex].content = remaining;
+                                    }
+                                    delete self.researchMessages[assistantMessageIndex]._rawContent;
+                                    self.researchMessages[assistantMessageIndex]._lastMarkdownFlush = 0;
+                                    self._lastMarkdownFlush = 0;
+                                    self.researchTyping = false;
+                                }
                                 else if (currentEvent === 'error' && data.message) { self.researchMessages[assistantMessageIndex].content = 'Error: ' + data.message; self.researchTyping = false; }
                             } catch (e) { console.warn('Failed to parse SSE data:', line, e); }
                         } else if (line.trim() === '') { currentEvent = null; }
                     }
                 }
                 this.researchTyping = false;
+                // Flush any remaining buffer if 'done' event was not received
+                var finalRemaining = this.researchMessages[assistantMessageIndex]._rawContent;
+                if (finalRemaining) {
+                    this.researchMessages[assistantMessageIndex].content = finalRemaining;
+                }
+                delete this.researchMessages[assistantMessageIndex]._rawContent;
+                this.researchMessages[assistantMessageIndex]._lastMarkdownFlush = 0;
+                this._lastMarkdownFlush = 0;
                 if (!this.researchMessages[assistantMessageIndex].content) { this.researchMessages[assistantMessageIndex].content = 'No response received. Please try again.'; }
             } catch (error) {
                 console.error('Error sending message:', error);
+                // Flush any remaining buffer on error/abort
+                var errorRemaining = this.researchMessages[assistantMessageIndex]._rawContent;
+                if (errorRemaining) {
+                    this.researchMessages[assistantMessageIndex].content = errorRemaining;
+                }
+                delete this.researchMessages[assistantMessageIndex]._rawContent;
+                this.researchMessages[assistantMessageIndex]._lastMarkdownFlush = 0;
+                this._lastMarkdownFlush = 0;
                 if (!this.researchMessages[assistantMessageIndex].content) { this.researchMessages[assistantMessageIndex].content = 'Sorry, I encountered an error. Please try again.'; }
             } finally { this.researchTyping = false; }
         },
@@ -354,16 +406,25 @@
         },
 
         renderMarkdownWithCitations(content, citations) {
+            console.log('[renderMarkdownWithCitations] Called with:', content?.substring(0, 100), 'citations:', citations?.length || 0);
             if (!citations || citations.length === 0) return this.renderMarkdown(content);
             this.currentCitations = citations;
             var html = this.renderMarkdown(content);
+            console.log('[renderMarkdownWithCitations] Processing', citations.length, 'citations');
             citations.forEach(function(citation) {
                 var citationNum = citation.number || citation.citationNumber;
+                console.log('[renderMarkdownWithCitations] Processing citation:', citationNum, citation);
                 if (!citationNum) return;
                 var sourceType = citation.sourceType || 'SEC_FILING';
                 var cssClass = sourceType === 'USER_UPLOAD' ? 'citation-link citation-upload' : 'citation-link citation-sec';
                 var regex = new RegExp('\\[' + citationNum + '\\]', 'g');
+                var beforeReplace = html;
                 html = html.replace(regex, '<a href="#" class="' + cssClass + '" data-citation-num="' + citationNum + '" onclick="event.preventDefault(); document.dispatchEvent(new CustomEvent(\'citation-click\', {detail: {num: ' + citationNum + '}}));">[' + citationNum + ']</a>');
+                if (beforeReplace !== html) {
+                    console.log('[renderMarkdownWithCitations] Replaced citation [' + citationNum + ']');
+                } else {
+                    console.log('[renderMarkdownWithCitations] Citation [' + citationNum + '] not found in content');
+                }
             });
             return html;
         },
@@ -384,50 +445,133 @@
 
         async copySourceCitation() { try { await navigator.clipboard.writeText(this.sourceModal.excerpt || ''); } catch (e) { console.error('Copy failed:', e); } },
 
+        isMarkdownBreakpoint(text) {
+            if (!text) return false;
+            // Flush at double newline (paragraph boundary)
+            if (text.endsWith('\n\n')) return true;
+            // Flush at end of table row
+            if (text.endsWith('|\n')) return true;
+            // Flush at sentence boundary: period followed by capital letter or newline.
+            // IMPORTANT: This requires one token of lookahead beyond the period.
+            // A trailing period at the very end of the buffer should NOT trigger a flush —
+            // we need to see the next character to confirm it's a capital letter.
+            // The regex checks the last 20 chars for .\s+[A-Z], which means the capital
+            // letter must already be in the buffer (not just the period).
+            if (/\.\s+[A-Z]/.test(text.slice(-20)) || text.endsWith('.\n')) return true;
+            // A bare trailing period (text.endsWith('.')) does NOT flush — wait for lookahead.
+            // Flush every 200 chars as a safety valve
+            var lastFlush = this._lastMarkdownFlush || 0;
+            if (text.length - lastFlush > 200) {
+                this._lastMarkdownFlush = text.length;
+                return true;
+            }
+            return false;
+        },
+
         formatExcerpt(text) {
             if (!text) return '<p class="text-gray-400 italic">No excerpt available</p>';
             return text.split('\n').map(function(p) { return '<p>' + p + '</p>'; }).join('');
         },
 
         renderChart(messageIndex, payload) {
-            if (!payload || !payload.datasets || payload.datasets.length === 0) return;
+            console.log('[renderChart] Called with messageIndex:', messageIndex, 'payload:', payload?.chartType, payload?.title);
+            if (!payload || !payload.datasets || payload.datasets.length === 0) {
+                console.warn('[renderChart] Invalid payload - no datasets');
+                return;
+            }
             var messageId = this.researchMessages[messageIndex]?.id;
-            if (!messageId) return;
+            if (!messageId) {
+                console.warn('[renderChart] No messageId found for index:', messageIndex);
+                return;
+            }
             var canvasId = 'chart-' + messageId;
+            console.log('[renderChart] Looking for canvas:', canvasId);
             var self = this;
-            this.$nextTick(function() {
+
+            function doRender(canvas) {
+                console.log('[renderChart] doRender for canvas:', canvasId, 'dimensions:', canvas.offsetWidth, 'x', canvas.offsetHeight);
+                try {
+                    var existingChart = Chart.getChart(canvas);
+                    if (existingChart) existingChart.destroy();
+                } catch (e) { /* ignore */ }
+                try {
+                    var colors = ['#1a56db', '#7c3aed', '#0e7490', '#059669', '#d97706', '#dc2626', '#6366f1', '#ec4899'];
+                    var bgColors = colors.map(function(c) { return c + '20'; });
+                    var chartType = payload.chartType === 'groupedBar' ? 'bar' : payload.chartType;
+                    var datasets = payload.datasets.map(function(ds, i) {
+                        var color = colors[i % colors.length];
+                        var bgColor = bgColors[i % bgColors.length];
+                        var dataset = { label: ds.label, data: ds.data, borderColor: color, backgroundColor: ds.type === 'line' || chartType === 'line' ? bgColor : color, borderWidth: 2, tension: 0.3, fill: chartType === 'line' && !ds.yAxisID, pointRadius: chartType === 'line' ? 4 : 0, pointHoverRadius: chartType === 'line' ? 6 : 0 };
+                        if (ds.type) dataset.type = ds.type;
+                        if (ds.yAxisID) dataset.yAxisID = ds.yAxisID;
+                        return dataset;
+                    });
+                    var scales = {
+                        x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+                        y: { beginAtZero: false, grid: { color: '#f3f4f6' }, ticks: { font: { size: 11 }, callback: function(value) {
+                            if (payload.options?.currency) { if (Math.abs(value) >= 1e9) return '$' + (value / 1e9).toFixed(1) + 'B'; if (Math.abs(value) >= 1e6) return '$' + (value / 1e6).toFixed(1) + 'M'; return '$' + value.toLocaleString(); }
+                            if (payload.options?.percentage) return value.toFixed(1) + '%';
+                            return value.toLocaleString();
+                        } } }
+                    };
+                    if (payload.options?.dualAxis) { scales.yoy = { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { font: { size: 11 }, callback: function(value) { return value.toFixed(1) + '%'; } }, title: { display: true, text: 'YoY Growth %', font: { size: 11 } } }; }
+                    new Chart(canvas, { type: chartType, data: { labels: payload.labels, datasets: datasets }, options: { responsive: true, maintainAspectRatio: true, aspectRatio: 2, plugins: { title: { display: true, text: payload.title, font: { size: 14, weight: '600' }, color: '#111827', padding: { bottom: 16 } }, legend: { display: datasets.length > 1, position: 'bottom', labels: { font: { size: 11 }, usePointStyle: true, padding: 16 } }, tooltip: { backgroundColor: '#1e293b', titleFont: { size: 12 }, bodyFont: { size: 12 }, padding: 12, cornerRadius: 8, callbacks: { label: function(context) {
+                        var label = context.dataset.label || '';
+                        var value = context.parsed.y;
+                        if (context.dataset.yAxisID === 'yoy') return label + ': ' + value.toFixed(1) + '%';
+                        if (payload.options?.currency) { if (Math.abs(value) >= 1e9) return label + ': $' + (value / 1e9).toFixed(2) + 'B'; if (Math.abs(value) >= 1e6) return label + ': $' + (value / 1e6).toFixed(2) + 'M'; return label + ': $' + value.toLocaleString(); }
+                        if (payload.options?.percentage) return label + ': ' + value.toFixed(2) + '%';
+                        return label + ': ' + value.toLocaleString();
+                    } } } }, scales: scales } });
+                    console.log('[renderChart] Chart rendered successfully: ' + canvasId + ' (' + chartType + ', ' + datasets.length + ' datasets)');
+                } catch (e) {
+                    console.error('[renderChart] Error rendering chart:', e);
+                }
+            }
+
+            function tryRender() {
+                if (typeof Chart === 'undefined') {
+                    console.warn('[renderChart] Chart.js not loaded yet');
+                    return false;
+                }
                 var canvas = document.getElementById(canvasId);
-                if (!canvas) return;
-                var existingChart = Chart.getChart(canvas);
-                if (existingChart) existingChart.destroy();
-                var colors = ['#1a56db', '#7c3aed', '#0e7490', '#059669', '#d97706', '#dc2626', '#6366f1', '#ec4899'];
-                var bgColors = colors.map(function(c) { return c + '20'; });
-                var chartType = payload.chartType === 'groupedBar' ? 'bar' : payload.chartType;
-                var datasets = payload.datasets.map(function(ds, i) {
-                    var color = colors[i % colors.length];
-                    var bgColor = bgColors[i % bgColors.length];
-                    var dataset = { label: ds.label, data: ds.data, borderColor: color, backgroundColor: ds.type === 'line' || chartType === 'line' ? bgColor : color, borderWidth: 2, tension: 0.3, fill: chartType === 'line' && !ds.yAxisID, pointRadius: chartType === 'line' ? 4 : 0, pointHoverRadius: chartType === 'line' ? 6 : 0 };
-                    if (ds.type) dataset.type = ds.type;
-                    if (ds.yAxisID) dataset.yAxisID = ds.yAxisID;
-                    return dataset;
+                if (canvas && canvas.offsetHeight > 0 && canvas.offsetWidth > 0) {
+                    doRender(canvas);
+                    return true;
+                }
+                return false;
+            }
+
+            this.$nextTick(function() {
+                requestAnimationFrame(function() {
+                    // Attempt immediate render
+                    if (tryRender()) return;
+
+                    // Canvas not ready — use MutationObserver on message container
+                    var container = document.querySelector('[x-ref="researchMessages"]');
+                    if (!container) {
+                        console.error('[renderChart] Message container not found for MutationObserver');
+                        return;
+                    }
+
+                    console.log('[renderChart] Canvas not ready, attaching MutationObserver for:', canvasId);
+                    var observer = new MutationObserver(function() {
+                        if (tryRender()) {
+                            observer.disconnect();
+                            clearTimeout(timeout);
+                            console.log('[renderChart] MutationObserver rendered:', canvasId);
+                        }
+                    });
+                    observer.observe(container, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
+
+                    // 5-second safety timeout
+                    var timeout = setTimeout(function() {
+                        observer.disconnect();
+                        if (!tryRender()) {
+                            console.error('[renderChart] MutationObserver timeout (5s) — canvas never appeared:', canvasId);
+                        }
+                    }, 5000);
                 });
-                var scales = {
-                    x: { grid: { display: false }, ticks: { font: { size: 11 } } },
-                    y: { beginAtZero: false, grid: { color: '#f3f4f6' }, ticks: { font: { size: 11 }, callback: function(value) {
-                        if (payload.options?.currency) { if (Math.abs(value) >= 1e9) return '$' + (value / 1e9).toFixed(1) + 'B'; if (Math.abs(value) >= 1e6) return '$' + (value / 1e6).toFixed(1) + 'M'; return '$' + value.toLocaleString(); }
-                        if (payload.options?.percentage) return value.toFixed(1) + '%';
-                        return value.toLocaleString();
-                    } } }
-                };
-                if (payload.options?.dualAxis) { scales.yoy = { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { font: { size: 11 }, callback: function(value) { return value.toFixed(1) + '%'; } }, title: { display: true, text: 'YoY Growth %', font: { size: 11 } } }; }
-                new Chart(canvas, { type: chartType, data: { labels: payload.labels, datasets: datasets }, options: { responsive: true, maintainAspectRatio: true, aspectRatio: 2, plugins: { title: { display: true, text: payload.title, font: { size: 14, weight: '600' }, color: '#111827', padding: { bottom: 16 } }, legend: { display: datasets.length > 1, position: 'bottom', labels: { font: { size: 11 }, usePointStyle: true, padding: 16 } }, tooltip: { backgroundColor: '#1e293b', titleFont: { size: 12 }, bodyFont: { size: 12 }, padding: 12, cornerRadius: 8, callbacks: { label: function(context) {
-                    var label = context.dataset.label || '';
-                    var value = context.parsed.y;
-                    if (context.dataset.yAxisID === 'yoy') return label + ': ' + value.toFixed(1) + '%';
-                    if (payload.options?.currency) { if (Math.abs(value) >= 1e9) return label + ': $' + (value / 1e9).toFixed(2) + 'B'; if (Math.abs(value) >= 1e6) return label + ': $' + (value / 1e6).toFixed(2) + 'M'; return label + ': $' + value.toLocaleString(); }
-                    if (payload.options?.percentage) return label + ': ' + value.toFixed(2) + '%';
-                    return label + ': ' + value.toLocaleString();
-                } } } }, scales: scales } });
             });
         },
 
@@ -571,7 +715,7 @@
     };
     </script>
 
-    <div x-data="FundLensShell('research', FundLensResearchView())" x-init="try { await init() } catch(e) { console.error('Init error:', e) }" x-cloak>
+    <div x-data="FundLensShell('research', FundLensResearchView())" x-init="init()" x-cloak>
 
         <!-- Nav Bar -->
         <nav class="bg-white shadow-sm border-b border-gray-100 sticky top-0 z-50"><div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"><div class="flex justify-between items-center h-16"><div class="flex items-center space-x-4"><a href="/app/deals/index.html" class="flex items-center"><div class="bg-white px-3 py-1 rounded-lg"><img src="/fundlens-logo.png" alt="FundLens" class="h-8 w-auto"></div></a><div class="hidden sm:flex items-center"><span class="text-gray-300 mx-3">|</span><div class="tenant-badge px-3 py-1 rounded-full"><span class="text-white text-sm font-medium" x-text="user.tenantName || 'Loading...'"></span></div></div></div><div class="flex items-center space-x-4"><div class="relative"><button @click="filingNotifOpen = !filingNotifOpen" class="filing-notif-bell"><i class="fas fa-bell"></i><span x-show="filingNotifCount > 0" class="filing-notif-badge" x-text="filingNotifCount > 99 ? '99+' : filingNotifCount"></span></button><div x-show="filingNotifOpen" @click.away="filingNotifOpen = false" x-transition class="filing-notif-dropdown"><div class="filing-notif-header"><h3>New Filings</h3></div><div class="filing-notif-list"><template x-if="filingNotifications.length === 0"><div class="filing-notif-empty"><i class="fas fa-check-circle"></i><p>No new filings</p></div></template><template x-for="notif in filingNotifications" :key="notif.id"><div class="filing-notif-card"><span class="filing-type-badge" :class="getFilingTypeBadgeClass(notif.filingType)" x-text="notif.filingType"></span><div class="filing-notif-content"><div class="filing-notif-ticker" x-text="notif.ticker"></div><div class="filing-notif-date" x-text="formatFilingDate(notif.filingDate)"></div></div><button @click.stop="dismissFilingNotif(notif.id)" class="filing-notif-dismiss"><i class="fas fa-times"></i></button></div></template></div></div></div><div class="relative" x-data="{ open: false }"><button @click="open = !open" class="flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-gray-100"><div class="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center"><span class="text-indigo-600 font-semibold text-sm" x-text="getUserInitials()"></span></div><div class="hidden md:block text-left"><p class="text-sm font-medium text-gray-700" x-text="user.email"></p></div></button><div x-show="open" @click.away="open = false" x-transition class="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg py-2 z-50 border border-gray-200"><div class="px-4 py-3 border-b border-gray-200"><p class="text-sm font-medium text-gray-900" x-text="user.email"></p><p class="text-xs text-gray-600" x-text="user.tenantName"></p></div><div class="pt-2"><button @click="logout()" class="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"><i class="fas fa-sign-out-alt mr-3"></i> Sign Out</button></div></div></div></div></div></div></nav>
@@ -598,11 +742,11 @@
                         </div>
                     </template>
                     <template x-for="message in researchMessages" :key="message.id">
-                        <div>
+                        <div :data-message-id="message.id">
                             <div x-show="message.role === 'user'" class="flex justify-end mb-4"><div class="message-user" x-text="message.content"></div></div>
                             <div x-show="message.role === 'assistant'" class="flex justify-start mb-4">
                                 <div class="message-assistant">
-                                    <div x-show="message.visualization" class="mb-4"><canvas :id="'chart-' + message.id" style="max-height: 320px; width: 100%;"></canvas></div>
+                                    <div :style="message.visualization ? 'min-height:200px;margin-bottom:1rem;' : 'height:0;overflow:hidden;'"><canvas :id="'chart-' + message.id" style="max-height: 320px; width: 100%;"></canvas></div>
                                     <div x-html="renderMarkdownWithCitations(message.content, message.citations)"></div>
                                     <template x-if="message.peerComparison">
                                         <div class="mt-4 p-4 rounded-lg" style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border: 1px solid #86efac;">

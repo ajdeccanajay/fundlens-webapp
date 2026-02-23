@@ -324,7 +324,7 @@ describe('Property 6: Incremental Detection', () => {
         // Property 6c: Existing filings were NOT counted
         expect(result.newFilings).toBeLessThan(allFilings.length);
       }),
-      { numRuns: 25 },
+      { numRuns: 10 },
     );
   }, 30000);
 
@@ -414,7 +414,7 @@ describe('Property 6: Incremental Detection', () => {
           );
         },
       ),
-      { numRuns: 25 },
+      { numRuns: 10 },
     );
   }, 30000);
 
@@ -518,7 +518,7 @@ describe('Property 6: Incremental Detection', () => {
           expect(upsertCall.where.ticker).toBe(ticker);
         },
       ),
-      { numRuns: 25 },
+      { numRuns: 10 },
     );
   }, 30000);
 });

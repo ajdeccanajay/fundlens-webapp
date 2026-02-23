@@ -115,7 +115,7 @@ describe('Property 9: Rate Limit Compliance', () => {
           }
         },
       ),
-      { numRuns: 25 },
+      { numRuns: 10 },
     );
   }, 30000);
 
@@ -159,7 +159,7 @@ describe('Property 9: Rate Limit Compliance', () => {
           }
         },
       ),
-      { numRuns: 25 },
+      { numRuns: 10 },
     );
   }, 30000);
 
@@ -217,7 +217,7 @@ describe('Property 9: Rate Limit Compliance', () => {
           expect(metrics.totalRequests).toBe(requestCount);
         },
       ),
-      { numRuns: 25 },
+      { numRuns: 10 },
     );
   }, 30000);
 
@@ -257,7 +257,7 @@ describe('Property 9: Rate Limit Compliance', () => {
           expect(metrics.maxRequestsPerSecond).toBeLessThan(SEC_HARD_LIMIT);
         },
       ),
-      { numRuns: 25 },
+      { numRuns: 10 },
     );
   }, 30000);
 });

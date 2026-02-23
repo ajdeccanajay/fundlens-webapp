@@ -27,6 +27,7 @@ export interface CacheEntry<T> {
   timestamp: Date;
   ttl: number;
   hits: number;
+  ticker?: string; // For ticker-based invalidation
 }
 
 export interface CacheMetrics {
@@ -131,7 +132,7 @@ export class PerformanceOptimizerService {
   /**
    * Cache a query result
    */
-  cacheQuery<T>(key: string, data: T, ttl: number): void {
+  cacheQuery<T>(key: string, data: T, ttl: number, ticker?: string): void {
     if (!this.config.enabled) {
       return;
     }
@@ -154,6 +155,7 @@ export class PerformanceOptimizerService {
       timestamp: new Date(),
       ttl,
       hits: 0,
+      ticker: ticker?.toUpperCase(),
     });
   }
   
@@ -226,6 +228,31 @@ export class PerformanceOptimizerService {
   clearCache(): void {
     this.cache.clear();
     this.logger.log('Cache cleared');
+  }
+  
+  /**
+   * Invalidate all cache entries for a given ticker.
+   * Called when new SEC filings are ingested.
+   * Returns the number of entries removed.
+   */
+  invalidateByTicker(ticker: string): number {
+    const upperTicker = ticker.toUpperCase();
+    let removed = 0;
+    
+    for (const [key, entry] of this.cache.entries()) {
+      if (entry.ticker === upperTicker) {
+        this.cache.delete(key);
+        removed++;
+      }
+    }
+    
+    this.cacheEvictions += removed;
+    
+    if (removed > 0) {
+      this.logger.log(`🗑️ Invalidated ${removed} cache entries for ticker ${upperTicker}`);
+    }
+    
+    return removed;
   }
   
   /**
@@ -331,8 +358,8 @@ export class PerformanceOptimizerService {
     this.logger.log(`   metrics.length: ${metrics.length}`);
     this.logger.log(`   narratives.length: ${narratives.length}`);
     
-    // Don't use LLM for simple metric lookups
-    if (intent.type === 'structured' && metrics.length > 0 && !intent.needsNarrative) {
+    // Don't use LLM for simple metric lookups — but DO use LLM for comparisons
+    if (intent.type === 'structured' && metrics.length > 0 && !intent.needsNarrative && !intent.needsComparison) {
       this.logger.log(`   ❌ Skipping LLM: simple structured lookup`);
       return false;
     }
