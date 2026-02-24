@@ -91,7 +91,7 @@ export class DocumentIntelligenceController {
     // Get full document record for s3_key and file_type
     const rows = await (this.intelligenceService as any).prisma.$queryRaw`
       SELECT s3_key, file_type, file_name, tenant_id, deal_id
-      FROM documents
+      FROM intel_documents
       WHERE document_id = ${documentId}::uuid
         AND tenant_id = ${tenantId}::uuid
     `;
@@ -142,7 +142,7 @@ export class DocumentIntelligenceController {
       SELECT document_id, file_name, file_type, document_type, status,
              processing_mode, upload_source, page_count, chunk_count,
              metric_count, created_at, updated_at
-      FROM documents
+      FROM intel_documents
       WHERE tenant_id = ${tenantId}::uuid
         AND deal_id = ${dealId}::uuid
       ORDER BY created_at DESC

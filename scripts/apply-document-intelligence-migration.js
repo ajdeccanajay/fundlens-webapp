@@ -33,16 +33,27 @@ async function applyMigration() {
     const sql = fs.readFileSync(migrationPath, 'utf8');
     console.log('📄 Migration file loaded');
 
-    // Remove comments and split by semicolon
+    // Remove comments
     const cleanedSql = sql
       .split('\n')
       .filter(line => !line.trim().startsWith('--'))
       .join('\n');
 
-    const statements = cleanedSql
-      .split(';')
-      .map(s => s.trim())
-      .filter(s => s.length > 10);
+    // Smart split: handle $ delimited function bodies that contain semicolons
+    const statements = [];
+    let current = '';
+    let inDollarBlock = false;
+    for (const part of cleanedSql.split(';')) {
+      current += (current ? ';' : '') + part;
+      // Track $ blocks — toggle on each occurrence
+      const dollarCount = (current.match(/\$\$/g) || []).length;
+      inDollarBlock = dollarCount % 2 !== 0;
+      if (!inDollarBlock) {
+        const trimmed = current.trim();
+        if (trimmed.length > 10) statements.push(trimmed);
+        current = '';
+      }
+    }
 
     // Categorize statements
     const createTableStmts = statements.filter(s =>
@@ -94,7 +105,7 @@ async function applyMigration() {
       SELECT table_name
       FROM information_schema.tables
       WHERE table_schema = 'public'
-        AND table_name IN ('documents', 'document_extractions')
+        AND table_name IN ('intel_documents', 'intel_document_extractions')
       ORDER BY table_name;
     `;
 
@@ -107,7 +118,7 @@ async function applyMigration() {
       SELECT tablename, indexname
       FROM pg_indexes
       WHERE schemaname = 'public'
-        AND tablename IN ('documents', 'document_extractions')
+        AND tablename IN ('intel_documents', 'intel_document_extractions')
       ORDER BY tablename, indexname;
     `;
 

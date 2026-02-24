@@ -119,7 +119,7 @@ export class DocumentIntelligenceService {
 
     // Step 4: Update document record — now queryable via long-context fallback
     await this.prisma.$executeRawUnsafe(
-      `UPDATE documents SET
+      `UPDATE intel_documents SET
         status = 'queryable',
         processing_mode = 'long-context-fallback',
         document_type = $1,
@@ -170,7 +170,7 @@ export class DocumentIntelligenceService {
     const rows = await this.prisma.$queryRaw<any[]>`
       SELECT document_id, status, processing_mode, document_type,
              chunk_count, metric_count, error, updated_at
-      FROM documents
+      FROM intel_documents
       WHERE document_id = ${documentId}::uuid
     `;
     if (!rows.length) return null;
@@ -210,7 +210,7 @@ export class DocumentIntelligenceService {
 
     // Insert document record
     await this.prisma.$executeRawUnsafe(
-      `INSERT INTO documents (
+      `INSERT INTO intel_documents (
         document_id, tenant_id, deal_id, chat_session_id,
         file_name, file_type, file_size, s3_key,
         status, upload_source, created_at, updated_at
@@ -360,7 +360,7 @@ export class DocumentIntelligenceService {
   ): Promise<void> {
     for (const metric of metrics) {
       await this.prisma.$executeRawUnsafe(
-        `INSERT INTO document_extractions (
+        `INSERT INTO intel_document_extractions (
           document_id, tenant_id, deal_id,
           extraction_type, data, confidence, verified, source_layer, created_at
         ) VALUES ($1::uuid, $2::uuid, $3::uuid,
@@ -374,7 +374,7 @@ export class DocumentIntelligenceService {
 
     // Update metric count on document
     await this.prisma.$executeRawUnsafe(
-      `UPDATE documents SET metric_count = $1 WHERE document_id = $2::uuid`,
+      `UPDATE intel_documents SET metric_count = $1 WHERE document_id = $2::uuid`,
       metrics.length,
       documentId,
     );

@@ -1,16 +1,17 @@
 -- ============================================
 -- Document Intelligence Engine — Layer 1 v2
--- Migration: documents + document_extractions
+-- Migration: intel_documents + intel_document_extractions
 -- Spec Reference: §9.1, §9.2
+-- NOTE: Uses 'intel_' prefix to avoid collision with existing 'documents' table
 -- ============================================
 
 -- ============================================
--- TABLE 1: documents
+-- TABLE 1: intel_documents
 -- Central registry for all uploaded documents
 -- (chat uploads + deal library uploads)
 -- ============================================
 
-CREATE TABLE IF NOT EXISTS documents (
+CREATE TABLE IF NOT EXISTS intel_documents (
   document_id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id         UUID NOT NULL,
   deal_id           UUID NOT NULL,
@@ -57,23 +58,23 @@ CREATE TABLE IF NOT EXISTS documents (
 );
 
 -- Indexes for common query patterns (Spec §9.1)
-CREATE INDEX IF NOT EXISTS idx_docs_tenant_deal ON documents(tenant_id, deal_id);
-CREATE INDEX IF NOT EXISTS idx_docs_session ON documents(chat_session_id);
-CREATE INDEX IF NOT EXISTS idx_docs_status ON documents(status);
-CREATE INDEX IF NOT EXISTS idx_docs_kb_sync ON documents(kb_sync_status);
-CREATE INDEX IF NOT EXISTS idx_docs_upload_source ON documents(upload_source);
-CREATE INDEX IF NOT EXISTS idx_docs_tenant_status ON documents(tenant_id, status);
+CREATE INDEX IF NOT EXISTS idx_idocs_tenant_deal ON intel_documents(tenant_id, deal_id);
+CREATE INDEX IF NOT EXISTS idx_idocs_session ON intel_documents(chat_session_id);
+CREATE INDEX IF NOT EXISTS idx_idocs_status ON intel_documents(status);
+CREATE INDEX IF NOT EXISTS idx_idocs_kb_sync ON intel_documents(kb_sync_status);
+CREATE INDEX IF NOT EXISTS idx_idocs_upload_source ON intel_documents(upload_source);
+CREATE INDEX IF NOT EXISTS idx_idocs_tenant_status ON intel_documents(tenant_id, status);
 
 
 -- ============================================
--- TABLE 2: document_extractions
+-- TABLE 2: intel_document_extractions
 -- All structured data extracted from documents
 -- Uses JSONB for flexible extraction payloads
 -- ============================================
 
-CREATE TABLE IF NOT EXISTS document_extractions (
+CREATE TABLE IF NOT EXISTS intel_document_extractions (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  document_id       UUID NOT NULL REFERENCES documents(document_id) ON DELETE CASCADE,
+  document_id       UUID NOT NULL REFERENCES intel_documents(document_id) ON DELETE CASCADE,
   tenant_id         UUID NOT NULL,
   deal_id           UUID NOT NULL,
 
@@ -95,24 +96,24 @@ CREATE TABLE IF NOT EXISTS document_extractions (
 );
 
 -- Fast lookup: "give me the price target for this document" (Spec §9.2)
-CREATE INDEX IF NOT EXISTS idx_extr_doc_type ON document_extractions(document_id, extraction_type);
+CREATE INDEX IF NOT EXISTS idx_iextr_doc_type ON intel_document_extractions(document_id, extraction_type);
 
 -- Fast lookup: "give me all price targets across all documents for AAPL" (Spec §9.2)
-CREATE INDEX IF NOT EXISTS idx_extr_tenant_deal ON document_extractions(tenant_id, deal_id, extraction_type);
+CREATE INDEX IF NOT EXISTS idx_iextr_tenant_deal ON intel_document_extractions(tenant_id, deal_id, extraction_type);
 
 -- Search within JSONB: data->>'metric_key' = 'price_target' (Spec §9.2)
 -- This GIN index is critical for fast JSONB metric queries
-CREATE INDEX IF NOT EXISTS idx_extr_data ON document_extractions USING GIN(data);
+CREATE INDEX IF NOT EXISTS idx_iextr_data ON intel_document_extractions USING GIN(data);
 
 -- Cross-document comparison queries (Spec §9.2)
-CREATE INDEX IF NOT EXISTS idx_extr_metric_key ON document_extractions(tenant_id, deal_id)
+CREATE INDEX IF NOT EXISTS idx_iextr_metric_key ON intel_document_extractions(tenant_id, deal_id)
   WHERE extraction_type = 'metric';
 
 -- ============================================
--- TRIGGER: auto-update updated_at on documents
+-- TRIGGER: auto-update updated_at on intel_documents
 -- ============================================
 
-CREATE OR REPLACE FUNCTION update_documents_updated_at()
+CREATE OR REPLACE FUNCTION update_intel_documents_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
   NEW.updated_at = NOW();
@@ -120,8 +121,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS trg_documents_updated_at ON documents;
-CREATE TRIGGER trg_documents_updated_at
-  BEFORE UPDATE ON documents
+DROP TRIGGER IF EXISTS trg_intel_documents_updated_at ON intel_documents;
+CREATE TRIGGER trg_intel_documents_updated_at
+  BEFORE UPDATE ON intel_documents
   FOR EACH ROW
-  EXECUTE FUNCTION update_documents_updated_at();
+  EXECUTE FUNCTION update_intel_documents_updated_at();

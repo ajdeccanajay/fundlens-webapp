@@ -186,7 +186,7 @@ export class ChatService {
       try {
         const longContextDocs = await this.prisma.$queryRawUnsafe<any[]>(
           `SELECT document_id, raw_text_s3_key, file_name
-           FROM documents
+           FROM intel_documents
            WHERE deal_id = $1::uuid
              AND tenant_id = $2::uuid
              AND processing_mode = 'long-context-fallback'
