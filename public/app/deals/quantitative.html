@@ -85,7 +85,7 @@
     </script>
 </head>
 <body class="bg-gray-50">
-    <div x-data="FundLensShell('quantitative', FundLensQuantitativeView())" x-init="try { await init() } catch(e) { console.error('Init error:', e) }" x-cloak>
+    <div x-data="FundLensShell('quantitative', FundLensQuantitativeView())" x-init="init()" x-cloak>
 
         <!-- Nav Bar -->
         <nav class="bg-white shadow-sm border-b border-gray-100 sticky top-0 z-50">

@@ -185,11 +185,13 @@
                                 else if (currentEvent === 'visualization' && data) { 
                                     console.log('[SSE] Received visualization event:', JSON.stringify(data).substring(0, 200));
                                     console.log('[SSE] Setting visualization on message index:', assistantMessageIndex);
-                                    self.researchMessages[assistantMessageIndex].visualization = data; 
+                                    // Set visualization directly — Alpine v3 Proxy tracks nested mutations
+                                    self.researchMessages[assistantMessageIndex].visualization = data;
                                     console.log('[SSE] Message visualization set:', !!self.researchMessages[assistantMessageIndex].visualization);
+                                    var vizPayload = data;
                                     self.$nextTick(function() { 
                                         console.log('[SSE] $nextTick - calling renderChart');
-                                        self.renderChart(assistantMessageIndex, data); 
+                                        self.renderChart(assistantMessageIndex, vizPayload); 
                                         self.scrollResearchToBottom(); 
                                     }); 
                                 }
@@ -265,10 +267,14 @@
             var headers = this.getAuthHeaders();
             if (!headers) { window.location.href = '/login.html'; return; }
             try {
-                if (!this.notebookId) await this.createNotebook();
-                var response = await fetch('/api/research/notebooks/' + this.notebookId + '/insights', { method: 'POST', headers: headers, body: JSON.stringify({ content: message.content, userNotes: notes || '', tags: [this.entityContext.value, 'research'] }) });
+                // Ensure we have a notebook to save into
+                if (!this.notebookId) { await this.createNotebook(); }
+                if (!this.notebookId) { alert('Could not create notebook'); return; }
+                var ticker = this.entityContext.value || 'default';
+                var content = message.content + (notes ? '\n\n---\n**Notes:** ' + notes : '');
+                var response = await fetch('/api/research/notebooks/' + this.notebookId + '/insights', { method: 'POST', headers: headers, body: JSON.stringify({ content: content, tags: [ticker, 'research'], companies: [ticker] }) });
                 if (response.status === 401) { localStorage.removeItem('fundlens_token'); window.location.href = '/login.html'; return; }
-                if (response.ok) { this.loadScratchpadCount(); alert('Saved to scratchpad!'); }
+                if (response.ok || response.status === 201) { this.loadScratchpadCount(); alert('Saved to scratchpad!'); }
                 else throw new Error('HTTP ' + response.status);
             } catch (error) { console.error('Error saving to scratchpad:', error); alert('Error saving to scratchpad'); }
         },
@@ -411,6 +417,7 @@
             this.currentCitations = citations;
             var html = this.renderMarkdown(content);
             console.log('[renderMarkdownWithCitations] Processing', citations.length, 'citations');
+            var replacedAny = false;
             citations.forEach(function(citation) {
                 var citationNum = citation.number || citation.citationNumber;
                 console.log('[renderMarkdownWithCitations] Processing citation:', citationNum, citation);
@@ -422,10 +429,31 @@
                 html = html.replace(regex, '<a href="#" class="' + cssClass + '" data-citation-num="' + citationNum + '" onclick="event.preventDefault(); document.dispatchEvent(new CustomEvent(\'citation-click\', {detail: {num: ' + citationNum + '}}));">[' + citationNum + ']</a>');
                 if (beforeReplace !== html) {
                     console.log('[renderMarkdownWithCitations] Replaced citation [' + citationNum + ']');
+                    replacedAny = true;
                 } else {
                     console.log('[renderMarkdownWithCitations] Citation [' + citationNum + '] not found in content');
                 }
             });
+            // If no [N] markers were found in the content, append a sources section
+            if (!replacedAny && citations.length > 0) {
+                console.log('[renderMarkdownWithCitations] No inline markers found, appending sources section');
+                var sourcesHtml = '<div class="citation-sources-section" style="margin-top:1rem;padding-top:0.75rem;border-top:1px solid #e5e7eb;"><p style="font-weight:600;margin-bottom:0.5rem;color:#374151;">Sources</p><ul style="list-style:none;padding:0;margin:0;">';
+                citations.forEach(function(citation) {
+                    var citationNum = citation.number || citation.citationNumber;
+                    if (!citationNum) return;
+                    var sourceType = citation.sourceType || 'SEC_FILING';
+                    var cssClass = sourceType === 'USER_UPLOAD' ? 'citation-link citation-upload' : 'citation-link citation-sec';
+                    var label = '';
+                    if (sourceType === 'USER_UPLOAD') {
+                        label = citation.filename || 'Uploaded Document';
+                    } else {
+                        label = [citation.ticker, citation.filingType, citation.fiscalPeriod, citation.section].filter(Boolean).join(' — ') || 'SEC Filing';
+                    }
+                    sourcesHtml += '<li style="margin-bottom:0.25rem;"><a href="#" class="' + cssClass + '" data-citation-num="' + citationNum + '" onclick="event.preventDefault(); document.dispatchEvent(new CustomEvent(\'citation-click\', {detail: {num: ' + citationNum + '}}));">[' + citationNum + ']</a> ' + label + '</li>';
+                });
+                sourcesHtml += '</ul></div>';
+                html += sourcesHtml;
+            }
             return html;
         },
 
@@ -447,21 +475,32 @@
 
         isMarkdownBreakpoint(text) {
             if (!text) return false;
+            
+            // Never flush mid-table: if text ends with a table row but the
+            // separator row (|---|) hasn't appeared yet, wait
+            var lines = text.split('\n');
+            var lastNonEmpty = '';
+            for (var i = lines.length - 1; i >= 0; i--) {
+                if (lines[i].trim()) { lastNonEmpty = lines[i].trim(); break; }
+            }
+            
+            // If we're inside a table (line starts/ends with |), only flush 
+            // after a complete table (double newline after table)
+            if (lastNonEmpty.startsWith('|') || lastNonEmpty.endsWith('|')) {
+                // Only flush if text ends with table followed by double newline
+                if (text.endsWith('|\n\n')) return true;
+                return false;  // Wait for more table rows
+            }
+            
             // Flush at double newline (paragraph boundary)
             if (text.endsWith('\n\n')) return true;
-            // Flush at end of table row
-            if (text.endsWith('|\n')) return true;
-            // Flush at sentence boundary: period followed by capital letter or newline.
-            // IMPORTANT: This requires one token of lookahead beyond the period.
-            // A trailing period at the very end of the buffer should NOT trigger a flush —
-            // we need to see the next character to confirm it's a capital letter.
-            // The regex checks the last 20 chars for .\s+[A-Z], which means the capital
-            // letter must already be in the buffer (not just the period).
+            
+            // Flush at sentence boundary with lookahead
             if (/\.\s+[A-Z]/.test(text.slice(-20)) || text.endsWith('.\n')) return true;
-            // A bare trailing period (text.endsWith('.')) does NOT flush — wait for lookahead.
-            // Flush every 200 chars as a safety valve
+            
+            // Safety valve: flush every 300 chars (increased from 200 for tables)
             var lastFlush = this._lastMarkdownFlush || 0;
-            if (text.length - lastFlush > 200) {
+            if (text.length - lastFlush > 300) {
                 this._lastMarkdownFlush = text.length;
                 return true;
             }
@@ -529,52 +568,48 @@
                 }
             }
 
+            // Polling retry: handles both "canvas not in DOM yet" and
+            // "canvas exists but Alpine hasn't updated style yet" cases.
+            // Change 1 (splice) ensures Alpine WILL update the style —
+            // this loop just waits for that update to propagate to the DOM.
+            var attempts = 0;
+            var maxAttempts = 30; // 30 × 100ms = 3 seconds max wait
+
             function tryRender() {
+                attempts++;
                 if (typeof Chart === 'undefined') {
-                    console.warn('[renderChart] Chart.js not loaded yet');
-                    return false;
+                    console.warn('[renderChart] Chart.js not loaded yet, attempt:', attempts);
+                    if (attempts < maxAttempts) { setTimeout(tryRender, 100); }
+                    return;
                 }
+
                 var canvas = document.getElementById(canvasId);
-                if (canvas && canvas.offsetHeight > 0 && canvas.offsetWidth > 0) {
-                    doRender(canvas);
-                    return true;
+
+                // Stage 1: Canvas element not in DOM yet (Alpine x-for hasn't rendered)
+                if (!canvas) {
+                    console.log('[renderChart] Canvas not in DOM yet, attempt:', attempts, '/', maxAttempts);
+                    if (attempts < maxAttempts) { setTimeout(tryRender, 100); }
+                    else { console.error('[renderChart] Canvas never appeared in DOM after ' + maxAttempts + ' attempts:', canvasId); }
+                    return;
                 }
-                return false;
+
+                // Stage 2: Canvas exists but not visible (Alpine style binding pending)
+                if (canvas.offsetHeight === 0 || canvas.offsetWidth === 0) {
+                    console.log('[renderChart] Canvas exists but not visible yet, attempt:', attempts, '/', maxAttempts, 'h:', canvas.offsetHeight, 'w:', canvas.offsetWidth);
+                    if (attempts < maxAttempts) { setTimeout(tryRender, 100); }
+                    else { console.error('[renderChart] Canvas never became visible after ' + maxAttempts + ' attempts:', canvasId); }
+                    return;
+                }
+
+                // Stage 3: Canvas is visible — render
+                console.log('[renderChart] Canvas ready on attempt:', attempts, 'dimensions:', canvas.offsetWidth, 'x', canvas.offsetHeight);
+                doRender(canvas);
             }
 
-            this.$nextTick(function() {
-                requestAnimationFrame(function() {
-                    // Attempt immediate render
-                    if (tryRender()) return;
-
-                    // Canvas not ready — use MutationObserver on message container
-                    var container = document.querySelector('[x-ref="researchMessages"]');
-                    if (!container) {
-                        console.error('[renderChart] Message container not found for MutationObserver');
-                        return;
-                    }
-
-                    console.log('[renderChart] Canvas not ready, attaching MutationObserver for:', canvasId);
-                    var observer = new MutationObserver(function() {
-                        if (tryRender()) {
-                            observer.disconnect();
-                            clearTimeout(timeout);
-                            console.log('[renderChart] MutationObserver rendered:', canvasId);
-                        }
-                    });
-                    observer.observe(container, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
-
-                    // 5-second safety timeout
-                    var timeout = setTimeout(function() {
-                        observer.disconnect();
-                        if (!tryRender()) {
-                            console.error('[renderChart] MutationObserver timeout (5s) — canvas never appeared:', canvasId);
-                        }
-                    }, 5000);
-                });
-            });
+            // Initial 50ms delay to let Alpine's splice-triggered reactivity
+            // start propagating before we begin polling
+            setTimeout(tryRender, 50);
         },
-
         renderExistingCharts() { var self = this; this.researchMessages.forEach(function(msg, index) { if (msg.visualization) self.$nextTick(function() { self.renderChart(index, msg.visualization); }); }); },
 
         toggleInstantRagSummaries() { this.showInstantRagSummaries = !this.showInstantRagSummaries; },

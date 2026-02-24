@@ -802,6 +802,22 @@ export class RAGService {
         answer = answer ? `${answer}\n\n${missingTickerMessage}` : missingTickerMessage;
       }
 
+      // Generate citations from structured metrics when no narrative citations exist
+      if ((!citations || citations.length === 0) && metrics.length > 0) {
+        const metricCitations = this.buildMetricCitations(metrics);
+        if (metricCitations.length > 0) {
+          citations = metricCitations;
+          // Re-inject into the answer text if LLM didn't add markers
+          if (answer && !answer.match(/\[\d+\]/)) {
+            // Append source reference section
+            const sourceRef = metricCitations
+              .map((c, i) => `[${i + 1}] ${c.ticker} ${c.filingType} ${c.fiscalPeriod}`)
+              .join('\n');
+            answer = `${answer}\n\n**Sources:**\n${sourceRef}`;
+          }
+        }
+      }
+
       const response: RAGResponse = {
         answer,
         intent,
@@ -2024,4 +2040,47 @@ export class RAGService {
   async testTimeSeries(ticker: string, metric: string, filingType?: string) {
     return this.structuredRetriever.getTimeSeries(ticker, metric, filingType);
   }
+
+  /**
+   * Build metric citations from structured metrics
+   * Used when no narrative citations exist but we have metric data
+   */
+  private buildMetricCitations(metrics: MetricResult[]): any[] {
+    const seen = new Set<string>();
+    const citations: any[] = [];
+    let num = 1;
+
+    for (const metric of metrics) {
+      const key = `${metric.ticker}-${metric.filingType}-${metric.fiscalPeriod}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      citations.push({
+        number: num,
+        citationNumber: num,
+        type: 'sec_filing',
+        sourceType: 'SEC_FILING',
+        ticker: metric.ticker,
+        filingType: metric.filingType,
+        fiscalPeriod: metric.fiscalPeriod,
+        section: metric.statementType || 'Financial Statements',
+        excerpt: `${metric.rawLabel}: ${this.formatValueForCitation(metric.value)} (${metric.fiscalPeriod})`,
+        relevanceScore: metric.confidenceScore,
+      });
+      num++;
+    }
+
+    return citations;
+  }
+
+  /**
+   * Format value for citation display
+   */
+  private formatValueForCitation(value: number): string {
+    if (Math.abs(value) >= 1e9) return `${(value / 1e9).toFixed(1)}B`;
+    if (Math.abs(value) >= 1e6) return `${(value / 1e6).toFixed(1)}M`;
+    if (Math.abs(value) >= 1e3) return `${(value / 1e3).toFixed(1)}K`;
+    return `${value.toFixed(2)}`;
+  }
 }
+

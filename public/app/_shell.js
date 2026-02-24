@@ -261,13 +261,16 @@ window.FundLensShell = function(viewName, viewData) {
         // --- Scratchpad Count ---
         async loadScratchpadCount() {
             try {
-                var entity = this.entityContext.value || 'default';
                 var headers = this.getAuthHeaders();
                 if (!headers) return;
-                var resp = await fetch('/api/research/scratchpad/' + entity, { headers: headers });
+                var resp = await fetch('/api/research/notebooks', { headers: headers });
                 if (resp.ok) {
                     var data = await resp.json();
-                    this.scratchpadCount = data.totalCount || (data.items || []).length || 0;
+                    if (data.data && data.data.length > 0) {
+                        this.scratchpadCount = data.data[0]._count?.insights || 0;
+                    } else {
+                        this.scratchpadCount = 0;
+                    }
                     this.shellEmit('scratchpad:countChanged', this.scratchpadCount);
                 }
             } catch (e) { this.scratchpadCount = 0; }

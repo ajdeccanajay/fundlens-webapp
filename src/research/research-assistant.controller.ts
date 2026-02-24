@@ -17,10 +17,9 @@ import {
   Param,
   Query,
   UseGuards,
-  Sse,
-  MessageEvent,
+  Res,
 } from '@nestjs/common';
-import { Observable } from 'rxjs';
+import type { Response } from 'express';
 import { TenantGuard } from '../tenant/tenant.guard';
 import {
   ResearchAssistantService,
@@ -144,43 +143,40 @@ export class ResearchAssistantController {
    * Returns Server-Sent Events stream:
    * - event: token, data: { text: "..." }
    * - event: source, data: { title: "...", type: "..." }
+   * - event: citations, data: { citations: [...] }
+   * - event: visualization, data: { chartType: "...", ... }
    * - event: done, data: { complete: true }
    * - event: error, data: { message: "..." }
    */
   @Post('conversations/:id/messages')
-  @Sse()
-  sendMessage(
+  async sendMessage(
     @Param('id') conversationId: string,
     @Body() dto: SendMessageDto,
-  ): Observable<MessageEvent> {
-    return new Observable((subscriber) => {
-      (async () => {
-        try {
-          const stream = this.researchService.sendMessage(conversationId, dto);
+    @Res() res: Response,
+  ) {
+    // Set SSE headers manually (matching working instant-rag pattern)
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+    res.flushHeaders();
 
-          for await (const chunk of stream) {
-            // Log what we're sending
-            console.log('📤 Sending SSE chunk:', JSON.stringify(chunk));
-            
-            // Format as proper MessageEvent for SSE
-            // NestJS will automatically format this as "data: {...}\n\n"
-            subscriber.next({
-              data: chunk.data,
-              type: chunk.type,
-            } as MessageEvent);
-          }
+    try {
+      const stream = this.researchService.sendMessage(conversationId, dto);
 
-          subscriber.complete();
-        } catch (error) {
-          console.error('❌ SSE Error:', error);
-          subscriber.next({
-            data: { message: error.message },
-            type: 'error',
-          } as MessageEvent);
-          subscriber.complete();
-        }
-      })();
-    });
+      for await (const chunk of stream) {
+        // Write proper SSE format: event + data + double newline
+        res.write(`event: ${chunk.type}\ndata: ${JSON.stringify(chunk.data)}\n\n`);
+      }
+
+      // Send done event
+      res.write(`event: done\ndata: ${JSON.stringify({ complete: true })}\n\n`);
+      res.end();
+    } catch (error) {
+      console.error('❌ SSE Error:', error);
+      res.write(`event: error\ndata: ${JSON.stringify({ message: error.message })}\n\n`);
+      res.end();
+    }
   }
 
   /**
