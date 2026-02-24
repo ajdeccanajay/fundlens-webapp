@@ -6,8 +6,8 @@ import { BackgroundEnrichmentService } from './background-enrichment.service';
 import * as mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
 
-// pdf-parse v2.x: use require for compatibility
-const pdfParse = require('pdf-parse').default || require('pdf-parse');
+// pdf-parse v2.x exports PDFParse class
+const { PDFParse } = require('pdf-parse');
 
 /**
  * Spec §3.1 — Instant Intelligence Prompt (Haiku)
@@ -258,7 +258,8 @@ export class DocumentIntelligenceService {
     const buffer = await this.s3.getFileBuffer(s3Key);
 
     if (fileType.includes('pdf')) {
-      const result = await pdfParse(buffer);
+      const parser = new PDFParse({ data: buffer });
+      const result = await parser.getText();
       return result.text || '';
     }
 

@@ -19,11 +19,14 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { BedrockService } from '../../src/rag/bedrock.service';
 import { S3Service } from '../../src/services/s3.service';
 
-// Mock pdf-parse before the service is imported (it uses require at module scope)
+// Mock pdf-parse v2.x before the service is imported (it uses require at module scope)
 jest.mock('pdf-parse', () => {
-  const mockPdfParse = jest.fn().mockResolvedValue({ text: 'Extracted PDF text content for testing', numpages: 5 });
-  mockPdfParse.default = mockPdfParse;
-  return mockPdfParse;
+  class MockPDFParse {
+    private data: Buffer;
+    constructor(opts: any) { this.data = opts?.data; }
+    async getText() { return { text: 'Extracted PDF text content for testing', total: 5, pages: [] }; }
+  }
+  return { PDFParse: MockPDFParse };
 });
 
 describe('DocumentIntelligenceService', () => {
