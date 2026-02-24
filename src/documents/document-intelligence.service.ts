@@ -1,7 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BedrockService } from '../rag/bedrock.service';
 import { S3Service } from '../services/s3.service';
+import { BackgroundEnrichmentService } from './background-enrichment.service';
 import * as mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
 
@@ -73,6 +74,8 @@ export class DocumentIntelligenceService {
     private readonly prisma: PrismaService,
     private readonly bedrock: BedrockService,
     private readonly s3: S3Service,
+    @Inject(forwardRef(() => BackgroundEnrichmentService))
+    private readonly backgroundEnrichment: BackgroundEnrichmentService,
   ) {}
 
   /**
@@ -150,6 +153,16 @@ export class DocumentIntelligenceService {
     this.logger.log(
       `[${documentId}] Instant intelligence complete in ${Date.now() - startTime}ms`,
     );
+
+    // Phase B: Fire background enrichment asynchronously (non-blocking)
+    // User is already querying via long-context fallback while this runs
+    setImmediate(() => {
+      this.backgroundEnrichment
+        .enrichDocument(documentId, tenantId, dealId)
+        .catch(err =>
+          this.logger.error(`[${documentId}] Background enrichment failed: ${err.message}`),
+        );
+    });
 
     return {
       documentId,

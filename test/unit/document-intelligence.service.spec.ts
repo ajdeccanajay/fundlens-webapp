@@ -14,6 +14,7 @@
 
 import { Test, TestingModule } from '@nestjs/testing';
 import { DocumentIntelligenceService } from '../../src/documents/document-intelligence.service';
+import { BackgroundEnrichmentService } from '../../src/documents/background-enrichment.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BedrockService } from '../../src/rag/bedrock.service';
 import { S3Service } from '../../src/services/s3.service';
@@ -58,6 +59,12 @@ describe('DocumentIntelligenceService', () => {
             getFileBuffer: jest.fn(),
             uploadBuffer: jest.fn().mockResolvedValue({ key: 'test-key', bucket: 'test' }),
             getSignedUploadUrl: jest.fn().mockResolvedValue('https://s3.presigned.url/upload'),
+          },
+        },
+        {
+          provide: BackgroundEnrichmentService,
+          useValue: {
+            enrichDocument: jest.fn().mockResolvedValue(undefined),
           },
         },
       ],

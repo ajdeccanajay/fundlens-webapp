@@ -150,6 +150,49 @@ export class DocumentIntelligenceController {
     return rows;
   }
 
+  /**
+   * Get extracted comp tables for a document (Spec §5.3)
+   * Used by frontend to render inline comp tables in chat.
+   */
+  @Get(':id/tables')
+  async getExtractedTables(
+    @Param('id') documentId: string,
+    @Req() req: Request,
+  ) {
+    const tenantId = this.getTenantId(req);
+    const rows = await (this.intelligenceService as any).prisma.$queryRaw`
+      SELECT e.data, e.page_number, e.confidence, e.verified, e.section
+      FROM intel_document_extractions e
+      JOIN intel_documents d ON e.document_id = d.document_id
+      WHERE e.document_id = ${documentId}::uuid
+        AND d.tenant_id = ${tenantId}::uuid
+        AND e.extraction_type = 'table'
+      ORDER BY e.page_number ASC
+    `;
+    return rows;
+  }
+
+  /**
+   * Get all extracted metrics for a document (Spec §9.3)
+   */
+  @Get(':id/metrics')
+  async getExtractedMetrics(
+    @Param('id') documentId: string,
+    @Req() req: Request,
+  ) {
+    const tenantId = this.getTenantId(req);
+    const rows = await (this.intelligenceService as any).prisma.$queryRaw`
+      SELECT e.data, e.page_number, e.confidence, e.verified, e.source_layer
+      FROM intel_document_extractions e
+      JOIN intel_documents d ON e.document_id = d.document_id
+      WHERE e.document_id = ${documentId}::uuid
+        AND d.tenant_id = ${tenantId}::uuid
+        AND e.extraction_type = 'metric'
+      ORDER BY e.confidence DESC, e.page_number ASC
+    `;
+    return rows;
+  }
+
   private getTenantId(req: Request): string {
     // Match existing pattern — tenant from auth context or header
     const tenantId =

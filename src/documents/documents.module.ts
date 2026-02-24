@@ -15,6 +15,9 @@ import { DocumentUploadController } from './document-upload.controller';
 import { DocumentProcessingService } from './document-processing.service';
 import { DocumentIntelligenceService } from './document-intelligence.service';
 import { DocumentIntelligenceController } from './document-intelligence.controller';
+import { VisionExtractionService } from './vision-extraction.service';
+import { VerificationService } from './verification.service';
+import { BackgroundEnrichmentService } from './background-enrichment.service';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { TenantModule } from '../tenant/tenant.module';
 import { RAGModule } from '../rag/rag.module';
@@ -34,8 +37,11 @@ import { S3Service } from '../services/s3.service';
     DocumentProcessorService,
     DocumentProcessingService,
     DocumentIntelligenceService,
+    VisionExtractionService,
+    VerificationService,
+    BackgroundEnrichmentService,
     S3Service,
   ],
-  exports: [DocumentsService, DocumentProcessorService, DocumentProcessingService, DocumentIntelligenceService],
+  exports: [DocumentsService, DocumentProcessorService, DocumentProcessingService, DocumentIntelligenceService, BackgroundEnrichmentService],
 })
 export class DocumentsModule {}

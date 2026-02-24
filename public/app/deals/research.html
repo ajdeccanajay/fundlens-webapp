@@ -814,6 +814,11 @@
                     visualization: null,
                 });
                 self.$nextTick(function() { self.scrollResearchToBottom(); });
+
+                // 5. Start polling for comp tables from background enrichment (Spec §5.3)
+                if (file.type && file.type.includes('pdf')) {
+                    self.pollForCompTables(urlData.documentId);
+                }
             } catch (error) {
                 console.error('Document Intelligence upload failed:', error);
                 self.docIntel.file.status = 'error';
@@ -838,6 +843,78 @@
                 for (var j = 0; j < intel.suggestedQuestions.length; j++) {
                     msg += '  → ' + intel.suggestedQuestions[j] + '\n';
                 }
+            }
+            return msg;
+        },
+
+        /**
+         * Poll for extracted comp tables after background enrichment (Spec §5.3).
+         * Called after instant intelligence completes. Polls every 10s for up to 2 min.
+         */
+        async pollForCompTables(documentId) {
+            var self = this;
+            var attempts = 0;
+            var maxAttempts = 12; // 12 × 10s = 2 min
+            var poll = async function() {
+                attempts++;
+                try {
+                    var headers = self.authHeaders ? self.authHeaders() : { 'Content-Type': 'application/json' };
+                    var resp = await fetch('/api/documents/' + documentId + '/tables', { headers: headers });
+                    if (!resp.ok) return;
+                    var tables = await resp.json();
+                    if (tables && tables.length > 0) {
+                        var tableMsg = self.formatCompTables(tables);
+                        if (tableMsg) {
+                            self.researchMessages.push({ id: Date.now(), role: 'assistant', content: tableMsg, sources: [], citations: [], visualization: null });
+                            self.$nextTick(function() { self.scrollResearchToBottom && self.scrollResearchToBottom(); });
+                        }
+                        return; // Stop polling
+                    }
+                } catch (e) { /* ignore polling errors */ }
+                if (attempts < maxAttempts) {
+                    setTimeout(poll, 10000);
+                }
+            };
+            // Start polling after 15s (give background enrichment time to start)
+            setTimeout(poll, 15000);
+        },
+
+        /**
+         * Format extracted comp tables as markdown for chat display (Spec §5.3).
+         */
+        formatCompTables(tableRows) {
+            var compTables = tableRows.filter(function(r) {
+                var d = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+                return d.tableType === 'comp-table' || d.tableType === 'valuation-summary';
+            });
+            if (compTables.length === 0) return null;
+
+            var msg = '';
+            for (var t = 0; t < compTables.length; t++) {
+                var tableData = typeof compTables[t].data === 'string' ? JSON.parse(compTables[t].data) : compTables[t].data;
+                var page = compTables[t].page_number;
+                var verified = compTables[t].verified;
+
+                msg += '📊 **Extracted ' + (tableData.title || tableData.tableType) + '** (p.' + page + ')';
+                if (verified) msg += ' ✅';
+                msg += '\n\n';
+
+                // Build markdown table from headers + rows
+                if (tableData.headers && tableData.headers.length > 0 && tableData.rows && tableData.rows.length > 0) {
+                    var headerCells = tableData.headers[0].cells || [];
+                    msg += '| ' + [''].concat(headerCells).join(' | ') + ' |\n';
+                    msg += '|' + new Array(headerCells.length + 2).join('---|') + '\n';
+
+                    for (var r = 0; r < Math.min(tableData.rows.length, 20); r++) {
+                        var row = tableData.rows[r];
+                        var cells = (row.cells || []).map(function(c) { return c.value || ''; });
+                        msg += '| ' + (row.label || '') + ' | ' + cells.join(' | ') + ' |\n';
+                    }
+                    if (tableData.rows.length > 20) {
+                        msg += '\n*(' + (tableData.rows.length - 20) + ' more rows)*\n';
+                    }
+                }
+                msg += '\n';
             }
             return msg;
         },
