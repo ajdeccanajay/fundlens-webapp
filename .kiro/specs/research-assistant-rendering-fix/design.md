@@ -2,220 +2,170 @@
 
 ## Overview
 
-The research assistant page (research.html) has 7 critical defects preventing proper functionality: Alpine.js initialization syntax error, broken citation rendering, non-rendering charts, poor markdown formatting, missing API endpoints, and console errors. This bugfix systematically addresses each defect using minimal, targeted changes to restore full functionality without disrupting existing features like streaming responses, provocations mode, sentiment analysis, instant RAG, and scratchpad integration.
+The research assistant fails to render charts, citations, and properly formatted markdown tables when processing multi-ticker comparison queries (e.g., "AAPL vs MSFT revenue FY 2023 - 2024"). The root causes span four critical areas: SSE event serialization in the NestJS controller, citation generation logic for structured-only queries, frontend chart rendering timing with Alpine.js, and markdown table parsing during streaming. This bugfix applies minimal, targeted changes to restore full visualization and citation functionality without disrupting existing streaming, mode switching, or instant RAG features.
 
 ## Glossary
 
-- **Bug_Condition (C)**: The set of conditions that trigger each of the 7 defects
-- **Property (P)**: The desired correct behavior for each defect
-- **Preservation**: All existing functionality (streaming, modes, instant RAG, scratchpad) that must remain unchanged
-- **Alpine.js**: Frontend reactive framework used for state management in research.html
-- **SSE (Server-Sent Events)**: Streaming protocol used for real-time message delivery
-- **Citation**: Clickable reference link [1], [2], etc. that opens source modal with filing/document details
-- **Chart.js**: Visualization library for rendering comparison charts
-- **Markdown**: Text formatting syntax used for response rendering
-- **Instant RAG**: Document upload feature for Q&A on user-uploaded files
+- **Bug_Condition (C)**: The set of conditions that trigger rendering failures for charts, citations, and markdown tables
+- **Property (P)**: The desired correct behavior for SSE event delivery, citation generation, chart rendering, and markdown formatting
+- **Preservation**: All existing functionality (streaming responses, semantic retrieval, single-ticker queries, non-table markdown) that must remain unchanged
+- **SSE (Server-Sent Events)**: Streaming protocol requiring `event: type\ndata: payload\n\n` format for proper frontend parsing
+- **@Sse() Decorator**: NestJS decorator designed for GET endpoints that may not properly serialize event types on POST endpoints
+- **Structured Query**: Intent-detected query requesting numeric metrics without semantic retrieval (no narratives array)
+- **Metric Citations**: Citations generated from metric filing metadata when no narrative chunks are available
+- **Alpine.js**: Frontend reactive framework that uses microtasks for DOM updates, causing timing issues with immediate canvas rendering
+- **Markdown Breakpoint**: Logic that determines when to flush accumulated streaming content for rendering
+- **Table Separator Row**: The `|---|---|` row in markdown tables that must arrive before flushing to prevent broken table rendering
 
 ## Bug Details
 
 ### Fault Condition
 
-The bugs manifest across 7 distinct conditions:
+The bug manifests when multi-ticker comparison queries are processed, spanning four distinct failure modes:
 
 **Formal Specification:**
 ```
 FUNCTION isBugCondition(input)
-  INPUT: input of type PageLoadEvent | ConversationLoadEvent | QueryEvent | APIRequestEvent
+  INPUT: input of type QueryEvent | SSEStreamEvent | CanvasRenderEvent | MarkdownStreamEvent
   OUTPUT: boolean
   
   RETURN (
-    // Defect 1: Alpine.js syntax error
-    (input.type === 'PageLoad' AND input.hasInvalidAlpineInit) OR
+    // Defect 1: SSE event type not serialized
+    (input.type === 'SSEStream' AND input.hasEventType 
+     AND input.serializedFormat NOT CONTAINS 'event: ' + input.eventType) OR
     
-    // Defect 2: Citations not rendering
-    (input.type === 'ConversationLoad' AND input.conversationId === '21f572ba-1c7c-4eb0-8fea-d7ec700b9a55' 
-     AND input.hasCitations AND NOT input.citationsRendered) OR
+    // Defect 2: No citations for structured-only queries
+    (input.type === 'QueryEvent' AND input.intentType === 'structured' 
+     AND input.narratives.length === 0 AND input.metrics.length > 0
+     AND input.citations.length === 0) OR
     
-    // Defect 3: Charts not rendering
-    (input.type === 'QueryResponse' AND input.hasVisualizationData 
-     AND NOT input.chartRendered) OR
+    // Defect 3: Chart canvas not visible when renderChart called
+    (input.type === 'CanvasRender' AND input.hasVisualizationData
+     AND input.canvasElement.offsetHeight === 0) OR
     
-    // Defect 4: Markdown formatting broken
-    (input.type === 'MessageDisplay' AND input.hasMarkdown 
-     AND input.formattingPoor) OR
-    
-    // Defect 5: Messages endpoint 404
-    (input.type === 'APIRequest' AND input.endpoint === '/api/research/conversations/{id}/messages' 
-     AND input.method === 'GET' AND input.statusCode === 404) OR
-    
-    // Defect 6: Scratchpad endpoint 500
-    (input.type === 'APIRequest' AND input.endpoint === '/api/research/scratchpad/{ticker}' 
-     AND input.statusCode === 500) OR
-    
-    // Defect 7: Favicon 404
-    (input.type === 'PageLoad' AND input.faviconMissing)
+    // Defect 4: Markdown table flushed mid-structure
+    (input.type === 'MarkdownStream' AND input.content.endsWith('|')
+     AND NOT input.content.contains('|---|') 
+     AND input.flushTriggered === true)
   )
 END FUNCTION
 ```
 
 ### Examples
 
-**Defect 1 - Alpine.js Syntax Error:**
-- Current: `x-init="try { await init() }"` on line 691 throws "Unexpected token 'try'" error
-- Expected: Valid Alpine.js initialization without syntax errors
-- Root Cause: Invalid JavaScript syntax in x-init attribute (try/catch not allowed in inline expressions)
+**Defect 1 - SSE Event Serialization:**
+- Current: Backend sends `data: {"chartType":"line",...}\n\ndata: {"citations":[...]}\n\n` without event type prefixes
+- Expected: Backend sends `event: visualization\ndata: {"chartType":"line",...}\n\nevent: citations\ndata: {"citations":[...]}\n\n`
+- Root Cause: `@Sse()` decorator on POST endpoint doesn't properly serialize MessageEvent.type field as SSE `event:` line
+- Impact: Frontend SSE parser never sets `currentEvent` variable, so all `if (currentEvent === 'visualization')` branches are skipped
 
-**Defect 2 - Citations Not Rendering:**
-- Current: Conversation 21f572ba-1c7c-4eb0-8fea-d7ec700b9a55 has citations in data but displays plain text instead of clickable [1], [2] links
-- Expected: Citations render as `<a href="#" class="citation-link citation-sec" data-citation-num="1">[1]</a>`
-- Root Cause: `renderMarkdownWithCitations()` function incomplete (line 390 truncated with "retur")
+**Defect 2 - Metric Citations Missing:**
+- Current: Query "AAPL vs MSFT revenue FY 2023 - 2024" returns metrics but `citations = []` because `narratives = []`
+- Expected: Citations generated from metric filing metadata: `[{number: 1, ticker: 'AAPL', filingType: '10-K', fiscalPeriod: 'FY2023', ...}]`, with `formatValue()` helper formatting large numbers (e.g., 1000000000 → "1.0B"), and source reference section appended when no citation markers exist
+- Root Cause: `extractCitations()` only processes narratives array, ignoring metric metadata even when metrics contain filing information
+- Impact: No clickable [1], [2] citation links in response, no source attribution for structured data
 
-**Defect 3 - Charts Not Rendering:**
-- Current: Query "AMZN vs MSFT revenue FY2024" returns visualization data but canvas remains empty
-- Expected: Chart.js renders bar/line chart with comparison data
-- Root Cause: `renderChart()` function may have timing issues or canvas element not found
+**Defect 3 - Chart Rendering Timing:**
+- Current: `renderChart()` called in `$nextTick` but canvas still has `height:0` from Alpine's previous style, Chart.js fails silently
+- Expected: Chart renders after canvas becomes visible with proper dimensions
+- Root Cause: Alpine.js uses microtasks for reactivity, `$nextTick` fires before DOM style propagation, MutationObserver fallback fails if message container doesn't exist yet
+- Impact: Visualization data arrives but chart never displays, canvas remains empty
 
-**Defect 4 - Markdown Formatting:**
-- Current: Responses display with poor formatting, broken tables, missing line breaks
-- Expected: Proper rendering of tables, code blocks, lists, paragraphs with correct spacing
-- Root Cause: `renderMarkdown()` function has complex table parsing logic that may be failing
-
-**Defect 5 - Messages Endpoint 404:**
-- Current: `GET /api/research/conversations/{id}/messages` returns 404
-- Expected: Returns 200 with array of messages for the conversation
-- Root Cause: Backend controller only has POST endpoint for sending messages, missing GET endpoint for loading history
-
-**Defect 6 - Scratchpad Endpoint 500:**
-- Current: `GET /api/research/scratchpad/{ticker}` returns 500 error
-- Expected: Returns 200 with scratchpad data or gracefully handles missing data
-- Root Cause: Endpoint may not exist or has unhandled error condition
-
-**Defect 7 - Favicon 404:**
-- Current: Browser console shows 404 for /favicon.ico
-- Expected: No 404 errors in console
-- Root Cause: Missing favicon file or missing `<link rel="icon">` tag in HTML head
+**Defect 4 - Markdown Table Flushing:**
+- Current: Table row `| Metric | AAPL | MSFT |` triggers flush because line ends with `|`, but separator row `|---|---|` hasn't arrived yet
+- Expected: Table flushed only after complete structure when text ends with `|\n\n` (table followed by double newline)
+- Root Cause: `isMarkdownBreakpoint()` detects `|` at line end as sentence boundary, doesn't recognize mid-table state
+- Impact: Broken table rendering with missing rows or malformed HTML structure
 
 ## Expected Behavior
 
 ### Preservation Requirements
 
 **Unchanged Behaviors:**
-- Streaming responses via SSE must continue to work with token-by-token delivery
-- Provocations mode must continue to apply adversarial research analyst system prompt
-- Sentiment mode must continue to apply sentiment analysis system prompt
-- Instant RAG document upload and Q&A must continue to function
+- Single-ticker queries must continue to render charts, citations, and markdown correctly
+- Semantic retrieval with narrative chunks must continue to generate citations from narratives array
+- Non-table markdown content (paragraphs, headers, lists, code blocks) must continue to flush at appropriate breakpoints
+- Canvas elements that are immediately visible must continue to render charts without delay
+- SSE streaming for token-by-token response delivery must continue to work
+- Provocations mode, sentiment mode, and instant RAG must continue to function
 - Scratchpad save functionality must continue to work
-- Navigation between workspace pages must maintain authentication
-- Markdown table rendering must continue to work
-- Severity badge conversion (RED FLAG, AMBER, GREEN CHALLENGE) must continue to work
 
 **Scope:**
-All inputs that do NOT trigger the 7 specific bug conditions should be completely unaffected by this fix. This includes:
-- New research queries and streaming responses
-- Mode toggles (provocations, sentiment)
-- Document uploads and instant RAG queries
-- Scratchpad interactions
-- Settings modal and system prompt customization
-- Peer comparison displays
-- Source modal interactions
+All inputs that do NOT involve multi-ticker structured queries with charts and tables should be completely unaffected by this fix. This includes:
+- Single-ticker queries with semantic retrieval
+- Queries without visualization data
+- Queries without markdown tables
+- Instant RAG document-based queries
+- Mode toggles and system prompt customization
+- Navigation and authentication flows
 
 ## Hypothesized Root Cause
 
-Based on the bug description and code analysis, the most likely issues are:
+Based on the detailed fix specifications, the root causes are:
 
-1. **Alpine.js Syntax Error (Defect 1)**: The `x-init` attribute on line 691 uses invalid syntax `try { await init() }`. Alpine.js x-init does not support try/catch blocks in inline expressions. The correct syntax should be `x-init="init()" with error handling inside the init() function itself.
+1. **SSE Event Serialization (Defect 1)**: The `@Sse()` decorator in NestJS is designed for `@Get()` endpoints using EventSource protocol. When applied to `@Post()` endpoints, NestJS may not properly serialize the `MessageEvent.type` field as the SSE `event:` line. The decorator expects Observable<MessageEvent> but the serialization logic doesn't consistently map the `type` property to the `event:` prefix in the SSE format. The frontend parser expects `event: visualization` followed by `data: {...}`, but receives only `data: {...}` lines, causing all event-specific handling to be skipped.
 
-2. **Citations Not Rendering (Defect 2)**: The `renderMarkdownWithCitations()` function at line 390 is truncated with "retur" instead of "return", indicating incomplete code. The function should return the markdown with citation links replaced, but the return statement is missing or malformed.
+2. **Metric Citations Missing (Defect 2)**: For structured queries like "AAPL vs MSFT revenue FY 2023 - 2024", intent detection classifies the query as `type: "structured"` which bypasses semantic retrieval (no Bedrock KB call). This results in `narratives = []`. The `extractCitations()` function only processes the narratives array: `const idx = num - 1; if (idx >= 0 && idx < narratives.length)`. With empty narratives, no citations are extracted even though the metrics array contains filing metadata (ticker, filingType, fiscalPeriod). The system has the source information but doesn't format it as clickable citations.
 
-3. **Charts Not Rendering (Defect 3)**: The `renderChart()` function may have timing issues where the canvas element is not yet in the DOM when Chart.js tries to render. The function uses `$nextTick()` but may need additional checks or retry logic. Also, the canvas visibility logic uses inline styles which may conflict with Alpine.js reactivity.
+3. **Chart Rendering Timing (Defect 3)**: The SSE event order is: source → citations → visualization → tokens → done. When the visualization event arrives, Alpine.js sets `message.visualization = payload` which triggers the template to change the canvas style from `height:0` to `min-height:200px`. The `renderChart()` call happens in `$nextTick()`, but Alpine.js uses microtasks for reactivity which may not have propagated to the DOM yet. The canvas check `if (canvas.offsetHeight > 0)` fails because the style hasn't updated. The MutationObserver fallback watches for the message container `[data-message-id="..."]` but if the message was just pushed to the array, the container may not exist yet, causing the observer to fail as well.
 
-4. **Markdown Formatting (Defect 4)**: The `renderMarkdown()` function has complex table parsing logic that may be failing on certain table formats. The function also has line break conversion logic that may be too aggressive or not aggressive enough.
-
-5. **Messages Endpoint 404 (Defect 5)**: The backend `ResearchAssistantController` only defines `POST /api/research/conversations/:id/messages` for sending messages (line 128-175), but does NOT define a `GET` endpoint for loading message history. The frontend calls `GET /api/research/conversations/{id}/messages` in `loadConversationHistory()` but this endpoint doesn't exist.
-
-6. **Scratchpad Endpoint 500 (Defect 6)**: The endpoint `/api/research/scratchpad/{ticker}` is referenced in the frontend but may not exist in the backend, or may have unhandled error conditions when no scratchpad data exists for a ticker.
-
-7. **Favicon 404 (Defect 7)**: The HTML head section does not include a `<link rel="icon">` tag, and no favicon.ico file exists in the public directory. Browsers automatically request /favicon.ico if no icon is specified.
+4. **Markdown Table Flushing (Defect 4)**: The `isMarkdownBreakpoint()` function flushes content at sentence boundaries, detecting patterns like `.\s+[A-Z]` or line endings. For markdown tables, the content arrives as: `| Metric | AAPL | MSFT |\n` followed by `|--------|------|------|\n` followed by data rows. The function detects the `|` at the end of the first line and triggers a flush before the separator row arrives. Without the separator row, the markdown parser can't recognize the table structure, resulting in broken rendering. The function doesn't distinguish between mid-table state and complete table state.
 
 ## Correctness Properties
 
-Property 1: Fault Condition - Alpine.js Initialization
+Property 1: Fault Condition - SSE Event Type Serialization
 
-_For any_ page load event where the research.html page is loaded, the Alpine.js framework SHALL initialize without syntax errors, and the init() function SHALL execute successfully, enabling all reactive features.
+_For any_ SSE stream event where the backend sends visualization or citation data with an explicit event type, the serialized SSE format SHALL include `event: {type}\n` before the `data: {payload}\n` line, enabling the frontend parser to distinguish event types and route data to the correct handlers.
 
 **Validates: Requirements 2.1**
 
-Property 2: Fault Condition - Citation Rendering
+Property 2: Fault Condition - Metric Citation Generation
 
-_For any_ conversation load event where the conversation contains citations in the message data, the citations SHALL render as clickable links with [1], [2], etc. notation that open the source modal when clicked, displaying the correct filing/document metadata.
+_For any_ structured query that returns metrics with filing metadata but no narrative chunks, the system SHALL generate citations from the metric metadata (ticker, filingType, fiscalPeriod) and format them as clickable citation objects with number, sourceType, excerpt, and relevanceScore fields.
 
 **Validates: Requirements 2.2**
 
-Property 3: Fault Condition - Chart Rendering
+Property 3: Fault Condition - Chart Canvas Visibility
 
-_For any_ query response event where the response contains visualization data (datasets, labels, chartType), the Chart.js library SHALL render the chart on the canvas element with proper styling, legends, and tooltips.
+_For any_ visualization event where the chart data arrives before the canvas element is visible in the DOM, the system SHALL use a polling retry mechanism (20 attempts × 100ms) to wait for the canvas to become visible before calling Chart.js render, ensuring charts display correctly regardless of Alpine.js timing.
 
 **Validates: Requirements 2.3**
 
-Property 4: Fault Condition - Markdown Formatting
+Property 4: Fault Condition - Markdown Table Integrity
 
-_For any_ message display event where the message content contains markdown syntax (tables, code blocks, lists, paragraphs), the marked.js library SHALL render the markdown with proper HTML structure, spacing, and styling.
+_For any_ markdown stream event where table content is being delivered, the system SHALL NOT flush at markdown breakpoints that occur within table structures (lines ending with `|`), and SHALL only flush when text ends with `|\n\n` (table followed by double newline), preserving table integrity during streaming.
 
 **Validates: Requirements 2.4**
 
-Property 5: Fault Condition - Messages Endpoint
+Property 5: Preservation - Single-Ticker Query Rendering
 
-_For any_ API request to GET /api/research/conversations/{id}/messages, the backend SHALL return HTTP 200 with a JSON array of message objects containing id, role, content, sources, citations, visualization, and peerComparison fields.
-
-**Validates: Requirements 2.5**
-
-Property 6: Fault Condition - Scratchpad Endpoint
-
-_For any_ API request to GET /api/research/scratchpad/{ticker}, the backend SHALL return HTTP 200 with scratchpad data if it exists, or return HTTP 200 with an empty array if no data exists, gracefully handling the missing data case.
-
-**Validates: Requirements 2.6**
-
-Property 7: Fault Condition - Favicon
-
-_For any_ page load event, the browser SHALL NOT generate a 404 error for favicon.ico, either by serving a valid favicon file or by specifying a favicon link in the HTML head.
-
-**Validates: Requirements 2.7**
-
-Property 8: Preservation - Streaming Responses
-
-_For any_ new research query submitted by the user, the system SHALL continue to stream responses via SSE with token-by-token delivery, exactly as it did before the fix.
+_For any_ single-ticker query with semantic retrieval, the system SHALL continue to render charts, citations, and markdown exactly as before the fix, with no changes to event handling, citation extraction, or rendering timing.
 
 **Validates: Requirements 3.1**
 
-Property 9: Preservation - Mode Functionality
+Property 6: Preservation - Narrative Citation Extraction
 
-_For any_ user interaction with provocations or sentiment mode toggles, the system SHALL continue to apply the correct system prompts and display preset questions, exactly as it did before the fix.
+_For any_ query where semantic retrieval returns narrative chunks, the system SHALL continue to generate citations from the narratives array exactly as before the fix, with no changes to the citation extraction logic.
 
-**Validates: Requirements 3.2, 3.3**
+**Validates: Requirements 3.2**
 
-Property 10: Preservation - Instant RAG
+Property 7: Preservation - Non-Table Markdown Flushing
 
-_For any_ document upload and instant RAG query, the system SHALL continue to process documents and enable document-based Q&A, exactly as it did before the fix.
+_For any_ markdown stream event containing non-table content (paragraphs, headers, lists, code blocks), the system SHALL continue to flush at appropriate breakpoints (double newlines, sentence boundaries) exactly as before the fix.
+
+**Validates: Requirements 3.3**
+
+Property 8: Preservation - Immediate Canvas Rendering
+
+_For any_ visualization event where the canvas element is immediately visible (offsetHeight > 0 on first check), the system SHALL continue to render charts without delay exactly as before the fix.
 
 **Validates: Requirements 3.4**
 
-Property 11: Preservation - Scratchpad Save
+Property 9: Preservation - Generic SSE Events
 
-_For any_ user action to save a message to scratchpad, the system SHALL continue to save insights to the notebook, exactly as it did before the fix.
+_For any_ SSE event with `chunk.type === undefined`, the system SHALL continue to handle it gracefully by treating it as a generic data event for backward compatibility, exactly as before the fix.
 
 **Validates: Requirements 3.5**
-
-Property 12: Preservation - Navigation and Auth
-
-_For any_ navigation between workspace pages, the system SHALL continue to maintain authentication state and context, exactly as it did before the fix.
-
-**Validates: Requirements 3.6**
-
-Property 13: Preservation - Table and Badge Rendering
-
-_For any_ response containing markdown tables or severity badges, the system SHALL continue to render them with proper HTML structure and styling, exactly as it did before the fix.
-
-**Validates: Requirements 3.7, 3.8**
 
 ## Fix Implementation
 
@@ -223,132 +173,126 @@ _For any_ response containing markdown tables or severity badges, the system SHA
 
 Assuming our root cause analysis is correct:
 
-**File**: `public/app/deals/research.html`
-
-**Function**: Alpine.js initialization (line 691)
-
-**Specific Changes**:
-1. **Fix Alpine.js Syntax Error**: Change `x-init="try { await init() } catch(e) { console.error('Init error:', e) }"` to `x-init="init()"` and move error handling inside the init() function itself
-   - Remove try/catch from inline x-init attribute
-   - Add try/catch inside the init() function definition (around line 103)
-
-2. **Fix Citation Rendering**: Complete the `renderMarkdownWithCitations()` function (line 390)
-   - The function is truncated with "retur" - complete the return statement
-   - Ensure the function returns `this.renderMarkdown(content)` when no citations exist
-   - Ensure citation replacement regex works correctly
-
-3. **Fix Chart Rendering**: Improve `renderChart()` function timing and error handling
-   - Add retry logic if canvas element not found on first attempt
-   - Add console logging to debug chart rendering failures
-   - Ensure canvas visibility logic works with Alpine.js reactivity
-   - Verify Chart.js is loaded before attempting to render
-
-4. **Fix Markdown Formatting**: Review and test `renderMarkdown()` function
-   - Test table parsing logic with various table formats
-   - Ensure line break conversion doesn't break code blocks
-   - Verify marked.js configuration is correct
-
 **File**: `src/research/research-assistant.controller.ts`
 
-**Function**: Add GET messages endpoint
+**Function**: `sendMessage()` (lines 150-170)
 
 **Specific Changes**:
-5. **Add Messages GET Endpoint**: Create new endpoint to load conversation message history
-   - Add `@Get('conversations/:id/messages')` decorator
-   - Call `researchService.getConversationMessages(conversationId)` 
-   - Return messages in format: `{ success: true, data: messages }`
-   - Ensure messages include all fields: id, role, content, sources, citations, visualization, peerComparison
+1. **Replace @Sse() with Manual SSE Streaming**: Remove `@Sse()` decorator and Observable pattern, replace with manual `res.write()` approach
+   - Remove imports: `@Sse()`, `Sse`, `MessageEvent`, `Observable` from `@nestjs/common` and `rxjs`
+   - Add imports: `@Res()` from `@nestjs/common`, `Response` from `express`
+   - Change method signature to `async sendMessage(..., @Res() res: Response)`
+   - Set SSE headers manually: `Content-Type: text/event-stream`, `Cache-Control: no-cache`, `Connection: keep-alive`, `X-Accel-Buffering: no`
+   - Replace `subscriber.next()` with `res.write(\`event: ${chunk.type}\ndata: ${JSON.stringify(chunk.data)}\n\n\`)`
+   - Add done event: `res.write('event: done\ndata: {"complete":true}\n\n')` before `res.end()`
+   - Add error handling: catch errors and send `event: error\ndata: {...}\n\n` before ending stream
 
-**File**: `src/research/research-assistant.service.ts`
+**File**: `src/rag/rag.service.ts`
 
-**Function**: Add getConversationMessages method
-
-**Specific Changes**:
-6. **Implement getConversationMessages**: Add service method to fetch messages from database
-   - Query messages table filtered by conversationId and tenantId
-   - Order by createdAt ascending
-   - Parse JSON fields (sources, citations, visualization, peerComparison)
-   - Return array of message objects
-
-**File**: `src/research/notebook.service.ts` or create new scratchpad controller
-
-**Function**: Add or fix scratchpad GET endpoint
+**Function**: Citation generation logic (around line 820)
 
 **Specific Changes**:
-7. **Fix Scratchpad Endpoint**: Ensure `/api/research/scratchpad/{ticker}` endpoint exists and handles missing data gracefully
-   - If endpoint doesn't exist, create it
-   - Return empty array or null when no scratchpad data exists (don't throw 500 error)
-   - Add try/catch to handle database errors gracefully
+2. **Generate Metric Citations for Structured Queries**: Add fallback citation generation from metrics when narratives array is empty
+   - After building response object, check: `if ((!citations || citations.length === 0) && metrics.length > 0)`
+   - Call new helper method: `const metricCitations = this.buildMetricCitations(metrics)`
+   - If metricCitations has items, set `citations = metricCitations`
+   - If answer doesn't contain `[1]` markers, append source reference section: `\n\n**Sources:**\n[1] AAPL 10-K FY2023\n[2] MSFT 10-K FY2023`
+
+3. **Add buildMetricCitations Helper Method**: Create method to format metric metadata as citation objects
+   - Input: `metrics: MetricResult[]`
+   - Output: `Citation[]` with fields: number, citationNumber, type, sourceType, ticker, filingType, fiscalPeriod, section, excerpt, relevanceScore
+   - Use Set to deduplicate by `${ticker}-${filingType}-${fiscalPeriod}` key
+   - Format excerpt: `${rawLabel}: ${formatValue(value)} (${fiscalPeriod})`
+   - Assign sequential citation numbers starting from 1
+
+4. **Add formatValue Helper Method**: Create method to format large numbers with B/M/K suffixes
+   - Input: `value: number`
+   - Output: `string` formatted as currency with appropriate suffix
+   - Logic: if abs(value) >= 1e9 return `${(value/1e9).toFixed(1)}B`, if >= 1e6 return `${(value/1e6).toFixed(1)}M`, if >= 1e3 return `${(value/1e3).toFixed(1)}K`, else return `${value.toFixed(2)}`
+
+4. **Add formatValue Helper Method**: Create method to format large numbers with B/M/K suffixes
+   - Input: `value: number`
+   - Output: `string` formatted as currency with appropriate suffix
+   - Logic: if abs(value) >= 1e9 return `${(value/1e9).toFixed(1)}B`, if >= 1e6 return `${(value/1e6).toFixed(1)}M`, if >= 1e3 return `${(value/1e3).toFixed(1)}K`, else return `${value.toFixed(2)}`
 
 **File**: `public/app/deals/research.html`
 
-**Function**: HTML head section
+**Function**: `renderChart()` (around line 450)
 
 **Specific Changes**:
-8. **Add Favicon**: Add favicon link to HTML head or create favicon.ico file
-   - Option A: Add `<link rel="icon" href="/fundlens-logo.png" type="image/png">` to head
-   - Option B: Create a favicon.ico file in public directory
-   - Option A is simpler and reuses existing logo
+5. **Replace MutationObserver with Polling Retry Loop**: Change chart rendering timing strategy to be more robust
+   - Remove MutationObserver logic and 5-second timeout
+   - Add polling variables: `var attempts = 0; var maxAttempts = 20;`
+   - Create `tryRender()` function that checks canvas visibility and increments attempts
+   - If canvas visible (offsetHeight > 0 && offsetWidth > 0), call `doRender(canvas)` and return
+   - If attempts < maxAttempts, call `setTimeout(tryRender, 100)` to retry after 100ms
+   - If maxAttempts reached, log error: `Canvas never became visible after 20 attempts`
+   - Start polling with initial delay: `setTimeout(tryRender, 50)` to let Alpine update DOM first
+   - Keep existing `doRender()` function with Chart.js rendering logic unchanged
+
+**File**: `public/app/deals/research.html`
+
+**Function**: `isMarkdownBreakpoint()` (around line 380)
+
+**Specific Changes**:
+6. **Improve Table Detection Logic**: Prevent flushing mid-table by detecting table state
+   - Add logic to find last non-empty line: iterate backwards through `text.split('\n')` to find `lastNonEmpty`
+   - Check if inside table: `if (lastNonEmpty.startsWith('|') || lastNonEmpty.endsWith('|'))`
+   - If inside table, only flush if text ends with `|\n\n` (table followed by double newline): `if (text.endsWith('|\n\n')) return true; else return false;`
+   - Keep existing flush logic for non-table content: double newline, sentence boundary with lookahead
+   - Increase safety valve from 200 to 300 chars to accommodate larger tables: `if (text.length - lastFlush > 300)`
+   - Store last flush position: `this._lastMarkdownFlush = text.length`
 
 ## Testing Strategy
 
 ### Validation Approach
 
-The testing strategy follows a two-phase approach: first, surface counterexamples that demonstrate each bug on unfixed code, then verify each fix works correctly and preserves existing behavior.
+The testing strategy follows a two-phase approach: first, surface counterexamples that demonstrate the bugs on unfixed code, then verify the fixes work correctly and preserve existing behavior.
 
 ### Exploratory Fault Condition Checking
 
-**Goal**: Surface counterexamples that demonstrate each of the 7 bugs BEFORE implementing the fix. Confirm or refute the root cause analysis. If we refute, we will need to re-hypothesize.
+**Goal**: Surface counterexamples that demonstrate the bugs BEFORE implementing the fix. Confirm or refute the root cause analysis. If we refute, we will need to re-hypothesize.
 
 **Test Plan**: Write tests that trigger each bug condition and observe the failures on UNFIXED code to understand the root causes.
 
 **Test Cases**:
-1. **Alpine.js Init Test**: Load research.html and check browser console for "Unexpected token 'try'" error (will fail on unfixed code)
-2. **Citation Rendering Test**: Load conversation 21f572ba-1c7c-4eb0-8fea-d7ec700b9a55 and verify citations are plain text, not clickable links (will fail on unfixed code)
-3. **Chart Rendering Test**: Send query "AMZN vs MSFT revenue FY2024" and verify canvas remains empty despite visualization data (will fail on unfixed code)
-4. **Markdown Formatting Test**: Send query that returns tables and verify poor formatting (will fail on unfixed code)
-5. **Messages Endpoint Test**: Call GET /api/research/conversations/{id}/messages and verify 404 response (will fail on unfixed code)
-6. **Scratchpad Endpoint Test**: Call GET /api/research/scratchpad/AAPL and verify 500 response (will fail on unfixed code)
-7. **Favicon Test**: Load research.html and check browser console for favicon.ico 404 error (will fail on unfixed code)
+1. **SSE Serialization Test**: Send query "AAPL vs MSFT revenue FY 2023 - 2024", inspect Network tab Response, verify only `data:` lines without `event:` prefixes (will fail on unfixed code)
+2. **Metric Citations Test**: Send structured query, inspect response object, verify `citations = []` even though `metrics.length > 0` (will fail on unfixed code)
+3. **Chart Timing Test**: Send comparison query, add console.log in renderChart, verify canvas.offsetHeight === 0 on first check (will fail on unfixed code)
+4. **Table Flushing Test**: Send query that returns markdown table, observe DOM updates, verify table rows appear separately before separator row (will fail on unfixed code)
 
 **Expected Counterexamples**:
-- Alpine.js throws syntax error on page load
-- Citations display as plain text [1], [2] instead of clickable links
-- Charts don't render despite visualization data being present
-- Markdown tables have broken formatting
-- GET messages endpoint returns 404
-- GET scratchpad endpoint returns 500
-- Browser console shows favicon 404 error
+- SSE stream contains only `data: {...}` lines without `event: visualization` or `event: citations` prefixes
+- Structured queries return metrics with filing metadata but citations array is empty
+- Chart rendering fails because canvas element has height 0 when Chart.js tries to render
+- Markdown tables are flushed mid-structure, causing broken HTML table rendering
 
 ### Fix Checking
 
-**Goal**: Verify that for all inputs where each bug condition holds, the fixed code produces the expected behavior.
+**Goal**: Verify that for all inputs where the bug condition holds, the fixed function produces the expected behavior.
 
 **Pseudocode:**
 ```
 FOR ALL input WHERE isBugCondition(input) DO
-  result := fixedCode(input)
+  result := fixedFunction(input)
   ASSERT expectedBehavior(result)
 END FOR
 ```
 
 **Test Cases**:
-1. **Alpine.js Init Fix**: Load research.html and verify no console errors, Alpine.js initializes successfully
-2. **Citation Rendering Fix**: Load conversation with citations and verify clickable [1], [2] links that open source modal
-3. **Chart Rendering Fix**: Send comparison query and verify Chart.js renders visualization with proper styling
-4. **Markdown Formatting Fix**: Send query with tables and verify proper HTML table structure with borders and spacing
-5. **Messages Endpoint Fix**: Call GET /api/research/conversations/{id}/messages and verify 200 response with message array
-6. **Scratchpad Endpoint Fix**: Call GET /api/research/scratchpad/AAPL and verify 200 response (empty array if no data)
-7. **Favicon Fix**: Load research.html and verify no 404 errors in browser console
+1. **SSE Serialization Fix**: Send comparison query, inspect Network tab, verify `event: visualization\ndata: {...}\n\nevent: citations\ndata: {...}\n\n` format
+2. **Metric Citations Fix**: Send structured query, verify citations array populated from metric metadata with ticker, filingType, fiscalPeriod
+3. **Chart Timing Fix**: Send comparison query, verify chart renders successfully after polling retry finds visible canvas
+4. **Table Flushing Fix**: Send query with markdown table, verify table rendered as complete HTML structure with all rows and separator
 
 ### Preservation Checking
 
-**Goal**: Verify that for all inputs where the bug conditions do NOT hold, the fixed code produces the same result as the original code.
+**Goal**: Verify that for all inputs where the bug condition does NOT hold, the fixed function produces the same result as the original function.
 
 **Pseudocode:**
 ```
 FOR ALL input WHERE NOT isBugCondition(input) DO
-  ASSERT originalCode(input) = fixedCode(input)
+  ASSERT originalFunction(input) = fixedFunction(input)
 END FOR
 ```
 
@@ -360,37 +304,30 @@ END FOR
 **Test Plan**: Observe behavior on UNFIXED code first for non-buggy scenarios, then write property-based tests capturing that behavior.
 
 **Test Cases**:
-1. **Streaming Preservation**: Send new research query and verify SSE streaming works exactly as before
-2. **Provocations Mode Preservation**: Toggle provocations mode and verify system prompt and preset questions work exactly as before
-3. **Sentiment Mode Preservation**: Toggle sentiment mode and verify system prompt works exactly as before
-4. **Instant RAG Preservation**: Upload document and send instant RAG query, verify processing works exactly as before
-5. **Scratchpad Save Preservation**: Save message to scratchpad and verify it saves to notebook exactly as before
-6. **Navigation Preservation**: Navigate between workspace pages and verify auth and context maintained exactly as before
-7. **Table Rendering Preservation**: Send query with markdown table and verify HTML table structure exactly as before
-8. **Badge Rendering Preservation**: Send query with RED FLAG, AMBER, GREEN CHALLENGE and verify badge styling exactly as before
+1. **Single-Ticker Preservation**: Send single-ticker query with semantic retrieval, verify charts and citations render exactly as before
+2. **Narrative Citations Preservation**: Send query that triggers semantic retrieval, verify citations extracted from narratives array exactly as before
+3. **Non-Table Markdown Preservation**: Send query with paragraphs and lists, verify flushing at appropriate breakpoints exactly as before
+4. **Immediate Canvas Preservation**: Send query where canvas is immediately visible, verify chart renders without delay exactly as before
+5. **Generic SSE Events Preservation**: Send SSE events without explicit type field, verify processed as generic data events exactly as before
 
 ### Unit Tests
 
-- Test Alpine.js initialization without syntax errors
-- Test citation link generation with various citation formats
-- Test Chart.js rendering with different chart types (bar, line, grouped)
-- Test markdown rendering with tables, code blocks, lists, paragraphs
-- Test GET messages endpoint returns correct data structure
-- Test GET scratchpad endpoint handles missing data gracefully
-- Test favicon link exists in HTML head
+- Test SSE format with manual res.write() includes proper `event:` and `data:` lines
+- Test buildMetricCitations() generates citation objects from metric metadata
+- Test formatValue() formats numbers with B/M/K suffixes correctly
+- Test polling retry loop finds canvas after Alpine.js DOM update
+- Test isMarkdownBreakpoint() doesn't flush mid-table but flushes after complete table
 
 ### Property-Based Tests
 
-- Generate random conversation IDs and verify messages endpoint returns valid data or 404 for non-existent conversations
-- Generate random ticker symbols and verify scratchpad endpoint returns valid data or empty array
-- Generate random markdown content and verify rendering produces valid HTML
-- Generate random visualization payloads and verify Chart.js renders without errors
-- Generate random citation arrays and verify all citations become clickable links
+- Generate random metric arrays and verify buildMetricCitations() produces valid citation objects
+- Generate random markdown content with tables and verify flushing preserves table integrity
+- Generate random visualization payloads and verify polling retry eventually renders chart
+- Generate random SSE event types and verify proper serialization format
 
 ### Integration Tests
 
-- Test full research flow: load page → send query → receive streaming response → render markdown with citations → click citation → view source modal
-- Test chart rendering flow: send comparison query → receive visualization data → render chart → verify chart displays correctly
-- Test conversation history flow: create conversation → send messages → reload page → load conversation history → verify all messages display correctly
-- Test instant RAG flow: upload document → send query → receive response with citations → verify citations link to uploaded document
-- Test mode switching flow: toggle provocations mode → send query → verify provocations system prompt applied → toggle off → verify default prompt restored
+- Test full multi-ticker comparison flow: send query → receive SSE stream with proper event types → render chart → display citations → verify markdown table formatting
+- Test structured query flow: send metric query → verify citations generated from metrics → verify clickable citation links → verify source modal displays filing metadata
+- Test chart rendering flow: send visualization data → verify polling retry waits for canvas → verify Chart.js renders with proper styling and legends
+- Test markdown streaming flow: send response with table → verify table not flushed mid-structure → verify complete table rendered with proper HTML
