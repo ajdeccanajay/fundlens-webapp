@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { RAGModule } from '../rag/rag.module';
 import { TenantModule } from '../tenant';
 import { S3Module } from '../s3/s3.module';
+import { S3Service } from '../services/s3.service';
 
 // Services
 import { DealService } from './deal.service';
@@ -73,6 +74,7 @@ import { ProvocationsController } from './provocations.controller';
   ],
   providers: [
     PrismaService,
+    S3Service,
     StatementMapper,
     XLSXGenerator,
     ExportService,

@@ -18,6 +18,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { RAGService } from '../rag/rag.service';
 import { FinancialCalculatorService } from './financial-calculator.service';
 import { MarketDataService } from './market-data.service';
+import { S3Service } from '../services/s3.service';
 import { TenantContext, TENANT_CONTEXT_KEY } from '../tenant/tenant-context';
 
 export interface ChatMessage {
@@ -80,6 +81,7 @@ export class ChatService {
     private readonly ragService: RAGService,
     private readonly financialCalculatorService: FinancialCalculatorService,
     private readonly marketDataService: MarketDataService,
+    private readonly s3Service: S3Service,
     @Inject(REQUEST) private readonly request: Request,
   ) {}
 
@@ -178,10 +180,37 @@ export class ChatService {
       const context = await this.buildComprehensiveContext(deal.id, params.content);
 
       // Generate AI response with enhanced citations
+      // ── Spec §7.1 Source 4: Long-context fallback for recently uploaded docs ──
+      let longContextText: string | undefined;
+      let longContextFileName: string | undefined;
+      try {
+        const longContextDocs = await this.prisma.$queryRawUnsafe<any[]>(
+          `SELECT document_id, raw_text_s3_key, file_name
+           FROM documents
+           WHERE deal_id = $1::uuid
+             AND tenant_id = $2::uuid
+             AND processing_mode = 'long-context-fallback'
+             AND status = 'queryable'
+           ORDER BY created_at DESC LIMIT 1`,
+          deal.id,
+          this.getTenantId(),
+        );
+        if (longContextDocs.length > 0 && longContextDocs[0].raw_text_s3_key) {
+          const rawBuffer = await this.s3Service.getFileBuffer(longContextDocs[0].raw_text_s3_key);
+          longContextText = rawBuffer.toString('utf-8');
+          longContextFileName = longContextDocs[0].file_name;
+          this.logger.log(`📄 Long-context fallback: loaded ${longContextText.length} chars from "${longContextFileName}"`);
+        }
+      } catch (err) {
+        this.logger.warn(`⚠️ Long-context fallback lookup failed (non-fatal): ${err.message}`);
+      }
+
       const aiResponse = await this.ragService.query(params.content, {
         includeNarrative: true,
         includeCitations: true,
         ticker: deal.ticker,
+        longContextText,
+        longContextFileName,
       });
 
       // Enhance sources with detailed traceability

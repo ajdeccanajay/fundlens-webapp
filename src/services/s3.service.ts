@@ -6,6 +6,7 @@ import {
   DeleteObjectCommand,
   HeadObjectCommand,
 } from '@aws-sdk/client-s3';
+import type { RequestPresigningArguments } from '@smithy/types';
 import { Upload } from '@aws-sdk/lib-storage';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Readable } from 'stream';
@@ -117,6 +118,29 @@ export class S3Service {
     } catch (error) {
       this.logger.error(`Error generating signed URL: ${error.message}`);
       throw new Error(`Failed to generate signed URL: ${error.message}`);
+    }
+  }
+  /**
+   * Get a signed URL for uploading a file (presigned PUT)
+   * Used by Document Intelligence Engine for client-side uploads
+   */
+  async getSignedUploadUrl(
+    key: string,
+    contentType: string,
+    expiresIn = 3600,
+  ): Promise<string> {
+    try {
+      const command = new PutObjectCommand({
+        Bucket: this.bucketName,
+        Key: key,
+        ContentType: contentType,
+      });
+
+      const url = await getSignedUrl(this.s3Client, command, { expiresIn });
+      return url;
+    } catch (error) {
+      this.logger.error(`Error generating signed upload URL: ${error.message}`);
+      throw new Error(`Failed to generate signed upload URL: ${error.message}`);
     }
   }
 

@@ -61,6 +61,14 @@
         .source-modal-btn { padding: 8px 16px; border-radius: 8px; font-size: 0.875rem; font-weight: 500; border: 1px solid #d1d5db; background: white; cursor: pointer; }
         .source-modal-btn:hover { background: #f9fafb; }
         .source-modal-btn.primary { background: var(--fundlens-primary, #1a56db); color: white; border-color: transparent; }
+        /* Document Intelligence Status Pill (Spec §10.2) */
+        .chat-upload-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 20px; font-size: 13px; transition: all 200ms ease; }
+        .chat-upload-pill--uploading { background: #EFF6FF; border: 1px solid #93C5FD; color: #1e40af; }
+        .chat-upload-pill--processing { background: #FFFBEB; border: 1px solid #FCD34D; color: #92400e; }
+        .chat-upload-pill--ready { background: #F0FDF4; border: 1px solid #86EFAC; color: #065f46; }
+        .chat-upload-pill--error { background: #FEF2F2; border: 1px solid #FCA5A5; color: #991b1b; }
+        .doc-intel-suggested-btn { padding: 4px 12px; border-radius: 16px; font-size: 12px; font-weight: 500; background: #f0fdf4; border: 1px solid #86efac; color: #065f46; cursor: pointer; transition: all 150ms ease; }
+        .doc-intel-suggested-btn:hover { background: #dcfce7; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -95,6 +103,11 @@
         instantRagTimeRemaining: 0,
         showInstantRagSummaries: false,
         _instantRagTimerInterval: null,
+        // Document Intelligence Engine (Spec §10.1)
+        docIntel: {
+            file: null,       // { name, size, type, status, documentId, intel }
+            dragOver: false,
+        },
 
         async init() {
             try {
@@ -745,7 +758,126 @@
         getChipStatusClass(file) { return { 'chip-pending': file.status === 'pending', 'chip-processing': file.status === 'processing', 'chip-complete': file.status === 'complete', 'chip-error': file.status === 'error' }; },
         truncateFileName(name, maxLen) { if (name.length <= maxLen) return name; var ext = name.split('.').pop(); var base = name.slice(0, maxLen - ext.length - 4); return base + '...' + ext; },
         formatFileSize(bytes) { if (bytes < 1024) return bytes + ' B'; if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'; return (bytes / (1024 * 1024)).toFixed(1) + ' MB'; },
-        formatSessionTime(seconds) { var mins = Math.floor(seconds / 60); var secs = seconds % 60; return mins + ':' + secs.toString().padStart(2, '0'); }
+        formatSessionTime(seconds) { var mins = Math.floor(seconds / 60); var secs = seconds % 60; return mins + ':' + secs.toString().padStart(2, '0'); },
+
+        // ── Document Intelligence Engine (Spec §10.1) ──────────────────
+        async uploadDocIntel(file) {
+            if (this.docIntel.file && this.docIntel.file.status === 'processing') {
+                alert('Please wait for current file to finish processing.');
+                return;
+            }
+            var maxSize = 50 * 1024 * 1024;
+            if (file.size > maxSize) { alert('File too large. Chat uploads limited to 50 MB.'); return; }
+            var allowed = ['pdf', 'docx', 'xlsx', 'csv', 'txt', 'png', 'jpg', 'jpeg'];
+            var ext = file.name.split('.').pop().toLowerCase();
+            if (!allowed.includes(ext)) { alert('File type .' + ext + ' is not supported.'); return; }
+
+            this.docIntel.file = { name: file.name, size: file.size, type: file.type, status: 'uploading', documentId: null, intel: null };
+            var self = this;
+            try {
+                var headers = this.getAuthHeaders();
+                if (!headers) { window.location.href = '/login.html'; return; }
+                // 1. Get presigned URL
+                var urlResp = await fetch('/api/documents/upload-url', {
+                    method: 'POST',
+                    headers: Object.assign({}, headers, { 'Content-Type': 'application/json' }),
+                    body: JSON.stringify({
+                        fileName: file.name, fileType: file.type, fileSize: file.size,
+                        dealId: this.entityContext.value,
+                        uploadSource: 'chat',
+                    }),
+                });
+                if (!urlResp.ok) throw new Error('Failed to get upload URL');
+                var urlData = await urlResp.json();
+                self.docIntel.file.documentId = urlData.documentId;
+
+                // 2. Upload to S3
+                await fetch(urlData.uploadUrl, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } });
+
+                // 3. Trigger instant intelligence (< 5s)
+                self.docIntel.file.status = 'processing';
+                var intelResp = await fetch('/api/documents/' + urlData.documentId + '/upload-complete', {
+                    method: 'POST', headers: headers,
+                });
+                if (!intelResp.ok) throw new Error('Processing failed');
+                var intel = await intelResp.json();
+
+                // 4. Show instant intelligence
+                self.docIntel.file.status = 'ready';
+                self.docIntel.file.intel = intel;
+                self.researchMessages.push({
+                    id: Date.now(),
+                    role: 'assistant',
+                    content: self.formatDocIntel(intel),
+                    sources: [],
+                    citations: [],
+                    visualization: null,
+                });
+                self.$nextTick(function() { self.scrollResearchToBottom(); });
+            } catch (error) {
+                console.error('Document Intelligence upload failed:', error);
+                self.docIntel.file.status = 'error';
+                alert('Upload failed: ' + error.message);
+            }
+        },
+
+        formatDocIntel(intel) {
+            var msg = '📄 **' + intel.fileName + '** — ' + intel.summary + '\n\n';
+            if (intel.headlineMetrics && intel.headlineMetrics.length > 0) {
+                msg += '**Headline Metrics:**\n';
+                for (var i = 0; i < intel.headlineMetrics.length; i++) {
+                    var m = intel.headlineMetrics[i];
+                    msg += '  ' + m.metric_key + ': **' + m.raw_value + '**';
+                    if (m.is_estimate) msg += ' (est.)';
+                    if (m.period) msg += ' [' + m.period + ']';
+                    msg += '\n';
+                }
+            }
+            if (intel.suggestedQuestions && intel.suggestedQuestions.length > 0) {
+                msg += '\n**You might want to ask:**\n';
+                for (var j = 0; j < intel.suggestedQuestions.length; j++) {
+                    msg += '  → ' + intel.suggestedQuestions[j] + '\n';
+                }
+            }
+            return msg;
+        },
+
+        handleDocIntelDrop(event) {
+            this.docIntel.dragOver = false;
+            var files = event.dataTransfer.files;
+            if (files.length > 0) this.uploadDocIntel(files[0]);
+        },
+
+        handleDocIntelFileInput(event) {
+            var files = event.target.files;
+            if (files.length > 0) this.uploadDocIntel(files[0]);
+            event.target.value = '';
+        },
+
+        docIntelPillClass() {
+            if (!this.docIntel.file) return '';
+            var s = this.docIntel.file.status;
+            if (s === 'uploading') return 'chat-upload-pill chat-upload-pill--uploading';
+            if (s === 'processing') return 'chat-upload-pill chat-upload-pill--processing';
+            if (s === 'ready') return 'chat-upload-pill chat-upload-pill--ready';
+            if (s === 'error') return 'chat-upload-pill chat-upload-pill--error';
+            return '';
+        },
+
+        docIntelPillText() {
+            if (!this.docIntel.file) return '';
+            var s = this.docIntel.file.status;
+            if (s === 'uploading') return '⬆️ Uploading ' + this.docIntel.file.name + '...';
+            if (s === 'processing') return '🔍 Analyzing ' + this.docIntel.file.name + '...';
+            if (s === 'ready') return '✅ ' + this.docIntel.file.name + ' — Ready for questions';
+            if (s === 'error') return '❌ ' + this.docIntel.file.name + ' — Failed';
+            return '';
+        },
+
+        askDocIntelQuestion(question) {
+            this.researchInput = question;
+            this.sendResearchMessage();
+        }
     };
     };
     </script>
@@ -829,6 +961,19 @@
                             <button x-show="conversationId" @click="clearConversation()" class="text-xs text-gray-500 hover:text-gray-700"><i class="fas fa-redo mr-1"></i>New</button>
                         </div>
                     </div>
+                    <!-- Document Intelligence Status Pill (Spec §10.2) -->
+                    <template x-if="docIntel.file">
+                        <div class="mb-3">
+                            <div :class="docIntelPillClass()"><span x-text="docIntelPillText()"></span></div>
+                            <template x-if="docIntel.file.status === 'ready' && docIntel.file.intel && docIntel.file.intel.suggestedQuestions">
+                                <div class="flex flex-wrap gap-2 mt-2">
+                                    <template x-for="q in docIntel.file.intel.suggestedQuestions" :key="q">
+                                        <button @click="askDocIntelQuestion(q)" class="doc-intel-suggested-btn" x-text="q.length > 50 ? q.substring(0, 47) + '...' : q"></button>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
                     <!-- Instant RAG Intake Summaries -->
                     <template x-if="instantRagIntakeSummaries.length > 0">
                         <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-xl">
@@ -869,7 +1014,9 @@
                             <div class="flex-1 flex items-end border-2 border-gray-200 rounded-xl focus-within:border-blue-500 transition-colors" :class="{ 'border-green-400': instantRagSession && instantRagSession.status === 'active' }">
                                 <div class="relative flex-shrink-0 pl-2 pb-2.5">
                                     <input type="file" x-ref="instantRagFileInput" @change="handleInstantRagFiles($event)" multiple accept=".pdf,.docx,.xlsx,.csv,.pptx,.txt,.png,.jpg,.jpeg" class="hidden">
+                                    <input type="file" x-ref="docIntelFileInput" @change="handleDocIntelFileInput($event)" accept=".pdf,.docx,.xlsx,.csv,.txt,.png,.jpg,.jpeg" class="hidden">
                                     <button @click="$refs.instantRagFileInput.click()" :disabled="instantRagUploading || (instantRagFiles.length >= 5)" class="p-1.5 rounded-lg hover:bg-gray-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed" :class="{ 'bg-green-50 hover:bg-green-100': instantRagSession && instantRagSession.status === 'active' }" title="Upload documents for instant Q&amp;A"><i class="fas fa-paperclip text-gray-400 text-lg" :class="{ 'text-green-600': instantRagSession && instantRagSession.status === 'active' }"></i></button>
+                                    <button @click="$refs.docIntelFileInput.click()" :disabled="docIntel.file && docIntel.file.status === 'processing'" class="p-1.5 rounded-lg hover:bg-gray-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed ml-0.5" title="Upload document for deep analysis (5s to queryable)"><i class="fas fa-file-medical text-gray-400 text-base" :class="{ 'text-emerald-600': docIntel.file && docIntel.file.status === 'ready' }"></i></button>
                                     <span x-show="instantRagFiles.length > 0" class="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 text-white text-[10px] rounded-full flex items-center justify-center" x-text="instantRagFiles.length"></span>
                                 </div>
                                 <textarea x-model="researchInput" @keydown.enter.prevent="sendResearchMessage()" :disabled="researchTyping || instantRagUploading" :placeholder="instantRagSession && instantRagSession.status === 'active' ? 'Ask about your uploaded documents...' : 'Ask about any company...'" rows="2" class="flex-1 px-3 py-3 focus:outline-none resize-none disabled:opacity-50 bg-transparent border-0 rounded-r-xl"></textarea>

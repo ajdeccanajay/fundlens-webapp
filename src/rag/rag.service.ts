@@ -61,6 +61,8 @@ export class RAGService {
       ticker?: string; // For scoped user document search
       tickers?: string[]; // Multi-ticker array for peer comparison
       instantRagSessionId?: string; // Instant RAG session ID for cross-source retrieval
+      longContextText?: string; // Spec §7.1 Source 4: raw doc text for long-context fallback
+      longContextFileName?: string; // File name for attribution
     },
   ): Promise<RAGResponse> {
     const startTime = Date.now();
@@ -490,6 +492,36 @@ export class RAGService {
           this.logger.warn(`⚠️ Failed to retrieve session documents: ${error.message}`);
           sessionDocsUnavailable = true;
         }
+      }
+
+      // ── SOURCE 4: Long-Context Fallback (Spec §7.1) ───────────────
+      // If caller provides raw document text (document in 'long-context-fallback'
+      // mode, not yet chunked/embedded), send it directly to Claude's 200K
+      // context window. The user always gets an answer.
+      if (options?.longContextText && options.longContextText.length > 0) {
+        this.logger.log(
+          `📄 Long-context fallback active: ${options.longContextText.length} chars from "${options.longContextFileName || 'uploaded document'}"`,
+        );
+
+        // If we already have metrics/narratives from other sources, merge the
+        // long-context text as an additional narrative chunk so the LLM sees it.
+        const longContextChunk = {
+          content: options.longContextText.substring(0, 180000), // Stay within 200K token budget
+          score: 0.95, // High relevance — user explicitly uploaded this
+          metadata: {
+            ticker: options.ticker || '',
+            sectionType: 'uploaded-document',
+            filingType: 'user-upload',
+            fiscalPeriod: undefined,
+            chunkIndex: undefined,
+          },
+          source: {
+            location: options.longContextFileName || 'uploaded-document',
+            type: 'long-context-fallback',
+          },
+        };
+        narratives = [...narratives, longContextChunk];
+        this.logger.log(`📄 Injected long-context document into narratives (total: ${narratives.length})`);
       }
 
       // ── Bounded Retrieval Loop (Req 13.1–13.6) ────────────────────────
