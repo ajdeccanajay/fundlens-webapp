@@ -122,7 +122,11 @@ export class S3Service {
   }
   /**
    * Get a signed URL for uploading a file (presigned PUT)
-   * Used by Document Intelligence Engine for client-side uploads
+   * Used by Document Intelligence Engine for client-side uploads.
+   * 
+   * IMPORTANT: We create a separate S3Client without automatic checksums
+   * because browsers cannot compute CRC32 checksums, and the presigned URL
+   * would include checksum query params that cause CORS preflight failures.
    */
   async getSignedUploadUrl(
     key: string,
@@ -130,13 +134,26 @@ export class S3Service {
     expiresIn = 3600,
   ): Promise<string> {
     try {
+      // Create a client without checksum for browser-compatible presigned URLs
+      const region = process.env.AWS_REGION || 'us-east-1';
+      const presignClient = new S3Client({
+        region,
+        requestChecksumCalculation: 'WHEN_REQUIRED',
+        responseChecksumValidation: 'WHEN_REQUIRED',
+        ...(process.env.AWS_ENDPOINT && {
+          endpoint: process.env.AWS_ENDPOINT,
+          forcePathStyle: true,
+        }),
+      });
+
       const command = new PutObjectCommand({
         Bucket: this.bucketName,
         Key: key,
         ContentType: contentType,
       });
 
-      const url = await getSignedUrl(this.s3Client, command, { expiresIn });
+      const url = await getSignedUrl(presignClient, command, { expiresIn });
+      presignClient.destroy();
       return url;
     } catch (error) {
       this.logger.error(`Error generating signed upload URL: ${error.message}`);
