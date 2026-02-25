@@ -8,10 +8,13 @@ import {
   HttpException,
   HttpStatus,
   Logger,
+  UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { DocumentIntelligenceService } from './document-intelligence.service';
 import type { InstantIntelligenceResult } from './document-intelligence.service';
+import { TenantGuard } from '../tenant/tenant.guard';
+import { TENANT_CONTEXT_KEY, TenantContext } from '../tenant/tenant-context';
 
 /**
  * Document Intelligence Controller
@@ -22,6 +25,7 @@ import type { InstantIntelligenceResult } from './document-intelligence.service'
  * GET  /api/documents/:id/status        → polling endpoint for processing state
  */
 @Controller('documents')
+@UseGuards(TenantGuard)
 export class DocumentIntelligenceController {
   private readonly logger = new Logger(DocumentIntelligenceController.name);
 
@@ -194,7 +198,10 @@ export class DocumentIntelligenceController {
   }
 
   private getTenantId(req: Request): string {
-    // Match existing pattern — tenant from auth context or header
+    const context = (req as any)[TENANT_CONTEXT_KEY] as TenantContext | undefined;
+    if (context?.tenantId) return context.tenantId;
+
+    // Fallback for backward compat
     const tenantId =
       (req as any).tenantId ||
       (req as any).user?.tenantId ||

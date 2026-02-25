@@ -10,27 +10,30 @@ import {
   HttpException,
   HttpStatus,
   Logger,
+  UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { DealLibraryService } from './deal-library.service';
 import type { DocumentTypeFilter } from './deal-library.service';
+import { TenantGuard } from '../tenant/tenant.guard';
+import { TENANT_CONTEXT_KEY, TenantContext } from '../tenant/tenant-context';
+import { PrismaService } from '../../prisma/prisma.service';
 
 /**
  * Deal Library Controller — Spec §4
  * API endpoints for bulk document management within a deal.
  *
- * POST   /api/deals/:dealId/library/upload-url          → presigned URL for upload
- * POST   /api/deals/:dealId/library/:documentId/upload-complete → trigger processing
- * GET    /api/deals/:dealId/library                      → list documents with filters
- * GET    /api/deals/:dealId/library/counts               → document counts by type
- * DELETE /api/deals/:dealId/library/:documentId          → remove document
+ * The :dealId param can be either a UUID or a ticker symbol.
+ * If a ticker is provided, it's resolved to the deal UUID automatically.
  */
 @Controller('deals/:dealId/library')
+@UseGuards(TenantGuard)
 export class DealLibraryController {
   private readonly logger = new Logger(DealLibraryController.name);
 
   constructor(
     private readonly libraryService: DealLibraryService,
+    private readonly prisma: PrismaService,
   ) {}
 
   /**
@@ -44,6 +47,7 @@ export class DealLibraryController {
     @Req() req: Request,
   ): Promise<{ uploadUrl: string; documentId: string }> {
     const tenantId = this.getTenantId(req);
+    const resolvedDealId = await this.resolveDealId(dealId, tenantId);
 
     if (!body.fileName || !body.fileType || !body.fileSize) {
       throw new HttpException(
@@ -67,7 +71,7 @@ export class DealLibraryController {
       fileType: body.fileType,
       fileSize: body.fileSize,
       tenantId,
-      dealId,
+      dealId: resolvedDealId,
     });
   }
 
@@ -96,7 +100,8 @@ export class DealLibraryController {
     @Req() req: Request,
   ) {
     const tenantId = this.getTenantId(req);
-    return this.libraryService.listDocuments(tenantId, dealId, filter, sortBy, sortDir);
+    const resolvedDealId = await this.resolveDealId(dealId, tenantId);
+    return this.libraryService.listDocuments(tenantId, resolvedDealId, filter, sortBy, sortDir);
   }
 
   /**
@@ -108,7 +113,8 @@ export class DealLibraryController {
     @Req() req: Request,
   ) {
     const tenantId = this.getTenantId(req);
-    return this.libraryService.getDocumentCounts(tenantId, dealId);
+    const resolvedDealId = await this.resolveDealId(dealId, tenantId);
+    return this.libraryService.getDocumentCounts(tenantId, resolvedDealId);
   }
 
   /**
@@ -129,6 +135,10 @@ export class DealLibraryController {
   }
 
   private getTenantId(req: Request): string {
+    const context = (req as any)[TENANT_CONTEXT_KEY] as TenantContext | undefined;
+    if (context?.tenantId) return context.tenantId;
+
+    // Fallback for backward compat
     const tenantId =
       (req as any).tenantId ||
       (req as any).user?.tenantId ||
@@ -141,5 +151,43 @@ export class DealLibraryController {
       );
     }
     return tenantId as string;
+  }
+
+  /**
+   * Resolve dealId param — accepts either UUID or ticker symbol.
+   * If it looks like a UUID, use as-is. Otherwise, look up by ticker.
+   */
+  private async resolveDealId(dealIdOrTicker: string, tenantId: string): Promise<string> {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (uuidRegex.test(dealIdOrTicker)) {
+      return dealIdOrTicker;
+    }
+
+    // Ticker lookup — deals.tenant_id may be text type
+    const rows = await this.prisma.$queryRaw<any[]>`
+      SELECT id FROM deals
+      WHERE UPPER(ticker) = ${dealIdOrTicker.toUpperCase()}
+        AND tenant_id = ${tenantId}
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+
+    if (!rows?.length) {
+      // Platform admin fallback — try without tenant filter
+      const fallback = await this.prisma.$queryRaw<any[]>`
+        SELECT id FROM deals
+        WHERE UPPER(ticker) = ${dealIdOrTicker.toUpperCase()}
+        ORDER BY created_at DESC
+        LIMIT 1
+      `;
+      if (fallback?.length) return fallback[0].id;
+
+      throw new HttpException(
+        `Deal not found for ticker: ${dealIdOrTicker}`,
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    return rows[0].id;
   }
 }
