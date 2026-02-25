@@ -14,6 +14,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BackgroundEnrichmentService } from '../../src/documents/background-enrichment.service';
 import { VisionExtractionService } from '../../src/documents/vision-extraction.service';
 import { VerificationService } from '../../src/documents/verification.service';
+import { DocumentChunkingService } from '../../src/documents/document-chunking.service';
+import { DocumentIndexingService } from '../../src/documents/document-indexing.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { S3Service } from '../../src/services/s3.service';
 
@@ -52,6 +54,22 @@ describe('BackgroundEnrichmentService', () => {
             identifyKeyPages: jest.fn().mockReturnValue([1, 2, 5]),
             extractFromPages: jest.fn().mockResolvedValue([]),
             flattenMetrics: jest.fn().mockReturnValue([]),
+          },
+        },
+        {
+          provide: DocumentChunkingService,
+          useValue: {
+            chunk: jest.fn().mockReturnValue([
+              { chunkIndex: 0, content: 'Test chunk 1', tokenEstimate: 50, sectionType: 'narrative' },
+              { chunkIndex: 1, content: 'Test chunk 2', tokenEstimate: 60, sectionType: 'table' },
+            ]),
+          },
+        },
+        {
+          provide: DocumentIndexingService,
+          useValue: {
+            indexChunks: jest.fn().mockResolvedValue(2),
+            deleteChunks: jest.fn().mockResolvedValue(undefined),
           },
         },
       ],

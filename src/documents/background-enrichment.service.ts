@@ -18,6 +18,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { S3Service } from '../services/s3.service';
 import { VisionExtractionService, VisionPageResult } from './vision-extraction.service';
 import { VerificationService } from './verification.service';
+import { DocumentChunkingService } from './document-chunking.service';
+import { DocumentIndexingService } from './document-indexing.service';
 
 @Injectable()
 export class BackgroundEnrichmentService {
@@ -28,6 +30,8 @@ export class BackgroundEnrichmentService {
     private readonly s3: S3Service,
     private readonly visionExtraction: VisionExtractionService,
     private readonly verification: VerificationService,
+    private readonly chunking: DocumentChunkingService,
+    private readonly indexing: DocumentIndexingService,
   ) {}
 
   /**
@@ -220,7 +224,7 @@ export class BackgroundEnrichmentService {
         );
       }
 
-      // Step 6: Update document status
+      // Step 6: Update document status (metrics from vision)
       await this.prisma.$executeRawUnsafe(
         `UPDATE intel_documents SET
           metric_count = COALESCE(metric_count, 0) + $1,
@@ -230,10 +234,43 @@ export class BackgroundEnrichmentService {
         documentId,
       );
 
+      // ── Step 7: Chunk raw text (Spec §3.4 Step 4) ──
+      const chunks = this.chunking.chunk(rawText, visionResults, {
+        maxTokens: 600,
+        overlap: 100,
+        preserveTables: true,
+        documentType: doc.document_type || 'generic',
+      });
+      this.logger.log(
+        `[${documentId}] Chunked into ${chunks.length} chunks`,
+      );
+
+      // ── Step 8: Embed + Index chunks with Titan V2 (Spec §6.1) ──
+      let indexedCount = 0;
+      if (chunks.length > 0) {
+        indexedCount = await this.indexing.indexChunks(
+          documentId,
+          tenantId,
+          dealId,
+          chunks,
+        );
+      }
+
+      // ── Step 9: Upgrade document to fully-indexed ──
+      await this.prisma.$executeRawUnsafe(
+        `UPDATE intel_documents SET
+          processing_mode = 'fully-indexed',
+          chunk_count = $1,
+          updated_at = NOW()
+        WHERE document_id = $2::uuid`,
+        indexedCount,
+        documentId,
+      );
+
       const elapsed = Date.now() - startTime;
       this.logger.log(
         `[${documentId}] Background enrichment complete: ` +
-        `${metricCount} metrics, ${tableCount} tables ` +
+        `${metricCount} metrics, ${tableCount} tables, ${indexedCount} chunks indexed ` +
         `(${elapsed}ms)`,
       );
     } catch (error) {

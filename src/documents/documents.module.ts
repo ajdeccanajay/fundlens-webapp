@@ -18,6 +18,8 @@ import { DocumentIntelligenceController } from './document-intelligence.controll
 import { VisionExtractionService } from './vision-extraction.service';
 import { VerificationService } from './verification.service';
 import { BackgroundEnrichmentService } from './background-enrichment.service';
+import { DocumentChunkingService } from './document-chunking.service';
+import { DocumentIndexingService } from './document-indexing.service';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { TenantModule } from '../tenant/tenant.module';
 import { RAGModule } from '../rag/rag.module';
@@ -40,8 +42,10 @@ import { S3Service } from '../services/s3.service';
     VisionExtractionService,
     VerificationService,
     BackgroundEnrichmentService,
+    DocumentChunkingService,
+    DocumentIndexingService,
     S3Service,
   ],
-  exports: [DocumentsService, DocumentProcessorService, DocumentProcessingService, DocumentIntelligenceService, BackgroundEnrichmentService],
+  exports: [DocumentsService, DocumentProcessorService, DocumentProcessingService, DocumentIntelligenceService, BackgroundEnrichmentService, DocumentIndexingService],
 })
 export class DocumentsModule {}

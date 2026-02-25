@@ -209,6 +209,8 @@ export class ChatService {
         includeNarrative: true,
         includeCitations: true,
         ticker: deal.ticker,
+        tenantId: this.getTenantId(),
+        dealId: deal.id,
         longContextText,
         longContextFileName,
       });

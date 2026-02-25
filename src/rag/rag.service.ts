@@ -14,6 +14,7 @@ import { InstantRAGService } from '../instant-rag/instant-rag.service';
 import { HybridSynthesisService, FinancialAnalysisContext, SubQueryResult } from './hybrid-synthesis.service';
 import { QueryDecomposerService, DecomposedQuery } from './query-decomposer.service';
 import { classifyResponseType, ResponseClassificationInput } from './types/query-intent';
+import { DocumentIndexingService } from '../documents/document-indexing.service';
 
 /**
  * RAG Service
@@ -46,6 +47,8 @@ export class RAGService {
     private readonly hybridSynthesis?: HybridSynthesisService,
     @Optional()
     private readonly queryDecomposer?: QueryDecomposerService,
+    @Optional()
+    private readonly documentIndexing?: DocumentIndexingService,
   ) {}
 
   /**
@@ -63,6 +66,7 @@ export class RAGService {
       instantRagSessionId?: string; // Instant RAG session ID for cross-source retrieval
       longContextText?: string; // Spec §7.1 Source 4: raw doc text for long-context fallback
       longContextFileName?: string; // File name for attribution
+      dealId?: string; // Spec §7.1: deal scope for uploaded doc search
     },
   ): Promise<RAGResponse> {
     const startTime = Date.now();
@@ -426,6 +430,87 @@ export class RAGService {
           this.logger.log(
             `🧠 Retrieved ${narratives.length} semantic narratives (avg score: ${result.summary.avgScore.toFixed(2)})`,
           );
+        }
+      }
+
+      // ── UPLOADED DOCUMENT SOURCES (Spec §7.1 Sources 1+2) ──────────
+      // Source 1: Deterministic metric lookup from intel_document_extractions
+      // Source 2: Vector search across intel_document_chunks (pgvector)
+      let uploadedDocChunks: any[] = [];
+      if (this.documentIndexing && options?.tenantId && options?.dealId) {
+        try {
+          // Source 1: If intent has metrics, query uploaded doc extractions
+          if (intent.metrics && intent.metrics.length > 0) {
+            const uploadedMetrics = await this.documentIndexing.queryMetrics(
+              intent.metrics,
+              options.tenantId,
+              options.dealId,
+            );
+            if (uploadedMetrics.length > 0) {
+              this.logger.log(
+                `📎 Source 1: Found ${uploadedMetrics.length} uploaded doc metrics`,
+              );
+              // Merge with existing metrics, marking source clearly
+              for (const um of uploadedMetrics) {
+                metrics.push({
+                  ticker: um.companyTicker || options.ticker || '',
+                  normalizedMetric: um.metricKey,
+                  rawLabel: um.metricKey,
+                  value: um.numericValue,
+                  fiscalPeriod: um.period || '',
+                  periodType: um.isEstimate ? 'estimate' : 'actual',
+                  filingType: 'uploaded-document',
+                  statementType: 'uploaded',
+                  statementDate: null,
+                  filingDate: null,
+                  sourcePage: um.pageNumber,
+                  confidenceScore: um.confidence,
+                  source: um.source,
+                  isEstimate: um.isEstimate,
+                  fileName: um.fileName,
+                });
+              }
+            }
+          }
+
+          // Source 2: Vector search across uploaded doc chunks
+          const vectorResults = await this.documentIndexing.searchChunks(
+            query,
+            options.tenantId,
+            options.dealId,
+            { topK: 5, minScore: 0.5 },
+          );
+          if (vectorResults.length > 0) {
+            this.logger.log(
+              `📎 Source 2: Found ${vectorResults.length} uploaded doc chunks (top score: ${vectorResults[0].score.toFixed(3)})`,
+            );
+            uploadedDocChunks = vectorResults;
+
+            // Convert to narrative format and merge
+            const uploadNarratives = vectorResults.map(r => ({
+              content: r.content,
+              score: r.score,
+              sourceType: 'UPLOADED_DOC',
+              metadata: {
+                ticker: r.companyTicker || options.ticker || '',
+                sectionType: r.sectionType || 'uploaded-document',
+                filingType: 'uploaded-document',
+                pageNumber: r.pageNumber,
+              },
+              source: {
+                location: r.fileName,
+                type: 'uploaded-document',
+                documentId: r.documentId,
+              },
+              filename: r.fileName,
+            }));
+            narratives = [...uploadNarratives, ...narratives];
+            this.logger.log(
+              `📎 Merged uploaded doc chunks into narratives (total: ${narratives.length})`,
+            );
+          }
+        } catch (error) {
+          this.logger.warn(`⚠️ Uploaded doc search failed: ${error.message}`);
         }
       }
 
@@ -866,6 +951,7 @@ export class RAGService {
           structuredMetrics: metrics.length,
           semanticNarratives: narratives.length,
           userDocumentChunks: userDocChunks.length,
+          uploadedDocChunks: uploadedDocChunks.length,
           usedBedrockKB: !!process.env.BEDROCK_KB_ID,
           usedClaudeGeneration: !!usage,
           hybridProcessing: true,
@@ -878,7 +964,7 @@ export class RAGService {
       };
 
       this.logger.log(
-        `✅ Hybrid query complete: ${metrics.length} metrics + ${narratives.length} narratives + ${userDocChunks.length} user docs (${latency}ms)`,
+        `✅ Hybrid query complete: ${metrics.length} metrics + ${narratives.length} narratives + ${userDocChunks.length} user docs + ${uploadedDocChunks.length} uploaded doc chunks (${latency}ms)`,
       );
 
       // Record performance metrics

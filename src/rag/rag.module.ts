@@ -47,9 +47,10 @@ import { PrismaModule } from '../../prisma/prisma.module';
 import { SecModule } from '../dataSources/sec/sec.module';
 import { S3Module } from '../s3/s3.module';
 import { InstantRAGModule } from '../instant-rag/instant-rag.module';
+import { DocumentsModule } from '../documents/documents.module';
 
 @Module({
-  imports: [PrismaModule, SecModule, forwardRef(() => S3Module), forwardRef(() => InstantRAGModule), HttpModule],
+  imports: [PrismaModule, SecModule, forwardRef(() => S3Module), forwardRef(() => InstantRAGModule), forwardRef(() => DocumentsModule), HttpModule],
   controllers: [RAGController, ChunkExportController, KBSyncController, SectionExportController, MetricCorrectionController],
   providers: [
     RAGService,

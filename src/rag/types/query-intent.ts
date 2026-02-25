@@ -237,6 +237,7 @@ export interface RAGResponse {
     structuredMetrics: number;
     semanticNarratives: number;
     userDocumentChunks: number; // Add user document chunks count
+    uploadedDocChunks?: number; // Spec §7.1 Source 1+2: uploaded doc chunks from intel_document_chunks
     usedBedrockKB: boolean;
     usedClaudeGeneration: boolean;
     hybridProcessing: boolean;
