@@ -131,7 +131,7 @@ export class DocumentIntelligenceService {
         company_name = $4,
         page_count = $5,
         updated_at = NOW()
-      WHERE document_id = $6`,
+      WHERE document_id = $6::uuid`,
       headline.documentType,
       rawTextS3Key,
       headline.ticker,

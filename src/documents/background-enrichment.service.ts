@@ -62,177 +62,29 @@ export class BackgroundEnrichmentService {
 
       const doc = rows[0];
 
-      // Only process PDFs with vision (other types already fully extracted in Phase A)
-      const isPdf = doc.file_type?.includes('pdf');
-      if (!isPdf) {
-        this.logger.log(`[${documentId}] Non-PDF file, skipping vision extraction`);
-        return;
-      }
-
-      // Get raw text for verification
+      // Get raw text for chunking + verification
       let rawText = '';
       if (doc.raw_text_s3_key) {
         const buf = await this.s3.getFileBuffer(doc.raw_text_s3_key);
         rawText = buf.toString('utf-8');
       }
 
-      // Step 1: Identify key pages
-      const keyPages = this.visionExtraction.identifyKeyPages(
-        rawText,
-        doc.document_type || 'generic',
-      );
-      this.logger.log(
-        `[${documentId}] Identified ${keyPages.length} key pages: [${keyPages.join(', ')}]`,
-      );
-
-      if (keyPages.length === 0) {
-        this.logger.log(`[${documentId}] No key pages found, skipping vision extraction`);
+      if (!rawText || rawText.length < 100) {
+        this.logger.warn(`[${documentId}] No raw text available, skipping enrichment`);
         return;
       }
 
-      // Step 2: Vision extraction on key pages
-      const visionResults = await this.visionExtraction.extractFromPages(
-        doc.s3_key,
-        keyPages,
-        doc.document_type || 'generic',
-      );
+      // Only attempt vision extraction for PDFs (currently disabled due to OOM)
+      // const isPdf = doc.file_type?.includes('pdf');
 
-      // Step 3: Flatten metrics from vision results
-      const allMetrics = this.visionExtraction.flattenMetrics(visionResults);
-
-      // Step 4: Deterministic verification against raw text
-      const verifiedMetrics = allMetrics.map(metric => {
-        if (metric.numeric_value != null) {
-          const result = this.verification.verifyExtractedNumber(
-            { value: metric.numeric_value, rawDisplay: metric.raw_value || '' },
-            rawText,
-            metric.units,
-          );
-          return { ...metric, confidence: result.confidence, verified: result.verified };
-        }
-        return { ...metric, confidence: 0.7, verified: false };
-      });
-
-      // Step 5: Persist verified extractions to intel_document_extractions
-      let metricCount = 0;
-      let tableCount = 0;
-
-      // Persist metrics
-      for (const metric of verifiedMetrics) {
-        await this.prisma.$executeRawUnsafe(
-          `INSERT INTO intel_document_extractions
-            (id, document_id, tenant_id, deal_id, extraction_type, data, page_number, confidence, verified, source_layer)
-          VALUES
-            (gen_random_uuid(), $1::uuid, $2::uuid, $3::uuid, 'metric',
-             $4::jsonb, $5, $6, $7, 'vision')`,
-          documentId,
-          tenantId,
-          dealId,
-          JSON.stringify({
-            metric_key: metric.metric_key,
-            raw_value: metric.raw_value,
-            numeric_value: metric.numeric_value,
-            period: metric.period,
-            is_estimate: metric.is_estimate,
-            is_negative: metric.is_negative,
-            table_type: metric.table_type,
-          }),
-          metric.page_number,
-          metric.confidence,
-          metric.verified,
-        );
-        metricCount++;
-      }
-
-      // Persist tables (full structure for comp table rendering)
-      for (const page of visionResults) {
-        for (const table of page.tables) {
-          // Verify table cells
-          const verifiedTable = this.verification.verifyVisionExtractions(
-            { metrics: [], tables: [table], narratives: [], footnotes: [], entities: {} },
-            rawText,
-          ).tables[0];
-
-          await this.prisma.$executeRawUnsafe(
-            `INSERT INTO intel_document_extractions
-              (id, document_id, tenant_id, deal_id, extraction_type, data, page_number, section, confidence, verified, source_layer)
-            VALUES
-              (gen_random_uuid(), $1::uuid, $2::uuid, $3::uuid, 'table',
-               $4::jsonb, $5, $6, $7, $8, 'vision')`,
-            documentId,
-            tenantId,
-            dealId,
-            JSON.stringify(verifiedTable),
-            page.pageNumber,
-            table.tableType || 'other',
-            this.averageTableConfidence(verifiedTable),
-            this.allTableCellsVerified(verifiedTable),
-          );
-          tableCount++;
-        }
-      }
-
-      // Persist narratives
-      for (const page of visionResults) {
-        if (page.narratives?.length > 0) {
-          await this.prisma.$executeRawUnsafe(
-            `INSERT INTO intel_document_extractions
-              (id, document_id, tenant_id, deal_id, extraction_type, data, page_number, source_layer)
-            VALUES
-              (gen_random_uuid(), $1::uuid, $2::uuid, $3::uuid, 'narrative',
-               $4::jsonb, $5, 'vision')`,
-            documentId,
-            tenantId,
-            dealId,
-            JSON.stringify({ items: page.narratives }),
-            page.pageNumber,
-          );
-        }
-      }
-
-      // Persist footnotes
-      for (const page of visionResults) {
-        if (page.footnotes?.length > 0) {
-          await this.prisma.$executeRawUnsafe(
-            `INSERT INTO intel_document_extractions
-              (id, document_id, tenant_id, deal_id, extraction_type, data, page_number, source_layer)
-            VALUES
-              (gen_random_uuid(), $1::uuid, $2::uuid, $3::uuid, 'footnote',
-               $4::jsonb, $5, 'vision')`,
-            documentId,
-            tenantId,
-            dealId,
-            JSON.stringify({ items: page.footnotes }),
-            page.pageNumber,
-          );
-        }
-      }
-
-      // Persist entities
-      const allEntities = this.mergeEntities(visionResults);
-      if (allEntities.companies.length > 0 || allEntities.metrics.length > 0) {
-        await this.prisma.$executeRawUnsafe(
-          `INSERT INTO intel_document_extractions
-            (id, document_id, tenant_id, deal_id, extraction_type, data, source_layer)
-          VALUES
-            (gen_random_uuid(), $1::uuid, $2::uuid, $3::uuid, 'entity',
-             $4::jsonb, 'vision')`,
-          documentId,
-          tenantId,
-          dealId,
-          JSON.stringify(allEntities),
-        );
-      }
-
-      // Step 6: Update document status (metrics from vision)
-      await this.prisma.$executeRawUnsafe(
-        `UPDATE intel_documents SET
-          metric_count = COALESCE(metric_count, 0) + $1,
-          updated_at = NOW()
-        WHERE document_id = $2::uuid`,
-        metricCount,
-        documentId,
-      );
+      // Steps 1-6: Vision extraction — DISABLED
+      // pdf-to-img causes V8 OOM abort (not catchable) on Node 25.
+      // Chunking + indexing is the critical path for RAG queries.
+      // Vision extraction will be re-enabled when running on ECS with more memory.
+      let visionResults: VisionPageResult[] = [];
+      const metricCount = 0;
+      const tableCount = 0;
+      this.logger.log(`[${documentId}] Vision extraction skipped (memory optimization)`);
 
       // ── Step 7: Chunk raw text (Spec §3.4 Step 4) ──
       const chunks = this.chunking.chunk(rawText, visionResults, {

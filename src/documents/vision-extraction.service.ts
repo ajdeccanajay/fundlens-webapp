@@ -217,7 +217,7 @@ export class VisionExtractionService {
       const pages: { pageNumber: number; imageBase64: string }[] = [];
       let currentPage = 0;
 
-      for await (const image of await pdf(pdfBuffer, { scale: 2.0 })) {
+      for await (const image of await pdf(pdfBuffer, { scale: 1.0 })) {
         currentPage++;
         if (pageNumbers.includes(currentPage)) {
           // image is a Buffer (PNG)

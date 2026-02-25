@@ -4,7 +4,7 @@
  * Embeds document chunks with Titan V2 and stores in pgvector
  * for tenant-scoped vector similarity search.
  *
- * Uses the same embedding model (amazon.titan-embed-text-v2:0, 1536 dims)
+ * Uses the same embedding model (amazon.titan-embed-text-v2:0, 1024 dims)
  * as Bedrock KB to ensure consistent relevance rankings (Spec §6.1).
  */
 import { Injectable, Logger } from '@nestjs/common';

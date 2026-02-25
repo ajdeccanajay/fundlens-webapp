@@ -410,6 +410,8 @@ export class BedrockService {
         accept: 'application/json',
         body: JSON.stringify({
           inputText: text.substring(0, 8000), // Titan limit is 8K tokens
+          dimensions: 1024, // Titan V2 supports 256/512/1024 — must match pgvector column
+          normalize: true,
         }),
       };
 

@@ -21,8 +21,8 @@ CREATE TABLE IF NOT EXISTS intel_document_chunks (
   page_number       INT,
   token_estimate    INT,
 
-  -- Titan V2 embedding (1536 dimensions — MUST match Bedrock KB)
-  embedding         vector(1536),
+  -- Titan V2 embedding (1024 dimensions — V2 max is 1024, V1 was 1536)
+  embedding         vector(1024),
 
   created_at        TIMESTAMP DEFAULT NOW()
 );
