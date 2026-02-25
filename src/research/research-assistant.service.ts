@@ -960,6 +960,26 @@ export class ResearchAssistantService {
           }
         }
 
+        // Detect horizontal rules (---, ***, ___) — flush before and treat as own chunk
+        if (line.trim().match(/^[-*_]{3,}$/)) {
+          if (currentChunk.trim()) {
+            chunks.push(currentChunk);
+            currentChunk = '';
+          }
+          chunks.push(line + '\n');
+          continue;
+        }
+
+        // Detect markdown headings (# or **bold:**) — flush before and start new chunk
+        if (line.trim().match(/^#{1,6}\s/) || line.trim().match(/^\*\*[^*]+\*\*:?\s*$/)) {
+          if (currentChunk.trim()) {
+            chunks.push(currentChunk);
+            currentChunk = '';
+          }
+          chunks.push(line + '\n');
+          continue;
+        }
+
         // Detect lists
         if (line.trim().match(/^[-*+]\s/) || line.trim().match(/^\d+\.\s/)) {
           inList = true;

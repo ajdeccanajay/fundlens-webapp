@@ -949,10 +949,22 @@ export class RAGService {
           citations = metricCitations;
           // Re-inject into the answer text if LLM didn't add markers
           if (answer && !answer.match(/\[\d+\]/)) {
-            const sourceRef = metricCitations
-              .map((c) => `[${c.number}] ${c.sourceType === 'UPLOADED_DOC' ? c.filename : `${c.ticker} ${c.filingType} ${c.fiscalPeriod}`}`)
-              .join('\n');
-            answer = `${answer}\n\n**Sources:**\n${sourceRef}`;
+            // Separate SEC and uploaded doc citations
+            const secCitations = metricCitations.filter((c: any) => c.sourceType !== 'UPLOADED_DOC');
+            const uploadCitations = metricCitations.filter((c: any) => c.sourceType === 'UPLOADED_DOC');
+
+            if (secCitations.length > 0) {
+              const secRef = secCitations
+                .map((c: any) => `- [${c.number}] ${c.ticker} ${c.filingType} ${c.fiscalPeriod}`)
+                .join('\n');
+              answer = `${answer}\n\n---\n\n**SEC Filing Sources:**\n\n${secRef}`;
+            }
+            if (uploadCitations.length > 0) {
+              const uploadRef = uploadCitations
+                .map((c: any) => `- [${c.number}] ${c.excerpt}`)
+                .join('\n');
+              answer = `${answer}\n\n**Uploaded Document Sources:**\n\n${uploadRef}`;
+            }
           }
         }
       } else if (citations && citations.length > 0 && metrics.length > 0) {
@@ -963,12 +975,12 @@ export class RAGService {
           const nextNum = Math.max(...citations.map((c: any) => c.number || c.citationNumber || 0)) + 1;
           const uploadCitations = this.buildUploadedDocCitations(uploadedDocMetrics, nextNum);
           citations = [...citations, ...uploadCitations];
-          // Append uploaded doc source references to answer
+          // Append uploaded doc source references as a clearly separated section
           if (uploadCitations.length > 0 && answer) {
             const uploadRef = uploadCitations
-              .map((c: any) => `[${c.number}] ${c.excerpt}`)
+              .map((c: any) => `- [${c.number}] ${c.excerpt}`)
               .join('\n');
-            answer = `${answer}\n\n**Uploaded Document Sources:**\n${uploadRef}`;
+            answer = `${answer}\n\n---\n\n**📄 Uploaded Document Sources:**\n\n${uploadRef}`;
           }
         }
       }
