@@ -177,7 +177,9 @@
             startPolling() {
                 var self = this;
                 this.pollTimer = setInterval(function() {
-                    var hasProcessing = self.documents.some(function(d) { return d.status === 'processing' || d.status === 'uploading'; });
+                    var hasProcessing = self.documents.some(function(d) {
+                        return d.status === 'processing' || d.status === 'uploading' || (d.status === 'queryable' && d.processing_mode !== 'fully-indexed');
+                    });
                     if (hasProcessing || self.uploading.some(function(u) { return u.status === 'processing' || u.status === 'queued'; })) {
                         self.loadDocuments();
                         self.loadCounts();
@@ -188,15 +190,17 @@
             getStatusClass(status) {
                 if (status === 'queryable' || status === 'fully-indexed') return 'status-ready';
                 if (status === 'processing') return 'status-processing';
-                if (status === 'uploading') return 'status-queued';
+                if (status === 'uploading') return 'status-processing';
                 if (status === 'error') return 'status-error';
                 return 'status-queued';
             },
 
             getStatusLabel(doc) {
-                if (doc.status === 'queryable' || doc.status === 'fully-indexed') return '✅ Ready';
-                if (doc.status === 'processing') return '🔄 Processing';
-                if (doc.status === 'uploading') return '⏳ Queued';
+                if (doc.status === 'fully-indexed') return '✅ Ready';
+                if (doc.status === 'queryable' && doc.processing_mode === 'fully-indexed') return '✅ Ready';
+                if (doc.status === 'queryable') return '🔄 Indexing...';
+                if (doc.status === 'processing') return '🔄 Processing...';
+                if (doc.status === 'uploading') return '⏳ Waiting for upload';
                 if (doc.status === 'error') return '❌ Failed';
                 return doc.status;
             },
@@ -212,7 +216,7 @@
             },
 
             getTypeLabel(docType) {
-                if (!docType) return 'Other';
+                if (!docType) return 'Classifying...';
                 var map = { 'sell-side-report': 'Sell-Side', 'sec-10k': '10-K', 'sec-10q': '10-Q', 'sec-8k': '8-K', 'sec-proxy': 'Proxy', 'earnings-transcript': 'Transcript', 'pe-cim': 'CIM', 'ic-memo': 'IC Memo', 'spreadsheet': 'Spreadsheet', 'presentation': 'Presentation', 'fund-mandate': 'Mandate', 'generic': 'Other' };
                 return map[docType] || docType;
             },

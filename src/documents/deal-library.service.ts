@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { S3Service } from '../services/s3.service';
 import { BackgroundEnrichmentService } from './background-enrichment.service';
+import { DocumentIntelligenceService } from './document-intelligence.service';
 
 /**
  * Deal Library Service — Spec §4
@@ -51,6 +52,7 @@ export class DealLibraryService {
     private readonly prisma: PrismaService,
     private readonly s3: S3Service,
     private readonly enrichment: BackgroundEnrichmentService,
+    private readonly intelligence: DocumentIntelligenceService,
   ) {}
 
   /**
@@ -157,18 +159,16 @@ export class DealLibraryService {
     fileName: string,
   ): Promise<void> {
     try {
-      // Run the full enrichment pipeline directly.
-      // For Deal Library, we process everything in background — no instant intelligence needed.
-      await this.enrichment.enrichDocument(documentId, tenantId, dealId);
-
-      // Update status to queryable after enrichment
-      await this.prisma.$executeRawUnsafe(
-        `UPDATE intel_documents SET
-          status = 'queryable',
-          updated_at = NOW()
-        WHERE document_id = $1::uuid
-          AND status != 'fully-indexed'`,
+      // Step 1: Run instant intelligence (classification + text extraction + headline metrics)
+      // This sets document_type, stores raw text, and makes doc queryable via long-context fallback.
+      // It also fires background enrichment (vision, chunking, indexing) internally.
+      await this.intelligence.processInstantIntelligence(
         documentId,
+        s3Key,
+        fileType,
+        fileName,
+        tenantId,
+        dealId,
       );
 
       this.logger.log(`[${documentId}] Deal Library processing complete`);
@@ -248,7 +248,7 @@ export class DealLibraryService {
         typeFilter = `AND document_type = 'ic-memo'`;
         break;
       case 'other':
-        typeFilter = `AND document_type NOT IN ('sell-side-report', 'sec-10k', 'sec-10q', 'sec-8k', 'sec-proxy', 'earnings-transcript', 'pe-cim', 'ic-memo')`;
+        typeFilter = `AND (document_type IS NULL OR document_type NOT IN ('sell-side-report', 'sec-10k', 'sec-10q', 'sec-8k', 'sec-proxy', 'earnings-transcript', 'pe-cim', 'ic-memo'))`;
         break;
     }
 
