@@ -425,46 +425,84 @@
         },
 
         renderMarkdownWithCitations(content, citations) {
-            console.log('[renderMarkdownWithCitations] Called with:', content?.substring(0, 100), 'citations:', citations?.length || 0);
             if (!citations || citations.length === 0) return this.renderMarkdown(content);
             this.currentCitations = citations;
-            var html = this.renderMarkdown(content);
-            console.log('[renderMarkdownWithCitations] Processing', citations.length, 'citations');
+
+            // CRITICAL: Preserve [N] citation markers BEFORE markdown rendering.
+            // The `marked` library treats [N] as link references and strips them.
+            // Replace [N] with safe placeholders, render markdown, then swap back.
+            var preserved = content || '';
+            var citationNums = [];
+            citations.forEach(function(c) {
+                var n = c.number || c.citationNumber;
+                if (n) citationNums.push(n);
+            });
+            // Sort descending so [10] is replaced before [1] (avoid partial match)
+            citationNums.sort(function(a, b) { return b - a; });
+            citationNums.forEach(function(n) {
+                preserved = preserved.replace(new RegExp('\\[' + n + '\\]', 'g'), '%%CITE_' + n + '%%');
+            });
+
+            var html = this.renderMarkdown(preserved);
+
+            // Now replace placeholders with clickable citation links
             var replacedAny = false;
+            var self = this;
             citations.forEach(function(citation) {
                 var citationNum = citation.number || citation.citationNumber;
-                console.log('[renderMarkdownWithCitations] Processing citation:', citationNum, citation);
                 if (!citationNum) return;
                 var sourceType = citation.sourceType || 'SEC_FILING';
                 var cssClass = (sourceType === 'USER_UPLOAD' || sourceType === 'UPLOADED_DOC') ? 'citation-link citation-upload' : 'citation-link citation-sec';
-                var regex = new RegExp('\\[' + citationNum + '\\]', 'g');
-                var beforeReplace = html;
-                html = html.replace(regex, '<a href="#" class="' + cssClass + '" data-citation-num="' + citationNum + '" onclick="event.preventDefault(); document.dispatchEvent(new CustomEvent(\'citation-click\', {detail: {num: ' + citationNum + '}}));">[' + citationNum + ']</a>');
-                if (beforeReplace !== html) {
-                    console.log('[renderMarkdownWithCitations] Replaced citation [' + citationNum + ']');
+                var placeholder = '%%CITE_' + citationNum + '%%';
+                var link = '<a href="#" class="' + cssClass + '" data-citation-num="' + citationNum + '" onclick="event.preventDefault(); document.dispatchEvent(new CustomEvent(\'citation-click\', {detail: {num: ' + citationNum + '}}));">[' + citationNum + ']</a>';
+                if (html.indexOf(placeholder) !== -1) {
+                    html = html.split(placeholder).join(link);
                     replacedAny = true;
-                } else {
-                    console.log('[renderMarkdownWithCitations] Citation [' + citationNum + '] not found in content');
                 }
             });
-            // If no [N] markers were found in the content, append a sources section
+
+            // Fallback: if no placeholders were found (content didn't have [N] markers), append sources section
             if (!replacedAny && citations.length > 0) {
-                console.log('[renderMarkdownWithCitations] No inline markers found, appending sources section');
-                var sourcesHtml = '<div class="citation-sources-section" style="margin-top:1rem;padding-top:0.75rem;border-top:1px solid #e5e7eb;"><p style="font-weight:600;margin-bottom:0.5rem;color:#374151;">Sources</p><ul style="list-style:none;padding:0;margin:0;">';
-                citations.forEach(function(citation) {
-                    var citationNum = citation.number || citation.citationNumber;
-                    if (!citationNum) return;
-                    var sourceType = citation.sourceType || 'SEC_FILING';
-                    var cssClass = sourceType === 'USER_UPLOAD' ? 'citation-link citation-upload' : 'citation-link citation-sec';
-                    var label = '';
-                    if (sourceType === 'USER_UPLOAD') {
-                        label = citation.filename || 'Uploaded Document';
-                    } else {
-                        label = [citation.ticker, citation.filingType, citation.fiscalPeriod, citation.section].filter(Boolean).join(' — ') || 'SEC Filing';
-                    }
-                    sourcesHtml += '<li style="margin-bottom:0.25rem;"><a href="#" class="' + cssClass + '" data-citation-num="' + citationNum + '" onclick="event.preventDefault(); document.dispatchEvent(new CustomEvent(\'citation-click\', {detail: {num: ' + citationNum + '}}));">[' + citationNum + ']</a> ' + label + '</li>';
-                });
-                sourcesHtml += '</ul></div>';
+                var secCites = citations.filter(function(c) { var st = c.sourceType || 'SEC_FILING'; return st !== 'USER_UPLOAD' && st !== 'UPLOADED_DOC'; });
+                var uploadCites = citations.filter(function(c) { var st = c.sourceType || 'SEC_FILING'; return st === 'USER_UPLOAD' || st === 'UPLOADED_DOC'; });
+
+                var sourcesHtml = '<div class="citation-sources-section" style="margin-top:1rem;padding-top:0.75rem;border-top:1px solid #e5e7eb;">';
+
+                if (secCites.length > 0) {
+                    sourcesHtml += '<p style="font-weight:600;margin-bottom:0.5rem;color:#374151;">📊 SEC Filing Sources</p><ul style="list-style:none;padding:0;margin:0 0 0.75rem 0;">';
+                    secCites.forEach(function(citation) {
+                        var citationNum = citation.number || citation.citationNumber;
+                        if (!citationNum) return;
+                        var label = [citation.ticker, citation.filingType, citation.fiscalPeriod, citation.section].filter(Boolean).join(' — ') || 'SEC Filing';
+                        sourcesHtml += '<li style="margin-bottom:0.25rem;"><a href="#" class="citation-link citation-sec" data-citation-num="' + citationNum + '" onclick="event.preventDefault(); document.dispatchEvent(new CustomEvent(\'citation-click\', {detail: {num: ' + citationNum + '}}));">[' + citationNum + ']</a> ' + label + '</li>';
+                    });
+                    sourcesHtml += '</ul>';
+                }
+
+                if (uploadCites.length > 0) {
+                    sourcesHtml += '<p style="font-weight:600;margin-bottom:0.5rem;color:#374151;">📄 Uploaded Document Sources</p><ul style="list-style:none;padding:0;margin:0;">';
+                    uploadCites.forEach(function(citation) {
+                        var citationNum = citation.number || citation.citationNumber;
+                        if (!citationNum) return;
+                        var label = citation.filename || citation.excerpt || 'Uploaded Document';
+                        if (citation.pageNumber) label += ' (p.' + citation.pageNumber + ')';
+                        sourcesHtml += '<li style="margin-bottom:0.25rem;"><a href="#" class="citation-link citation-upload" data-citation-num="' + citationNum + '" onclick="event.preventDefault(); document.dispatchEvent(new CustomEvent(\'citation-click\', {detail: {num: ' + citationNum + '}}));">[' + citationNum + ']</a> ' + label + '</li>';
+                    });
+                    sourcesHtml += '</ul>';
+                }
+
+                if (secCites.length === 0 && uploadCites.length === 0) {
+                    sourcesHtml += '<p style="font-weight:600;margin-bottom:0.5rem;color:#374151;">Sources</p><ul style="list-style:none;padding:0;margin:0;">';
+                    citations.forEach(function(citation) {
+                        var citationNum = citation.number || citation.citationNumber;
+                        if (!citationNum) return;
+                        var label = citation.excerpt || citation.filename || 'Source';
+                        sourcesHtml += '<li style="margin-bottom:0.25rem;"><a href="#" class="citation-link citation-sec" data-citation-num="' + citationNum + '" onclick="event.preventDefault(); document.dispatchEvent(new CustomEvent(\'citation-click\', {detail: {num: ' + citationNum + '}}));">[' + citationNum + ']</a> ' + label + '</li>';
+                    });
+                    sourcesHtml += '</ul>';
+                }
+
+                sourcesHtml += '</div>';
                 html += sourcesHtml;
             }
             return html;

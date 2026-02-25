@@ -941,47 +941,24 @@ export class RAGService {
         answer = answer ? `${answer}\n\n${missingTickerMessage}` : missingTickerMessage;
       }
 
-      // Generate citations from metrics when none exist, or ensure uploaded doc citations are included
+      // Generate citations from metrics when none exist, or ensure uploaded doc citations are included.
+      // IMPORTANT: We do NOT append source reference text (e.g. "[N] ticker ...") to the answer.
+      // The frontend's renderMarkdownWithCitations has a fallback that renders a styled "Sources"
+      // section from the citations array when no inline [N] markers are found. Appending [N] to
+      // the answer causes `marked` to interpret them as link references, breaking clickable links.
       if ((!citations || citations.length === 0) && metrics.length > 0) {
-        // No citations at all — build from all metrics
         const metricCitations = this.buildMetricCitations(metrics);
         if (metricCitations.length > 0) {
           citations = metricCitations;
-          // Re-inject into the answer text if LLM didn't add markers
-          if (answer && !answer.match(/\[\d+\]/)) {
-            // Separate SEC and uploaded doc citations
-            const secCitations = metricCitations.filter((c: any) => c.sourceType !== 'UPLOADED_DOC');
-            const uploadCitations = metricCitations.filter((c: any) => c.sourceType === 'UPLOADED_DOC');
-
-            if (secCitations.length > 0) {
-              const secRef = secCitations
-                .map((c: any) => `- [${c.number}] ${c.ticker} ${c.filingType} ${c.fiscalPeriod}`)
-                .join('\n');
-              answer = `${answer}\n\n---\n\n**SEC Filing Sources:**\n\n${secRef}`;
-            }
-            if (uploadCitations.length > 0) {
-              const uploadRef = uploadCitations
-                .map((c: any) => `- [${c.number}] ${c.excerpt}`)
-                .join('\n');
-              answer = `${answer}\n\n**Uploaded Document Sources:**\n\n${uploadRef}`;
-            }
-          }
         }
       } else if (citations && citations.length > 0 && metrics.length > 0) {
-        // Citations exist (from HybridSynthesis) — ensure uploaded doc metrics are represented
+        // Ensure uploaded doc metrics are represented in citations
         const hasUploadedDocCitation = citations.some((c: any) => c.sourceType === 'UPLOADED_DOC' || c.type === 'uploaded_document');
         const uploadedDocMetrics = metrics.filter((m: any) => m.filingType === 'uploaded-document' && m.fileName);
         if (!hasUploadedDocCitation && uploadedDocMetrics.length > 0) {
           const nextNum = Math.max(...citations.map((c: any) => c.number || c.citationNumber || 0)) + 1;
           const uploadCitations = this.buildUploadedDocCitations(uploadedDocMetrics, nextNum);
           citations = [...citations, ...uploadCitations];
-          // Append uploaded doc source references as a clearly separated section
-          if (uploadCitations.length > 0 && answer) {
-            const uploadRef = uploadCitations
-              .map((c: any) => `- [${c.number}] ${c.excerpt}`)
-              .join('\n');
-            answer = `${answer}\n\n---\n\n**📄 Uploaded Document Sources:**\n\n${uploadRef}`;
-          }
         }
       }
 
