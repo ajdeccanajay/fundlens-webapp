@@ -572,6 +572,9 @@ export class ResearchAssistantService {
           // Support both formats: Bedrock citations (number) and user doc citations (citationNumber)
           number: c.number || c.citationNumber,
           citationNumber: c.citationNumber || c.number,
+          // Source type identification (critical for frontend rendering)
+          sourceType: c.sourceType || c.type || 'SEC_FILING',
+          type: c.type || c.sourceType || 'sec_filing',
           // SEC filing metadata (from Bedrock)
           ticker: c.ticker,
           filingType: c.filingType,

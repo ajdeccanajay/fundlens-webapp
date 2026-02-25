@@ -383,6 +383,7 @@
                 }
                 if (typeof hljs !== 'undefined') { setTimeout(function() { document.querySelectorAll('.message-assistant pre code').forEach(function(block) { if (!block.classList.contains('hljs')) hljs.highlightElement(block); }); }, 0); }
                 finalHtml = this.convertSeverityBadges(finalHtml);
+                finalHtml = this.convertSectionHeadings(finalHtml);
                 finalHtml = finalHtml.replace(/([^>])\n([^<])/g, '$1<br>\n$2');
                 return finalHtml;
             } catch (error) { console.error('Error rendering markdown:', error); return text.replace(/\n/g, '<br>'); }
@@ -403,6 +404,51 @@
             html = html.replace(/([^>])GREEN CHALLENGE:?\s*/gi, '$1<span class="severity-badge severity-green"><i class="fas fa-lightbulb"></i> GREEN CHALLENGE</span> ');
             html = html.replace(/^GREEN CHALLENGE:?\s*/gim, '<span class="severity-badge severity-green"><i class="fas fa-lightbulb"></i> GREEN CHALLENGE</span> ');
             html = html.replace(/🟢\s*GREEN:?\s*/gi, '<span class="severity-badge severity-green"><i class="fas fa-lightbulb"></i> GREEN</span> ');
+            return html;
+        },
+
+        convertSectionHeadings(html) {
+            if (!html) return html;
+            // Convert known financial analysis section headings into styled section dividers.
+            // These headings often come from the LLM without markdown heading syntax.
+            var sectionPatterns = [
+                'Investment Implications',
+                'Investment Challenges',
+                'For the Investment Committee',
+                'IC Challenge',
+                'Key Investment Considerations',
+                'Fundamental Backdrop',
+                'Price Target Overview',
+                'Executive Summary',
+                'Valuation Analysis',
+                'Risk Factors',
+                'Catalyst Analysis',
+                'Management Commentary',
+                'Earnings Analysis',
+                'Revenue Analysis',
+                'Margin Analysis',
+                'Cash Flow Analysis',
+                'Balance Sheet Analysis',
+                'Competitive Positioning',
+            ];
+            sectionPatterns.forEach(function(heading) {
+                // Match heading at start of <p> tag or after <br> — plain text not already in a heading tag
+                var escapedHeading = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                // Pattern: <p>Heading text or <p><strong>Heading text</strong>
+                html = html.replace(new RegExp('<p>\\s*<strong>' + escapedHeading + ':?<\\/strong>', 'gi'),
+                    '<div style="margin-top:1.25rem;padding-top:0.75rem;border-top:1px solid #e2e8f0;"><p><strong style="color:#1e40af;font-size:1.05em;">' + heading + '</strong>');
+                html = html.replace(new RegExp('<p>\\s*' + escapedHeading + '\\s*<br>', 'gi'),
+                    '<div style="margin-top:1.25rem;padding-top:0.75rem;border-top:1px solid #e2e8f0;"><p><strong style="color:#1e40af;font-size:1.05em;">' + heading + '</strong><br>');
+                html = html.replace(new RegExp('<p>\\s*' + escapedHeading + '\\s*</p>', 'gi'),
+                    '<div style="margin-top:1.25rem;padding-top:0.75rem;border-top:1px solid #e2e8f0;"><p><strong style="color:#1e40af;font-size:1.05em;">' + heading + '</strong></p>');
+                // Also handle "For the Investment Committee:" with colon inline
+                html = html.replace(new RegExp('(<p>[^<]*?)\\b' + escapedHeading + ':?\\s*', 'gi'), function(match, before) {
+                    // Only convert if it's near the start of the paragraph (within first 5 chars of content)
+                    var textBefore = before.replace(/<[^>]*>/g, '').trim();
+                    if (textBefore.length > 5) return match; // Don't convert mid-sentence
+                    return before + '</p><div style="margin-top:1.25rem;padding-top:0.75rem;border-top:1px solid #e2e8f0;"><p><strong style="color:#1e40af;font-size:1.05em;">' + heading + ':</strong> ';
+                });
+            });
             return html;
         },
 
@@ -445,8 +491,8 @@
 
             var html = this.renderMarkdown(preserved);
 
-            // Now replace placeholders with clickable citation links
-            var replacedAny = false;
+            // Replace placeholders with clickable citation links, tracking which were matched inline
+            var matchedNums = {};
             var self = this;
             citations.forEach(function(citation) {
                 var citationNum = citation.number || citation.citationNumber;
@@ -457,14 +503,23 @@
                 var link = '<a href="#" class="' + cssClass + '" data-citation-num="' + citationNum + '" onclick="event.preventDefault(); document.dispatchEvent(new CustomEvent(\'citation-click\', {detail: {num: ' + citationNum + '}}));">[' + citationNum + ']</a>';
                 if (html.indexOf(placeholder) !== -1) {
                     html = html.split(placeholder).join(link);
-                    replacedAny = true;
+                    matchedNums[citationNum] = true;
                 }
             });
 
-            // Fallback: if no placeholders were found (content didn't have [N] markers), append sources section
-            if (!replacedAny && citations.length > 0) {
-                var secCites = citations.filter(function(c) { var st = c.sourceType || 'SEC_FILING'; return st !== 'USER_UPLOAD' && st !== 'UPLOADED_DOC'; });
-                var uploadCites = citations.filter(function(c) { var st = c.sourceType || 'SEC_FILING'; return st === 'USER_UPLOAD' || st === 'UPLOADED_DOC'; });
+            // Always show a Sources section for citations that were NOT matched inline.
+            // This ensures uploaded doc citations appear even when the LLM only referenced SEC sources inline.
+            var unmatchedCitations = citations.filter(function(c) {
+                var n = c.number || c.citationNumber;
+                return n && !matchedNums[n];
+            });
+
+            // Also show all citations in Sources section if NONE were matched inline (full fallback)
+            var citationsToShow = unmatchedCitations.length > 0 ? unmatchedCitations : (Object.keys(matchedNums).length === 0 ? citations : []);
+
+            if (citationsToShow.length > 0) {
+                var secCites = citationsToShow.filter(function(c) { var st = c.sourceType || 'SEC_FILING'; return st !== 'USER_UPLOAD' && st !== 'UPLOADED_DOC'; });
+                var uploadCites = citationsToShow.filter(function(c) { var st = c.sourceType || 'SEC_FILING'; return st === 'USER_UPLOAD' || st === 'UPLOADED_DOC'; });
 
                 var sourcesHtml = '<div class="citation-sources-section" style="margin-top:1rem;padding-top:0.75rem;border-top:1px solid #e5e7eb;">';
 
@@ -487,17 +542,6 @@
                         var label = citation.filename || citation.excerpt || 'Uploaded Document';
                         if (citation.pageNumber) label += ' (p.' + citation.pageNumber + ')';
                         sourcesHtml += '<li style="margin-bottom:0.25rem;"><a href="#" class="citation-link citation-upload" data-citation-num="' + citationNum + '" onclick="event.preventDefault(); document.dispatchEvent(new CustomEvent(\'citation-click\', {detail: {num: ' + citationNum + '}}));">[' + citationNum + ']</a> ' + label + '</li>';
-                    });
-                    sourcesHtml += '</ul>';
-                }
-
-                if (secCites.length === 0 && uploadCites.length === 0) {
-                    sourcesHtml += '<p style="font-weight:600;margin-bottom:0.5rem;color:#374151;">Sources</p><ul style="list-style:none;padding:0;margin:0;">';
-                    citations.forEach(function(citation) {
-                        var citationNum = citation.number || citation.citationNumber;
-                        if (!citationNum) return;
-                        var label = citation.excerpt || citation.filename || 'Source';
-                        sourcesHtml += '<li style="margin-bottom:0.25rem;"><a href="#" class="citation-link citation-sec" data-citation-num="' + citationNum + '" onclick="event.preventDefault(); document.dispatchEvent(new CustomEvent(\'citation-click\', {detail: {num: ' + citationNum + '}}));">[' + citationNum + ']</a> ' + label + '</li>';
                     });
                     sourcesHtml += '</ul>';
                 }
