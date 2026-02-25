@@ -436,7 +436,7 @@
                 console.log('[renderMarkdownWithCitations] Processing citation:', citationNum, citation);
                 if (!citationNum) return;
                 var sourceType = citation.sourceType || 'SEC_FILING';
-                var cssClass = sourceType === 'USER_UPLOAD' ? 'citation-link citation-upload' : 'citation-link citation-sec';
+                var cssClass = (sourceType === 'USER_UPLOAD' || sourceType === 'UPLOADED_DOC') ? 'citation-link citation-upload' : 'citation-link citation-sec';
                 var regex = new RegExp('\\[' + citationNum + '\\]', 'g');
                 var beforeReplace = html;
                 html = html.replace(regex, '<a href="#" class="' + cssClass + '" data-citation-num="' + citationNum + '" onclick="event.preventDefault(); document.dispatchEvent(new CustomEvent(\'citation-click\', {detail: {num: ' + citationNum + '}}));">[' + citationNum + ']</a>');
@@ -474,8 +474,8 @@
             var citation = this.currentCitations?.find(function(c) { return c.number === citationNum || c.citationNumber === citationNum; });
             if (!citation) return;
             var sourceType = citation.sourceType || 'SEC_FILING';
-            if (sourceType === 'USER_UPLOAD') {
-                this.sourceModal = { sourceType: 'USER_UPLOAD', filename: citation.filename || '', ticker: '', filingType: '', fiscalPeriod: '', section: '', pageNumber: null, excerpt: citation.excerpt || '', relevanceScore: citation.relevanceScore || citation.score || null };
+            if (sourceType === 'USER_UPLOAD' || sourceType === 'UPLOADED_DOC') {
+                this.sourceModal = { sourceType: 'USER_UPLOAD', filename: citation.filename || '', ticker: citation.ticker || '', filingType: '', fiscalPeriod: '', section: '', pageNumber: citation.pageNumber || null, excerpt: citation.excerpt || '', relevanceScore: citation.relevanceScore || citation.score || null };
             } else {
                 this.sourceModal = { sourceType: 'SEC_FILING', filename: '', ticker: citation.ticker || '', filingType: citation.filingType || '', fiscalPeriod: citation.fiscalPeriod || '', section: citation.section || '', pageNumber: citation.pageNumber || null, excerpt: citation.excerpt || '', relevanceScore: citation.relevanceScore || citation.score || null };
             }

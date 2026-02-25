@@ -941,18 +941,34 @@ export class RAGService {
         answer = answer ? `${answer}\n\n${missingTickerMessage}` : missingTickerMessage;
       }
 
-      // Generate citations from structured metrics when no narrative citations exist
+      // Generate citations from metrics when none exist, or ensure uploaded doc citations are included
       if ((!citations || citations.length === 0) && metrics.length > 0) {
+        // No citations at all — build from all metrics
         const metricCitations = this.buildMetricCitations(metrics);
         if (metricCitations.length > 0) {
           citations = metricCitations;
           // Re-inject into the answer text if LLM didn't add markers
           if (answer && !answer.match(/\[\d+\]/)) {
-            // Append source reference section
             const sourceRef = metricCitations
-              .map((c, i) => `[${i + 1}] ${c.ticker} ${c.filingType} ${c.fiscalPeriod}`)
+              .map((c) => `[${c.number}] ${c.sourceType === 'UPLOADED_DOC' ? c.filename : `${c.ticker} ${c.filingType} ${c.fiscalPeriod}`}`)
               .join('\n');
             answer = `${answer}\n\n**Sources:**\n${sourceRef}`;
+          }
+        }
+      } else if (citations && citations.length > 0 && metrics.length > 0) {
+        // Citations exist (from HybridSynthesis) — ensure uploaded doc metrics are represented
+        const hasUploadedDocCitation = citations.some((c: any) => c.sourceType === 'UPLOADED_DOC' || c.type === 'uploaded_document');
+        const uploadedDocMetrics = metrics.filter((m: any) => m.filingType === 'uploaded-document' && m.fileName);
+        if (!hasUploadedDocCitation && uploadedDocMetrics.length > 0) {
+          const nextNum = Math.max(...citations.map((c: any) => c.number || c.citationNumber || 0)) + 1;
+          const uploadCitations = this.buildUploadedDocCitations(uploadedDocMetrics, nextNum);
+          citations = [...citations, ...uploadCitations];
+          // Append uploaded doc source references to answer
+          if (uploadCitations.length > 0 && answer) {
+            const uploadRef = uploadCitations
+              .map((c: any) => `[${c.number}] ${c.excerpt}`)
+              .join('\n');
+            answer = `${answer}\n\n**Uploaded Document Sources:**\n${uploadRef}`;
           }
         }
       }
@@ -1835,64 +1851,83 @@ export class RAGService {
    * Only includes sources with valid ticker and filing information
    */
   private extractSources(metrics: any[], narratives: any[]): any[] {
-    const sources: any[] = [];
-    const seen = new Set<string>(); // Deduplicate sources
+      const sources: any[] = [];
+      const seen = new Set<string>(); // Deduplicate sources
 
-    for (const metric of metrics) {
-      // Only add if we have valid ticker and filing info
-      if (metric.ticker && metric.filingType && metric.fiscalPeriod) {
-        const key = `${metric.ticker}-${metric.filingType}-${metric.fiscalPeriod}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          sources.push({
-            type: 'metric',
-            ticker: metric.ticker,
-            filingType: metric.filingType,
-            fiscalPeriod: metric.fiscalPeriod,
-            pageNumber: metric.sourcePage,
-          });
+      for (const metric of metrics) {
+        // Handle uploaded document metrics (Source 1)
+        if (metric.filingType === 'uploaded-document' && metric.fileName) {
+          const key = `upload-metric-${metric.fileName}-${metric.normalizedMetric}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            sources.push({
+              type: 'uploaded_document',
+              sourceType: 'UPLOADED_DOC',
+              filename: metric.fileName,
+              ticker: metric.ticker || '',
+              filingType: 'Uploaded Document',
+              fiscalPeriod: metric.fiscalPeriod || '',
+            });
+          }
+          continue;
+        }
+
+        // Only add if we have valid ticker and filing info
+        if (metric.ticker && metric.filingType && metric.fiscalPeriod) {
+          const key = `${metric.ticker}-${metric.filingType}-${metric.fiscalPeriod}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            sources.push({
+              type: 'metric',
+              ticker: metric.ticker,
+              filingType: metric.filingType,
+              fiscalPeriod: metric.fiscalPeriod,
+              pageNumber: metric.sourcePage,
+            });
+          }
         }
       }
+
+      for (const narrative of narratives) {
+        // Handle uploaded document sources (from Instant RAG session or document intelligence)
+        if (narrative.sourceType === 'USER_UPLOAD' || narrative.sourceType === 'UPLOADED_DOC') {
+          const key = `upload-${narrative.filename || narrative.source?.documentId || narrative.id}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            sources.push({
+              type: 'uploaded_document',
+              sourceType: 'UPLOADED_DOC',
+              filename: narrative.filename || narrative.source?.location || 'Uploaded Document',
+              ticker: narrative.metadata?.ticker || '',
+              filingType: 'Uploaded Document',
+              pageNumber: narrative.metadata?.pageNumber,
+            });
+          }
+          continue;
+        }
+
+        // Only add if we have valid metadata (fiscalPeriod is optional)
+        if (narrative.metadata?.ticker && narrative.metadata?.filingType) {
+          const fiscalPeriod = narrative.metadata.fiscalPeriod || 'unknown';
+          const key = `${narrative.metadata.ticker}-${narrative.metadata.filingType}-${fiscalPeriod}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            sources.push({
+              type: 'narrative',
+              sourceType: 'SEC_FILING',
+              ticker: narrative.metadata.ticker,
+              filingType: narrative.metadata.filingType,
+              fiscalPeriod: narrative.metadata.fiscalPeriod || 'Period Unknown',
+              pageNumber: narrative.metadata.pageNumber,
+              section: narrative.metadata.sectionType,
+            });
+          }
+        }
+      }
+
+      return sources;
     }
 
-    for (const narrative of narratives) {
-      // Handle uploaded document sources (from Instant RAG session)
-      if (narrative.sourceType === 'USER_UPLOAD') {
-        const key = `upload-${narrative.filename || narrative.id}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          sources.push({
-            type: 'uploaded_document',
-            sourceType: 'USER_UPLOAD',
-            filename: narrative.filename,
-            ticker: null,
-            filingType: 'Uploaded Document',
-          });
-        }
-        continue;
-      }
-      
-      // Only add if we have valid metadata (fiscalPeriod is optional)
-      if (narrative.metadata?.ticker && narrative.metadata?.filingType) {
-        const fiscalPeriod = narrative.metadata.fiscalPeriod || 'unknown';
-        const key = `${narrative.metadata.ticker}-${narrative.metadata.filingType}-${fiscalPeriod}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          sources.push({
-            type: 'narrative',
-            sourceType: 'SEC_FILING',
-            ticker: narrative.metadata.ticker,
-            filingType: narrative.metadata.filingType,
-            fiscalPeriod: narrative.metadata.fiscalPeriod || 'Period Unknown',
-            pageNumber: narrative.metadata.pageNumber,
-            section: narrative.metadata.sectionType,
-          });
-        }
-      }
-    }
-
-    return sources;
-  }
 
   /**
    * Estimate cost of query
@@ -2186,32 +2221,93 @@ export class RAGService {
    * Used when no narrative citations exist but we have metric data
    */
   private buildMetricCitations(metrics: MetricResult[]): any[] {
+      const seen = new Set<string>();
+      const citations: any[] = [];
+      let num = 1;
+
+      for (const metric of metrics) {
+        // Handle uploaded document metrics — generate UPLOADED_DOC citations
+        if ((metric as any).filingType === 'uploaded-document' && (metric as any).fileName) {
+          const key = `upload-${(metric as any).fileName}-${metric.normalizedMetric}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+
+          citations.push({
+            number: num,
+            citationNumber: num,
+            type: 'uploaded_document',
+            sourceType: 'UPLOADED_DOC',
+            filename: (metric as any).fileName,
+            ticker: metric.ticker || '',
+            filingType: 'Uploaded Document',
+            fiscalPeriod: metric.fiscalPeriod || '',
+            section: 'Uploaded Document',
+            excerpt: `${metric.rawLabel || metric.normalizedMetric}: ${this.formatValueForCitation(metric.value)}${metric.fiscalPeriod ? ` (${metric.fiscalPeriod})` : ''} — from ${(metric as any).fileName}`,
+            relevanceScore: (metric as any).confidenceScore || 0.9,
+            pageNumber: (metric as any).sourcePage || null,
+          });
+          num++;
+          continue;
+        }
+
+        // SEC filing metrics
+        const key = `${metric.ticker}-${metric.filingType}-${metric.fiscalPeriod}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        citations.push({
+          number: num,
+          citationNumber: num,
+          type: 'sec_filing',
+          sourceType: 'SEC_FILING',
+          ticker: metric.ticker,
+          filingType: metric.filingType,
+          fiscalPeriod: metric.fiscalPeriod,
+          section: metric.statementType || 'Financial Statements',
+          excerpt: `${metric.rawLabel}: ${this.formatValueForCitation(metric.value)} (${metric.fiscalPeriod})`,
+          relevanceScore: metric.confidenceScore,
+        });
+        num++;
+      }
+
+      return citations;
+    }
+
+  /**
+   * Build citations specifically for uploaded document metrics.
+   * Used when HybridSynthesis returns SEC citations but misses uploaded doc sources.
+   */
+  private buildUploadedDocCitations(uploadedDocMetrics: any[], startNum: number): any[] {
     const seen = new Set<string>();
     const citations: any[] = [];
-    let num = 1;
+    let num = startNum;
 
-    for (const metric of metrics) {
-      const key = `${metric.ticker}-${metric.filingType}-${metric.fiscalPeriod}`;
+    for (const metric of uploadedDocMetrics) {
+      const key = `${metric.fileName}-${metric.normalizedMetric}`;
       if (seen.has(key)) continue;
       seen.add(key);
 
       citations.push({
         number: num,
         citationNumber: num,
-        type: 'sec_filing',
-        sourceType: 'SEC_FILING',
-        ticker: metric.ticker,
-        filingType: metric.filingType,
-        fiscalPeriod: metric.fiscalPeriod,
-        section: metric.statementType || 'Financial Statements',
-        excerpt: `${metric.rawLabel}: ${this.formatValueForCitation(metric.value)} (${metric.fiscalPeriod})`,
-        relevanceScore: metric.confidenceScore,
+        type: 'uploaded_document',
+        sourceType: 'UPLOADED_DOC',
+        filename: metric.fileName,
+        ticker: metric.ticker || '',
+        filingType: 'Uploaded Document',
+        fiscalPeriod: metric.fiscalPeriod || '',
+        section: 'Uploaded Document',
+        excerpt: `${metric.rawLabel || metric.normalizedMetric}: ${this.formatValueForCitation(metric.value)}${metric.fiscalPeriod ? ` (${metric.fiscalPeriod})` : ''} — from ${metric.fileName}`,
+        relevanceScore: metric.confidenceScore || 0.9,
+        pageNumber: metric.sourcePage || null,
       });
       num++;
     }
 
     return citations;
   }
+
+
 
   /**
    * Format value for citation display
