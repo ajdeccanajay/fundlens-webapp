@@ -261,7 +261,7 @@ export class DealLibraryService {
       default: orderBy = `created_at ${sortDir.toUpperCase()}`; break;
     }
 
-    const rows = await this.prisma.$queryRawUnsafe<DealLibraryDocument[]>(
+    const rows = await this.prisma.$queryRawUnsafe<any[]>(
       `SELECT document_id, file_name, file_type, file_size, document_type,
               status, processing_mode, upload_source, page_count, chunk_count,
               metric_count, kb_sync_status, error, retry_count, created_at, updated_at
@@ -275,7 +275,11 @@ export class DealLibraryService {
       dealId,
     );
 
-    return rows;
+    // Convert BigInt fields (file_size) to Number for JSON serialization
+    return rows.map(r => ({
+      ...r,
+      file_size: r.file_size != null ? Number(r.file_size) : null,
+    }));
   }
 
   /**
