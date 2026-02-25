@@ -514,6 +514,9 @@ export class ResearchAssistantService {
         this.logger.log(`🔧 Enhanced query with ticker context: "${enhancedQuery}"`);
       }
 
+      // Resolve dealId from primaryTicker so uploaded document Sources 1+2 activate
+      const dealId = primaryTicker ? await this.getDealIdForTicker(primaryTicker) : undefined;
+
       // Use FULL HYBRID RAG SYSTEM with intent detection, query routing, and user documents
       // Pass all tickers (including peers) for multi-ticker retrieval
       const ragResult = await this.ragService.query(enhancedQuery, {
@@ -524,6 +527,7 @@ export class ResearchAssistantService {
         ticker: primaryTicker, // Primary ticker for scoping
         tickers: tickers.length > 1 ? tickers : undefined, // Pass peer tickers for multi-ticker retrieval
         instantRagSessionId: dto.context?.instantRagSessionId, // Cross-source retrieval from Instant RAG session
+        dealId, // Spec §7.1: enables Sources 1+2 (uploaded doc extractions + vector chunks)
       });
 
       this.logger.log(`✅ RAG Result: ${ragResult.intent.type} query`);
@@ -761,6 +765,32 @@ export class ResearchAssistantService {
       queryType: this.detectQueryType(query),
     };
   }
+
+  /**
+   * Look up the deal ID for a given ticker within the current tenant.
+   * Returns undefined if no deal found (non-fatal).
+   */
+  private async getDealIdForTicker(ticker: string): Promise<string | undefined> {
+    if (!ticker) return undefined;
+    const tenantId = this.getTenantId();
+    try {
+      const deals = await this.prisma.$queryRawUnsafe<{ id: string }[]>(
+        `SELECT id FROM deals WHERE UPPER(ticker) = $1 AND tenant_id = $2 ORDER BY created_at DESC LIMIT 1`,
+        ticker.toUpperCase(),
+        tenantId,
+      );
+      if (deals.length > 0) {
+        this.logger.log(`📎 Resolved dealId for ${ticker}: ${deals[0].id}`);
+        return deals[0].id;
+      }
+      this.logger.log(`📎 No deal found for ticker ${ticker} in tenant ${tenantId}`);
+      return undefined;
+    } catch (err) {
+      this.logger.warn(`⚠️ getDealIdForTicker failed (non-fatal): ${err.message}`);
+      return undefined;
+    }
+  }
+
 
   /**
    * Extract ticker symbols from query

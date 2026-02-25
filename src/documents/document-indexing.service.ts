@@ -201,7 +201,7 @@ export class DocumentIndexingService {
         JOIN intel_documents d ON e.document_id = d.document_id
         WHERE e.tenant_id = $1::uuid
           AND e.deal_id = $2::uuid
-          AND e.extraction_type = 'metric'
+          AND e.extraction_type IN ('metric', 'headline')
           AND e.data->>'metric_key' = ANY($3::text[])
         ORDER BY e.confidence DESC
         `,

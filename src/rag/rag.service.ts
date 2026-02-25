@@ -439,10 +439,32 @@ export class RAGService {
       let uploadedDocChunks: any[] = [];
       if (this.documentIndexing && options?.tenantId && options?.dealId) {
         try {
-          // Source 1: If intent has metrics, query uploaded doc extractions
-          if (intent.metrics && intent.metrics.length > 0) {
+          // Source 1: Query uploaded doc extractions
+          // Build metric keys from both intent.metrics AND raw query text matching
+          // (uploaded docs use simple keys like price_target, rating, revenue, ebitda)
+          const uploadedDocMetricKeys = new Set<string>(intent.metrics || []);
+          const queryLower = query.toLowerCase();
+          const uploadedDocKeyMap: Record<string, string[]> = {
+            price_target: ['price target', 'target price', 'pt'],
+            rating: ['rating', 'recommendation', 'buy', 'sell', 'hold', 'overweight', 'underweight'],
+            revenue: ['revenue', 'sales', 'top line'],
+            ebitda: ['ebitda'],
+            net_profit: ['net profit', 'net income', 'earnings', 'bottom line'],
+            eps: ['eps', 'earnings per share'],
+            gross_margin: ['gross margin'],
+            operating_margin: ['operating margin'],
+          };
+          for (const [key, triggers] of Object.entries(uploadedDocKeyMap)) {
+            if (triggers.some(t => queryLower.includes(t))) {
+              uploadedDocMetricKeys.add(key);
+            }
+          }
+
+          if (uploadedDocMetricKeys.size > 0) {
+            const metricKeysArray = [...uploadedDocMetricKeys];
+            this.logger.log(`📎 Source 1: Querying uploaded doc metrics for keys: [${metricKeysArray.join(', ')}]`);
             const uploadedMetrics = await this.documentIndexing.queryMetrics(
-              intent.metrics,
+              metricKeysArray,
               options.tenantId,
               options.dealId,
             );
