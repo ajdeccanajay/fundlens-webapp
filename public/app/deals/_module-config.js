@@ -37,6 +37,7 @@ window.FundLensModuleConfig = {
                 { name: 'Research Assistant', page: 'research', icon: 'fas fa-robot', shortcut: '5' },
                 { name: 'Scratchpad', page: 'scratchpad', icon: 'fas fa-sticky-note', shortcut: '6', badge: 'scratchpadCount' },
                 { name: 'IC Memo', page: 'ic-memo', icon: 'fas fa-file-contract', shortcut: '7' },
+                { name: 'Documents', page: 'documents', icon: 'fas fa-folder-open', shortcut: '8' },
             ]
         }
     ],

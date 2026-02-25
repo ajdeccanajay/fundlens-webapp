@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FundLens - Deal Library</title>
+    <link rel="icon" href="/fundlens-logo.png" type="image/png">
+    <link rel="stylesheet" href="/css/design-system.css">
+    <link rel="stylesheet" href="/css/filing-notifications.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.14.8/dist/cdn.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="_module-config.js"></script>
+    <script src="/app/_shell.js"></script>
+    <script src="/app/_utils.js"></script>
+    <style>
+        [x-cloak] { display: none !important; }
+        .sidebar { width: 240px; background: white; border-right: 1px solid #e5e7eb; }
+        .nav-item { transition: all 0.2s ease; cursor: pointer; position: relative; }
+        .nav-item:hover { background: #f9fafb; }
+        .nav-item.active { background: #eff6ff; color: #1a56db; border-left: 3px solid #1a56db; }
+        .nav-item.active i { color: #1a56db; }
+        .badge { position: absolute; top: 8px; right: 8px; background: #dc2626; color: white; font-size: 0.65rem; padding: 2px 6px; border-radius: 10px; font-weight: 600; }
+        .tenant-badge { background: linear-gradient(135deg, #1a56db 0%, #7c3aed 100%); }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .fade-in { animation: fadeIn 0.3s ease-out; }
+        /* Upload zone */
+        .upload-zone { border: 2px dashed #d1d5db; border-radius: 12px; padding: 32px; text-align: center; transition: all 0.2s; cursor: pointer; }
+        .upload-zone:hover { border-color: #93c5fd; background: #eff6ff; }
+        .upload-zone--active { border-color: #3b82f6; background: #dbeafe; }
+        /* Status pills */
+        .status-pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
+        .status-ready { background: #f0fdf4; color: #166534; border: 1px solid #86efac; }
+        .status-processing { background: #fffbeb; color: #92400e; border: 1px solid #fcd34d; }
+        .status-queued { background: #eff6ff; color: #1e40af; border: 1px solid #93c5fd; }
+        .status-error { background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5; }
+        /* Type badges */
+        .type-badge { display: inline-flex; padding: 2px 8px; border-radius: 6px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; }
+        .type-sell-side { background: #ede9fe; color: #5b21b6; }
+        .type-filing { background: #dbeafe; color: #1e40af; }
+        .type-transcript { background: #fef3c7; color: #92400e; }
+        .type-cim { background: #d1fae5; color: #065f46; }
+        .type-memo { background: #fce7f3; color: #9d174d; }
+        .type-other { background: #f3f4f6; color: #374151; }
+        /* Filter bar */
+        .filter-btn { padding: 6px 14px; border-radius: 8px; font-size: 0.8rem; font-weight: 500; border: 1px solid #e5e7eb; background: white; cursor: pointer; transition: all 0.15s; }
+        .filter-btn:hover { background: #f9fafb; border-color: #d1d5db; }
+        .filter-btn.active { background: #1a56db; color: white; border-color: #1a56db; }
+    </style>
+    <script>
+    window.FundLensDocumentsView = function() {
+        return {
+            documents: [],
+            counts: {},
+            loading: false,
+            filter: 'all',
+            sortBy: 'date',
+            sortDir: 'desc',
+            dragOver: false,
+            uploading: [],
+            pollTimer: null,
+
+            async init() {
+                await this.loadDocuments();
+                await this.loadCounts();
+                this.startPolling();
+            },
+
+            async loadDocuments() {
+                this.loading = true;
+                try {
+                    var headers = this.getAuthHeaders();
+                    if (!headers) return;
+                    var ticker = this.entityContext.value;
+                    var url = '/api/deals/' + ticker + '/library?filter=' + this.filter + '&sortBy=' + this.sortBy + '&sortDir=' + this.sortDir;
+                    var resp = await fetch(url, { headers: headers });
+                    if (resp.ok) {
+                        this.documents = await resp.json();
+                    }
+                } catch (e) { console.warn('Failed to load documents:', e.message); }
+                this.loading = false;
+            },
+
+            async loadCounts() {
+                try {
+                    var headers = this.getAuthHeaders();
+                    if (!headers) return;
+                    var ticker = this.entityContext.value;
+                    var resp = await fetch('/api/deals/' + ticker + '/library/counts', { headers: headers });
+                    if (resp.ok) { this.counts = await resp.json(); }
+                } catch (e) { /* ignore */ }
+            },
+
+            setFilter(f) {
+                this.filter = f;
+                this.loadDocuments();
+            },
+
+            toggleSort(col) {
+                if (this.sortBy === col) {
+                    this.sortDir = this.sortDir === 'desc' ? 'asc' : 'desc';
+                } else {
+                    this.sortBy = col;
+                    this.sortDir = 'desc';
+                }
+                this.loadDocuments();
+            },
+
+            handleDrop(event) {
+                this.dragOver = false;
+                var files = event.dataTransfer.files;
+                for (var i = 0; i < files.length; i++) {
+                    this.uploadFile(files[i]);
+                }
+            },
+
+            handleFileSelect(event) {
+                var files = event.target.files;
+                for (var i = 0; i < files.length; i++) {
+                    this.uploadFile(files[i]);
+                }
+                event.target.value = '';
+            },
+
+            async uploadFile(file) {
+                var entry = { id: crypto.randomUUID(), name: file.name, size: file.size, status: 'uploading', progress: 0, documentId: null };
+                this.uploading.push(entry);
+
+                try {
+                    var headers = this.getAuthHeaders();
+                    var ticker = this.entityContext.value;
+
+                    // 1. Get presigned URL
+                    var urlResp = await fetch('/api/deals/' + ticker + '/library/upload-url', {
+                        method: 'POST',
+                        headers: headers,
+                        body: JSON.stringify({ fileName: file.name, fileType: file.type || 'application/octet-stream', fileSize: file.size }),
+                    });
+                    if (!urlResp.ok) throw new Error('Failed to get upload URL');
+                    var urlData = await urlResp.json();
+                    entry.documentId = urlData.documentId;
+
+                    // 2. Upload to S3
+                    entry.status = 'uploading';
+                    await fetch(urlData.uploadUrl, { method: 'PUT', body: file, headers: { 'Content-Type': file.type || 'application/octet-stream' } });
+
+                    // 3. Trigger background processing
+                    entry.status = 'processing';
+                    await fetch('/api/deals/' + ticker + '/library/' + urlData.documentId + '/upload-complete', {
+                        method: 'POST',
+                        headers: headers,
+                    });
+
+                    entry.status = 'queued';
+                    // Refresh list
+                    await this.loadDocuments();
+                    await this.loadCounts();
+                } catch (e) {
+                    entry.status = 'error';
+                    entry.error = e.message;
+                }
+            },
+
+            async deleteDocument(docId) {
+                if (!confirm('Delete this document? This cannot be undone.')) return;
+                try {
+                    var headers = this.getAuthHeaders();
+                    var ticker = this.entityContext.value;
+                    var resp = await fetch('/api/deals/' + ticker + '/library/' + docId, { method: 'DELETE', headers: headers });
+                    if (resp.ok) {
+                        await this.loadDocuments();
+                        await this.loadCounts();
+                    }
+                } catch (e) { console.warn('Delete failed:', e.message); }
+            },
+
+            startPolling() {
+                var self = this;
+                this.pollTimer = setInterval(function() {
+                    var hasProcessing = self.documents.some(function(d) { return d.status === 'processing' || d.status === 'uploading'; });
+                    if (hasProcessing || self.uploading.some(function(u) { return u.status === 'processing' || u.status === 'queued'; })) {
+                        self.loadDocuments();
+                        self.loadCounts();
+                    }
+                }, 5000);
+            },
+
+            getStatusClass(status) {
+                if (status === 'queryable' || status === 'fully-indexed') return 'status-ready';
+                if (status === 'processing') return 'status-processing';
+                if (status === 'uploading') return 'status-queued';
+                if (status === 'error') return 'status-error';
+                return 'status-queued';
+            },
+
+            getStatusLabel(doc) {
+                if (doc.status === 'queryable' || doc.status === 'fully-indexed') return '✅ Ready';
+                if (doc.status === 'processing') return '🔄 Processing';
+                if (doc.status === 'uploading') return '⏳ Queued';
+                if (doc.status === 'error') return '❌ Failed';
+                return doc.status;
+            },
+
+            getTypeClass(docType) {
+                if (!docType) return 'type-other';
+                if (docType === 'sell-side-report') return 'type-sell-side';
+                if (docType.startsWith('sec-')) return 'type-filing';
+                if (docType === 'earnings-transcript') return 'type-transcript';
+                if (docType === 'pe-cim') return 'type-cim';
+                if (docType === 'ic-memo') return 'type-memo';
+                return 'type-other';
+            },
+
+            getTypeLabel(docType) {
+                if (!docType) return 'Other';
+                var map = { 'sell-side-report': 'Sell-Side', 'sec-10k': '10-K', 'sec-10q': '10-Q', 'sec-8k': '8-K', 'sec-proxy': 'Proxy', 'earnings-transcript': 'Transcript', 'pe-cim': 'CIM', 'ic-memo': 'IC Memo', 'spreadsheet': 'Spreadsheet', 'presentation': 'Presentation', 'fund-mandate': 'Mandate', 'generic': 'Other' };
+                return map[docType] || docType;
+            },
+
+            formatDate(dateStr) {
+                if (!dateStr) return '';
+                try { return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
+                catch (e) { return dateStr; }
+            },
+
+            formatSize(bytes) {
+                if (!bytes) return '';
+                if (bytes < 1024) return bytes + ' B';
+                if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+                return (bytes / 1048576).toFixed(1) + ' MB';
+            },
+
+            filterCount(key) {
+                return this.counts[key] || 0;
+            },
+        };
+    };
+    </script>
+</head>
+<body class="bg-gray-50">
+    <div x-data="FundLensShell('documents', FundLensDocumentsView())" x-init="init()" x-cloak>
+
+        <!-- Nav Bar -->
+        <nav class="bg-white shadow-sm border-b border-gray-100 sticky top-0 z-50"><div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"><div class="flex justify-between items-center h-16"><div class="flex items-center space-x-4"><a href="/app/deals/index.html" class="flex items-center"><div class="bg-white px-3 py-1 rounded-lg"><img src="/fundlens-logo.png" alt="FundLens" class="h-8 w-auto"></div></a><div class="hidden sm:flex items-center"><span class="text-gray-300 mx-3">|</span><div class="tenant-badge px-3 py-1 rounded-full"><span class="text-white text-sm font-medium" x-text="user.tenantName || 'Loading...'"></span></div><div x-show="user.isPlatformAdmin" class="ml-2 px-2 py-1 rounded-full bg-yellow-500"><span class="text-white text-xs font-bold">PLATFORM ADMIN</span></div></div></div><div class="flex items-center space-x-4"><div class="relative"><button @click="filingNotifOpen = !filingNotifOpen" class="filing-notif-bell"><i class="fas fa-bell"></i><span x-show="filingNotifCount > 0" class="filing-notif-badge" x-text="filingNotifCount > 99 ? '99+' : filingNotifCount"></span></button><div x-show="filingNotifOpen" @click.away="filingNotifOpen = false" x-transition class="filing-notif-dropdown"><div class="filing-notif-header"><h3>New Filings</h3><button x-show="filingNotifications.length > 0" @click="dismissAllFilingNotifs()" class="filing-notif-dismiss-all">Dismiss All</button></div><div class="filing-notif-list"><template x-if="filingNotifications.length === 0"><div class="filing-notif-empty"><i class="fas fa-check-circle"></i><p>No new filings</p></div></template><template x-for="notif in filingNotifications" :key="notif.id"><div class="filing-notif-card"><span class="filing-type-badge" :class="getFilingTypeBadgeClass(notif.filingType)" x-text="notif.filingType"></span><div class="filing-notif-content"><div class="filing-notif-ticker" x-text="notif.ticker"></div><div class="filing-notif-date" x-text="formatFilingDate(notif.filingDate)"></div></div><button @click.stop="dismissFilingNotif(notif.id)" class="filing-notif-dismiss"><i class="fas fa-times"></i></button></div></template></div></div></div><div class="relative" x-data="{ open: false }"><button @click="open = !open" class="flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-gray-100"><div class="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center"><span class="text-indigo-600 font-semibold text-sm" x-text="getUserInitials()"></span></div><div class="hidden md:block text-left"><p class="text-sm font-medium text-gray-700" x-text="user.email"></p><p class="text-xs text-gray-500 capitalize" x-text="user.role"></p></div><i class="fas fa-chevron-down text-gray-400 text-xs"></i></button><div x-show="open" @click.away="open = false" x-transition class="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg py-2 z-50 border border-gray-200"><div class="px-4 py-3 border-b border-gray-200"><p class="text-sm font-medium text-gray-900" x-text="user.email"></p><p class="text-xs text-gray-600" x-text="user.tenantName"></p></div><div class="pt-2"><button @click="logout()" class="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"><i class="fas fa-sign-out-alt mr-3"></i> Sign Out</button></div></div></div></div></div></div></nav>
+
+        <!-- Breadcrumbs -->
+        <div class="bg-white border-b border-gray-200 px-6 py-3"><div class="flex items-center space-x-2 text-sm mb-2"><template x-for="(crumb, i) in breadcrumbItems" :key="i"><span class="flex items-center space-x-2"><span x-show="i > 0"><i class="fas fa-chevron-right text-gray-400 text-xs"></i></span><a x-show="crumb.path" :href="crumb.path" class="text-gray-500 hover:text-blue-600" x-text="crumb.label"></a><span x-show="!crumb.path" class="text-gray-900 font-medium" x-text="crumb.label"></span></span></template></div><div class="flex items-center space-x-4"><div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background: linear-gradient(135deg, #1a56db 0%, #7c3aed 100%);"><i class="fas fa-chart-line text-white"></i></div><div><h1 class="text-lg font-bold text-gray-900" x-text="entityContext.displayName"></h1><p class="text-xs text-gray-500" x-text="entityContext.extra.sector" x-show="entityContext.extra.sector"></p></div></div></div>
+
+        <!-- Main Layout -->
+        <div class="flex h-[calc(100vh-132px)]">
+            <!-- Sidebar -->
+            <div class="sidebar flex flex-col" role="navigation"><nav class="flex-1 p-3 space-y-3"><template x-for="group in sidebarGroups" :key="group.label"><div><div class="text-xs font-semibold text-gray-400 uppercase tracking-wider px-3 py-1" x-text="group.label"></div><template x-for="item in group.items" :key="item.page"><div @click="navigateTo(item.page)" :class="{'active': currentPage === item.page}" class="nav-item flex items-center px-3 py-2.5 rounded-lg cursor-pointer"><i :class="item.icon" class="w-5 text-gray-400"></i><span class="ml-3 text-sm font-medium" x-text="item.name"></span><span x-show="item.badge && $data[item.badge] > 0" class="badge" x-text="$data[item.badge]"></span></div></template></div></template></nav><div class="p-4 border-t border-gray-200"><p class="text-xs text-gray-400 mb-2">Keyboard Shortcuts</p><div class="space-y-1 text-xs text-gray-500"><template x-for="item in sidebarGroups.flatMap(g => g.items).filter(i => i.shortcut)" :key="item.shortcut"><div><span x-text="'⌘' + item.shortcut + ' - ' + item.name"></span></div></template></div></div></div>
+
+            <!-- Content Area -->
+            <div class="flex-1 overflow-auto">
+                <div class="fade-in p-8"><div class="max-w-6xl mx-auto">
+
+                    <!-- Header -->
+                    <div class="flex justify-between items-center mb-6">
+                        <div>
+                            <h2 class="text-2xl font-bold text-gray-900">Deal Library</h2>
+                            <p class="text-gray-500 text-sm">Upload and manage documents for this deal. All documents are processed and indexed for research queries.</p>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span class="text-sm text-gray-500" x-text="filterCount('all') + ' documents'"></span>
+                        </div>
+                    </div>
+
+                    <!-- Upload Zone -->
+                    <div class="upload-zone mb-6"
+                         :class="{ 'upload-zone--active': dragOver }"
+                         @dragover.prevent="dragOver = true"
+                         @dragleave="dragOver = false"
+                         @drop.prevent="handleDrop($event)"
+                         @click="$refs.fileInput.click()">
+                        <i class="fas fa-cloud-upload-alt text-3xl text-gray-400 mb-3"></i>
+                        <p class="text-gray-600 font-medium">Drag files here or click to browse</p>
+                        <p class="text-gray-400 text-sm mt-1">PDF, DOCX, XLSX, CSV, TXT — up to 500 MB per file</p>
+                        <input type="file" x-ref="fileInput" multiple @change="handleFileSelect($event)" hidden
+                               accept=".pdf,.docx,.xlsx,.csv,.txt,.png,.jpg,.jpeg">
+                    </div>
+
+                    <!-- Upload Progress -->
+                    <template x-for="up in uploading.filter(u => u.status !== 'done')" :key="up.id">
+                        <div class="bg-white rounded-lg border border-gray-200 p-3 mb-2 flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <i class="fas fa-file text-gray-400"></i>
+                                <span class="text-sm font-medium text-gray-700" x-text="up.name"></span>
+                            </div>
+                            <div>
+                                <span x-show="up.status === 'uploading'" class="status-pill status-queued">⏳ Uploading...</span>
+                                <span x-show="up.status === 'processing'" class="status-pill status-processing">🔄 Queued</span>
+                                <span x-show="up.status === 'queued'" class="status-pill status-processing">🔄 Processing</span>
+                                <span x-show="up.status === 'error'" class="status-pill status-error" x-text="'❌ ' + (up.error || 'Failed')"></span>
+                            </div>
+                        </div>
+                    </template>
+
+                    <!-- Filter Bar -->
+                    <div class="flex items-center gap-2 mb-4 flex-wrap">
+                        <button @click="setFilter('all')" :class="{ active: filter === 'all' }" class="filter-btn">
+                            All <span class="ml-1 text-xs opacity-70" x-text="'(' + filterCount('all') + ')'"></span>
+                        </button>
+                        <button @click="setFilter('sell-side')" :class="{ active: filter === 'sell-side' }" class="filter-btn">
+                            Sell-Side <span class="ml-1 text-xs opacity-70" x-text="'(' + filterCount('sell-side') + ')'"></span>
+                        </button>
+                        <button @click="setFilter('filings')" :class="{ active: filter === 'filings' }" class="filter-btn">
+                            Filings <span class="ml-1 text-xs opacity-70" x-text="'(' + filterCount('filings') + ')'"></span>
+                        </button>
+                        <button @click="setFilter('transcripts')" :class="{ active: filter === 'transcripts' }" class="filter-btn">
+                            Transcripts <span class="ml-1 text-xs opacity-70" x-text="'(' + filterCount('transcripts') + ')'"></span>
+                        </button>
+                        <button @click="setFilter('cims')" :class="{ active: filter === 'cims' }" class="filter-btn">
+                            CIMs <span class="ml-1 text-xs opacity-70" x-text="'(' + filterCount('cims') + ')'"></span>
+                        </button>
+                        <button @click="setFilter('memos')" :class="{ active: filter === 'memos' }" class="filter-btn">
+                            Memos <span class="ml-1 text-xs opacity-70" x-text="'(' + filterCount('memos') + ')'"></span>
+                        </button>
+                        <button @click="setFilter('other')" :class="{ active: filter === 'other' }" class="filter-btn">
+                            Other <span class="ml-1 text-xs opacity-70" x-text="'(' + filterCount('other') + ')'"></span>
+                        </button>
+                    </div>
+
+                    <!-- Document Table -->
+                    <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                        <table class="w-full">
+                            <thead>
+                                <tr class="bg-gray-50 border-b border-gray-200">
+                                    <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700" @click="toggleSort('name')">
+                                        Name <i class="fas fa-sort text-gray-300 ml-1" :class="{ 'text-indigo-500': sortBy === 'name' }"></i>
+                                    </th>
+                                    <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700" @click="toggleSort('type')">
+                                        Type <i class="fas fa-sort text-gray-300 ml-1" :class="{ 'text-indigo-500': sortBy === 'type' }"></i>
+                                    </th>
+                                    <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700" @click="toggleSort('status')">
+                                        Status <i class="fas fa-sort text-gray-300 ml-1" :class="{ 'text-indigo-500': sortBy === 'status' }"></i>
+                                    </th>
+                                    <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Size</th>
+                                    <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700" @click="toggleSort('date')">
+                                        Date <i class="fas fa-sort text-gray-300 ml-1" :class="{ 'text-indigo-500': sortBy === 'date' }"></i>
+                                    </th>
+                                    <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">KB Sync</th>
+                                    <th class="px-4 py-3"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-if="loading && documents.length === 0">
+                                    <tr><td colspan="7" class="text-center py-12 text-gray-400"><i class="fas fa-spinner fa-spin mr-2"></i>Loading documents...</td></tr>
+                                </template>
+                                <template x-if="!loading && documents.length === 0">
+                                    <tr><td colspan="7" class="text-center py-12 text-gray-400">
+                                        <i class="fas fa-folder-open text-4xl mb-3 block"></i>
+                                        <p class="font-medium">No documents yet</p>
+                                        <p class="text-sm mt-1">Upload files above to build your deal library</p>
+                                    </td></tr>
+                                </template>
+                                <template x-for="doc in documents" :key="doc.document_id">
+                                    <tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                                        <td class="px-4 py-3">
+                                            <div class="flex items-center gap-2">
+                                                <i class="fas fa-file-pdf text-red-400" x-show="doc.file_type && doc.file_type.includes('pdf')"></i>
+                                                <i class="fas fa-file-word text-blue-400" x-show="doc.file_type && doc.file_type.includes('word')"></i>
+                                                <i class="fas fa-file-excel text-green-400" x-show="doc.file_type && doc.file_type.includes('sheet')"></i>
+                                                <i class="fas fa-file text-gray-400" x-show="!doc.file_type || (!doc.file_type.includes('pdf') && !doc.file_type.includes('word') && !doc.file_type.includes('sheet'))"></i>
+                                                <span class="text-sm font-medium text-gray-800 truncate max-w-xs" x-text="doc.file_name"></span>
+                                            </div>
+                                        </td>
+                                        <td class="px-4 py-3">
+                                            <span class="type-badge" :class="getTypeClass(doc.document_type)" x-text="getTypeLabel(doc.document_type)"></span>
+                                        </td>
+                                        <td class="px-4 py-3">
+                                            <span class="status-pill" :class="getStatusClass(doc.status)" x-text="getStatusLabel(doc)"></span>
+                                        </td>
+                                        <td class="px-4 py-3 text-sm text-gray-500" x-text="formatSize(doc.file_size)"></td>
+                                        <td class="px-4 py-3 text-sm text-gray-500" x-text="formatDate(doc.created_at)"></td>
+                                        <td class="px-4 py-3">
+                                            <span x-show="doc.kb_sync_status === 'synced'" class="text-xs text-green-600"><i class="fas fa-check-circle mr-1"></i>Synced</span>
+                                            <span x-show="doc.kb_sync_status === 'prepared'" class="text-xs text-blue-600"><i class="fas fa-clock mr-1"></i>Prepared</span>
+                                            <span x-show="doc.kb_sync_status === 'syncing'" class="text-xs text-yellow-600"><i class="fas fa-sync fa-spin mr-1"></i>Syncing</span>
+                                            <span x-show="doc.kb_sync_status === 'pending'" class="text-xs text-gray-400">Pending</span>
+                                            <span x-show="doc.kb_sync_status === 'failed'" class="text-xs text-red-600"><i class="fas fa-exclamation-circle mr-1"></i>Failed</span>
+                                        </td>
+                                        <td class="px-4 py-3 text-right">
+                                            <button @click="deleteDocument(doc.document_id)" class="text-gray-400 hover:text-red-500 transition-colors" title="Delete document">
+                                                <i class="fas fa-trash-alt"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Info footer -->
+                    <div class="mt-4 text-xs text-gray-400 flex items-center gap-4">
+                        <span><i class="fas fa-info-circle mr-1"></i>Documents are automatically classified and indexed for research queries</span>
+                        <span>•</span>
+                        <span>KB Sync runs every 15 minutes</span>
+                    </div>
+
+                </div></div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

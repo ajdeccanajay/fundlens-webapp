@@ -20,6 +20,8 @@ import { VerificationService } from './verification.service';
 import { BackgroundEnrichmentService } from './background-enrichment.service';
 import { DocumentChunkingService } from './document-chunking.service';
 import { DocumentIndexingService } from './document-indexing.service';
+import { DealLibraryService } from './deal-library.service';
+import { DealLibraryController } from './deal-library.controller';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { TenantModule } from '../tenant/tenant.module';
 import { RAGModule } from '../rag/rag.module';
@@ -33,7 +35,7 @@ import { S3Service } from '../services/s3.service';
     forwardRef(() => RAGModule), // Provides BedrockService
     HttpModule.register({ timeout: 120000, maxRedirects: 5 }),
   ],
-  controllers: [DocumentsController, DocumentUploadController, DocumentIntelligenceController],
+  controllers: [DocumentsController, DocumentUploadController, DocumentIntelligenceController, DealLibraryController],
   providers: [
     DocumentsService,
     DocumentProcessorService,
@@ -44,8 +46,9 @@ import { S3Service } from '../services/s3.service';
     BackgroundEnrichmentService,
     DocumentChunkingService,
     DocumentIndexingService,
+    DealLibraryService,
     S3Service,
   ],
-  exports: [DocumentsService, DocumentProcessorService, DocumentProcessingService, DocumentIntelligenceService, BackgroundEnrichmentService, DocumentIndexingService],
+  exports: [DocumentsService, DocumentProcessorService, DocumentProcessingService, DocumentIntelligenceService, BackgroundEnrichmentService, DocumentIndexingService, DealLibraryService],
 })
 export class DocumentsModule {}

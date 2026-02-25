@@ -267,6 +267,34 @@ export class BackgroundEnrichmentService {
         documentId,
       );
 
+      // ── Step 10: KB Sync Prep — write chunks to S3 kb-ready/ prefix (Spec §6.3) ──
+      // Only for Deal Library documents (or chat uploads linked to Deal Library)
+      const dealLibraryCheck = await this.prisma.$queryRaw<any[]>`
+        SELECT deal_library_id, upload_source FROM intel_documents
+        WHERE document_id = ${documentId}::uuid
+      `;
+      const isDealLibrary = dealLibraryCheck?.[0]?.deal_library_id != null
+        || dealLibraryCheck?.[0]?.upload_source === 'deal-library';
+
+      if (isDealLibrary && chunks.length > 0) {
+        try {
+          await this.prepareKBChunks(documentId, tenantId, dealId, chunks, doc);
+          await this.prisma.$executeRawUnsafe(
+            `UPDATE intel_documents SET kb_sync_status = 'prepared', updated_at = NOW()
+             WHERE document_id = $1::uuid`,
+            documentId,
+          );
+          this.logger.log(
+            `[${documentId}] KB sync prep complete: ${chunks.length} chunks written to kb-ready/`,
+          );
+        } catch (kbErr) {
+          this.logger.warn(
+            `[${documentId}] KB sync prep failed (non-fatal): ${kbErr.message}`,
+          );
+          // Non-fatal — document is still queryable via OpenSearch
+        }
+      }
+
       const elapsed = Date.now() - startTime;
       this.logger.log(
         `[${documentId}] Background enrichment complete: ` +
@@ -313,6 +341,50 @@ export class BackgroundEnrichmentService {
       }
     }
     return true;
+  }
+
+  /**
+   * KB Sync Prep — Write chunks to S3 kb-ready/ prefix (Spec §6.3, §6.4)
+   * Chunks are written as JSON files with metadata for Bedrock KB ingestion.
+   * Actual KB sync happens via existing cron (KBSyncService).
+   */
+  private async prepareKBChunks(
+    documentId: string,
+    tenantId: string,
+    dealId: string,
+    chunks: any[],
+    doc: any,
+  ): Promise<void> {
+    const safeFileName = (doc.file_name || 'document').replace(/[^a-zA-Z0-9._-]/g, '_');
+
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      const chunkKey = `kb-ready/${tenantId}/${dealId}/uploads/${safeFileName}_chunk_${String(i + 1).padStart(3, '0')}.json`;
+
+      const chunkPayload = {
+        content: chunk.text || chunk.content || '',
+        metadata: {
+          tenant_id: tenantId,
+          deal_id: dealId,
+          document_id: documentId,
+          document_type: doc.document_type || 'generic',
+          source: 'upload',
+          company_ticker: doc.company_ticker || '',
+          file_name: doc.file_name || '',
+          section_type: chunk.sectionType || chunk.section || 'general',
+          page_number: chunk.pageNumber || chunk.page || null,
+          chunk_index: i,
+          total_chunks: chunks.length,
+        },
+      };
+
+      await this.s3.uploadBuffer(
+        Buffer.from(JSON.stringify(chunkPayload), 'utf-8'),
+        chunkKey,
+        'application/json',
+        { documentId, tenantId },
+      );
+    }
   }
 
   private mergeEntities(visionResults: VisionPageResult[]): {
