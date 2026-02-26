@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional, Inject } from '@nestjs/common';
 import { BedrockService } from './bedrock.service';
 import { PerformanceOptimizerService } from './performance-optimizer.service';
 import {
@@ -6,6 +6,7 @@ import {
   ResponseType, classifyResponseType, ResponseClassificationInput,
 } from './types/query-intent';
 import { ComputedMetricResult } from './metric-resolution/types';
+import { MetricRegistryService } from './metric-resolution/metric-registry.service';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
@@ -91,6 +92,7 @@ export class HybridSynthesisService {
   constructor(
     private readonly bedrock: BedrockService,
     private readonly performanceOptimizer: PerformanceOptimizerService,
+    @Optional() @Inject(MetricRegistryService) private readonly metricRegistry?: MetricRegistryService,
   ) {}
 
   // ── Tenant Overlay Loading (Req 11.1) ─────────────────────────────
@@ -757,28 +759,62 @@ export class HybridSynthesisService {
   }
 
   /** Format a numeric value with appropriate precision */
-  private formatValue(value: number, metricId: string): string {
-    if (value == null || typeof value !== 'number' || isNaN(value)) return String(value ?? 'N/A');
-    const lower = metricId.toLowerCase();
-    if (/margin|rate|ratio|pct/.test(lower)) {
-      // Margins/rates from MetricsSummary are stored as decimals (0.48 = 48%)
-      // Values < 1 are decimals that need *100; values >= 1 are already percentages
-      const pctValue = Math.abs(value) < 1 ? value * 100 : value;
-      return `${pctValue.toFixed(1)}%`;
+  /** Format a numeric value with appropriate precision, using MetricRegistry output_format */
+    private formatValue(value: number, metricId: string): string {
+      if (value == null || typeof value !== 'number' || isNaN(value)) return String(value ?? 'N/A');
+
+      // Look up output_format from the MetricRegistry (authoritative source)
+      const metricDef = this.metricRegistry?.getMetricById(metricId);
+      const outputFormat = metricDef?.output_format;
+
+      if (outputFormat === 'percentage') {
+        // Margins/rates from MetricsSummary are stored as decimals (0.48 = 48%)
+        // Values with abs < 1 are decimals that need *100; values >= 1 are already percentages
+        const pctValue = Math.abs(value) < 1 ? value * 100 : value;
+        return `${pctValue.toFixed(1)}%`;
+      }
+      if (outputFormat === 'ratio') {
+        return `${value.toFixed(2)}x`;
+      }
+      if (outputFormat === 'days') {
+        return `${value.toFixed(0)} days`;
+      }
+      if (outputFormat === 'currency_per_share') {
+        return `$${value.toFixed(2)}`;
+      }
+      if (outputFormat === 'currency') {
+        return this.formatCurrency(value);
+      }
+
+      // Fallback: no registry match — use metric name heuristics
+      const lower = metricId.toLowerCase();
+      if (/margin|pct|yield/.test(lower)) {
+        // Likely a percentage stored as decimal
+        const pctValue = Math.abs(value) < 1 ? value * 100 : value;
+        return `${pctValue.toFixed(1)}%`;
+      }
+      if (/growth|cagr/.test(lower)) {
+        const pctValue = Math.abs(value) < 1 ? value * 100 : value;
+        return `${pctValue.toFixed(1)}%`;
+      }
+      if (/ratio|multiple|turnover/.test(lower)) {
+        return `${value.toFixed(2)}x`;
+      }
+
+      // Default: magnitude-based currency formatting
+      return this.formatCurrency(value);
     }
-    if (/growth|cagr/.test(lower)) {
-      // Growth rates: same decimal convention
-      const pctValue = Math.abs(value) < 1 ? value * 100 : value;
-      return `${pctValue.toFixed(1)}%`;
-    }
+
+  /** Format a currency value with B/M/K suffixes */
+  private formatCurrency(value: number): string {
     if (Math.abs(value) >= 1_000_000_000) {
-      return `$${(value / 1_000_000_000).toFixed(2)}B`;
+      return `${(value / 1_000_000_000).toFixed(2)}B`;
     }
     if (Math.abs(value) >= 1_000_000) {
-      return `$${(value / 1_000_000).toFixed(2)}M`;
+      return `${(value / 1_000_000).toFixed(2)}M`;
     }
     if (Math.abs(value) >= 1_000) {
-      return `$${(value / 1_000).toFixed(2)}K`;
+      return `${(value / 1_000).toFixed(2)}K`;
     }
     return value.toFixed(2);
   }
