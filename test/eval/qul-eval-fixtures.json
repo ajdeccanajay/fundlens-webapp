@@ -1,0 +1,1573 @@
+[
+  {
+    "id": "explicit-ticker-01",
+    "category": "explicit_ticker",
+    "description": "Ticker AAPL with capital allocation question",
+    "input": {
+      "query": "Walk me through AAPL's capital allocation strategy over the last 3 years",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "AAPL",
+      "isValidQuery": true,
+      "useWorkspaceContext": false,
+      "domain": "public_equity"
+    }
+  },
+  {
+    "id": "explicit-ticker-02",
+    "category": "explicit_ticker",
+    "description": "Ticker MSFT with margin expansion question",
+    "input": {
+      "query": "How has MSFT's operating leverage improved since the Activision close?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "MSFT",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "explicit-ticker-03",
+    "category": "explicit_ticker",
+    "description": "Ticker TSLA with FCF conversion",
+    "input": {
+      "query": "What's TSLA's free cash flow conversion rate and how does capex intensity compare to prior years?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "TSLA",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "explicit-ticker-04",
+    "category": "explicit_ticker",
+    "description": "Ticker NVDA with data center segment deep-dive",
+    "input": {
+      "query": "Break down NVDA's data center revenue by end-market — hyperscaler vs enterprise vs sovereign AI",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "NVDA",
+      "intent": "SEGMENT_ANALYSIS",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "explicit-ticker-05",
+    "category": "explicit_ticker",
+    "description": "Ticker AMZN with operating income bridge",
+    "input": {
+      "query": "Walk me through AMZN's operating income bridge — what drove the margin expansion in North America retail?",
+      "workspace": { "ticker": "TSLA", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "AMZN",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "explicit-ticker-06",
+    "category": "explicit_ticker",
+    "description": "Ticker META with R&D efficiency",
+    "input": {
+      "query": "What's META's R&D as a percentage of revenue and how has Reality Labs spending trended?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "META",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "explicit-ticker-07",
+    "category": "explicit_ticker",
+    "description": "Ticker GOOGL with segment profitability",
+    "input": {
+      "query": "GOOGL Cloud segment — when did it inflect to profitability and what's the current margin run-rate?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "GOOGL",
+      "intent": "SEGMENT_ANALYSIS",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "explicit-ticker-08",
+    "category": "explicit_ticker",
+    "description": "Ticker CRM with SaaS metrics",
+    "input": {
+      "query": "What's CRM's remaining performance obligation growth and implied billings trajectory?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "CRM",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "explicit-ticker-09",
+    "category": "explicit_ticker",
+    "description": "Ticker NFLX with debt maturity",
+    "input": {
+      "query": "NFLX debt maturity schedule and interest coverage — any near-term refinancing risk?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "NFLX",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "explicit-ticker-10",
+    "category": "explicit_ticker",
+    "description": "Dollar-sign ticker format",
+    "input": {
+      "query": "$ABNB nights booked and GBV per night trend",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "ABNB",
+      "isValidQuery": true
+    }
+  },
+  {
+    "id": "explicit-ticker-11",
+    "category": "explicit_ticker",
+    "description": "Ticker with balance sheet question",
+    "input": {
+      "query": "What's ORCL's net debt position after the Cerner acquisition?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "ORCL",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "explicit-ticker-12",
+    "category": "explicit_ticker",
+    "description": "Ticker with working capital question",
+    "input": {
+      "query": "How has WMT's inventory turns and DSO trended over the last 8 quarters?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "WMT",
+      "intent": "METRIC_TREND",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "explicit-ticker-13",
+    "category": "explicit_ticker",
+    "description": "Ticker with shareholder return question",
+    "input": {
+      "query": "AAPL buyback yield and total shareholder return vs S&P 500 over 5 years",
+      "workspace": { "ticker": "MSFT", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "AAPL",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "explicit-ticker-14",
+    "category": "explicit_ticker",
+    "description": "Ticker with risk factor question",
+    "input": {
+      "query": "What are NVDA's key supply chain concentration risks disclosed in the 10-K?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "NVDA",
+      "intent": "NARRATIVE_SEARCH",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "explicit-ticker-15",
+    "category": "explicit_ticker",
+    "description": "Ticker with guidance question",
+    "input": {
+      "query": "What did AMZN guide for next quarter's operating income range?",
+      "workspace": { "ticker": "TSLA", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "AMZN",
+      "intent": "NARRATIVE_SEARCH",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "company-name-01",
+    "category": "company_name",
+    "description": "Apple resolves to AAPL",
+    "input": {
+      "query": "What's Apple's services revenue as a percentage of total and how has the mix shifted?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "AAPL",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "company-name-02",
+    "category": "company_name",
+    "description": "Microsoft resolves to MSFT",
+    "input": {
+      "query": "How much of Microsoft's revenue is recurring vs transactional?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "MSFT",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "company-name-03",
+    "category": "company_name",
+    "description": "Tesla resolves to TSLA",
+    "input": {
+      "query": "How has Tesla's automotive gross margin ex-credits trended since the price cuts?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "TSLA",
+      "intent": "METRIC_TREND",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "company-name-04",
+    "category": "company_name",
+    "description": "Google/Alphabet resolves to GOOGL",
+    "input": {
+      "query": "What's Alphabet's capex run-rate and how much is going to AI infrastructure?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "GOOGL",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "company-name-05",
+    "category": "company_name",
+    "description": "Amazon resolves to AMZN",
+    "input": {
+      "query": "Walk me through Amazon's fulfillment cost per unit and how it's improved with regionalization",
+      "workspace": { "ticker": "TSLA", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "AMZN",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "company-name-06",
+    "category": "company_name",
+    "description": "NVIDIA resolves to NVDA",
+    "input": {
+      "query": "What's NVIDIA's gross margin trajectory as they ramp Blackwell?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "NVDA",
+      "intent": "METRIC_TREND",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "company-name-07",
+    "category": "company_name",
+    "description": "Netflix resolves to NFLX",
+    "input": {
+      "query": "What's Netflix's ARM trend by region and how has the ad tier impacted blended ARPU?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "NFLX",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "company-name-08",
+    "category": "company_name",
+    "description": "Salesforce resolves to CRM",
+    "input": {
+      "query": "Has Salesforce's operating margin expansion been driven by headcount rationalization or revenue scale?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "CRM",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "company-name-09",
+    "category": "company_name",
+    "description": "Airbnb resolves to ABNB",
+    "input": {
+      "query": "What's Airbnb's take rate and how does it compare to Booking Holdings?",
+      "workspace": { "ticker": "TSLA", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "ABNB",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "company-name-10",
+    "category": "company_name",
+    "description": "Meta Platforms resolves to META",
+    "input": {
+      "query": "How much is Meta Platforms spending on AI capex and what's the expected ROI timeline per Zuckerberg?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "META",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "company-name-11",
+    "category": "company_name",
+    "description": "JPMorgan resolves to JPM",
+    "input": {
+      "query": "What's JPMorgan's net interest income sensitivity to a 100bp rate cut?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "JPM",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "company-name-12",
+    "category": "company_name",
+    "description": "Broadcom resolves to AVGO",
+    "input": {
+      "query": "How has Broadcom's software mix changed post-VMware and what's the recurring revenue percentage?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "AVGO",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "company-name-13",
+    "category": "company_name",
+    "description": "Costco resolves to COST",
+    "input": {
+      "query": "What's Costco's membership renewal rate and how much does membership fee income contribute to operating profit?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "COST",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "company-name-14",
+    "category": "company_name",
+    "description": "UnitedHealth resolves to UNH",
+    "input": {
+      "query": "What's UnitedHealth's medical loss ratio trend and how has Optum's contribution to earnings grown?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "UNH",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "company-name-15",
+    "category": "company_name",
+    "description": "Eli Lilly resolves to LLY",
+    "input": {
+      "query": "What's Eli Lilly's GLP-1 revenue run-rate and how much of the pipeline is in Phase 3?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "LLY",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "workspace-context-01",
+    "category": "workspace_context",
+    "description": "No entity — revenue question defaults to workspace",
+    "input": {
+      "query": "What's the revenue and how has the growth rate trended?",
+      "workspace": { "ticker": "ABNB", "companyName": "Airbnb", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "ABNB",
+      "intent": "METRIC_TREND",
+      "isValidQuery": true,
+      "useWorkspaceContext": true
+    }
+  },
+  {
+    "id": "workspace-context-02",
+    "category": "workspace_context",
+    "description": "Generic margin question — workspace context",
+    "input": {
+      "query": "How are gross margins trending and what's driving the expansion?",
+      "workspace": { "ticker": "TSLA", "companyName": "Tesla", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "TSLA",
+      "isValidQuery": true,
+      "useWorkspaceContext": true
+    }
+  },
+  {
+    "id": "workspace-context-03",
+    "category": "workspace_context",
+    "description": "Management commentary — workspace context",
+    "input": {
+      "query": "What did management say about the competitive environment on the last earnings call?",
+      "workspace": { "ticker": "NVDA", "companyName": "NVIDIA", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "NVDA",
+      "isValidQuery": true,
+      "useWorkspaceContext": true
+    }
+  },
+  {
+    "id": "workspace-context-04",
+    "category": "workspace_context",
+    "description": "Balance sheet question — workspace context",
+    "input": {
+      "query": "What's the net debt position and how does the maturity schedule look?",
+      "workspace": { "ticker": "AMZN", "companyName": "Amazon", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "AMZN",
+      "isValidQuery": true,
+      "useWorkspaceContext": true
+    }
+  },
+  {
+    "id": "workspace-context-05",
+    "category": "workspace_context",
+    "description": "Cash flow analysis — workspace context",
+    "input": {
+      "query": "Walk me through the cash flow statement — what's the FCF conversion and where is cash being deployed?",
+      "workspace": { "ticker": "MSFT", "companyName": "Microsoft", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "MSFT",
+      "isValidQuery": true,
+      "useWorkspaceContext": true
+    }
+  },
+  {
+    "id": "workspace-context-06",
+    "category": "workspace_context",
+    "description": "Risk factors — workspace context",
+    "input": {
+      "query": "What are the key risk factors and any new disclosures in the latest 10-K?",
+      "workspace": { "ticker": "AAPL", "companyName": "Apple", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "AAPL",
+      "intent": "NARRATIVE_SEARCH",
+      "isValidQuery": true,
+      "useWorkspaceContext": true
+    }
+  },
+  {
+    "id": "workspace-context-07",
+    "category": "workspace_context",
+    "description": "Segment breakdown — workspace context",
+    "input": {
+      "query": "Give me the segment breakdown with margins for each business line",
+      "workspace": { "ticker": "GOOGL", "companyName": "Alphabet", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "GOOGL",
+      "intent": "SEGMENT_ANALYSIS",
+      "isValidQuery": true,
+      "useWorkspaceContext": true
+    }
+  },
+  {
+    "id": "workspace-context-08",
+    "category": "workspace_context",
+    "description": "Accounting policy question — workspace context",
+    "input": {
+      "query": "How does the company recognize revenue and were there any changes in accounting policy?",
+      "workspace": { "ticker": "CRM", "companyName": "Salesforce", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "CRM",
+      "intent": "NARRATIVE_SEARCH",
+      "isValidQuery": true,
+      "useWorkspaceContext": true
+    }
+  },
+  {
+    "id": "workspace-context-09",
+    "category": "workspace_context",
+    "description": "SBC dilution question — workspace context",
+    "input": {
+      "query": "What's the stock-based compensation as a percentage of revenue and how dilutive is it?",
+      "workspace": { "ticker": "META", "companyName": "Meta Platforms", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "META",
+      "isValidQuery": true,
+      "useWorkspaceContext": true
+    }
+  },
+  {
+    "id": "workspace-context-10",
+    "category": "workspace_context",
+    "description": "Geographic mix question — workspace context",
+    "input": {
+      "query": "What's the geographic revenue split and which regions are growing fastest?",
+      "workspace": { "ticker": "NFLX", "companyName": "Netflix", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "NFLX",
+      "intent": "SEGMENT_ANALYSIS",
+      "isValidQuery": true,
+      "useWorkspaceContext": true
+    }
+  },
+  {
+    "id": "workspace-override-01",
+    "category": "workspace_override",
+    "description": "Apple in ABNB workspace — override",
+    "input": {
+      "query": "What's Apple's services gross margin and how does it compare to the hardware segment?",
+      "workspace": { "ticker": "ABNB", "companyName": "Airbnb", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "AAPL",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "workspace-override-02",
+    "category": "workspace_override",
+    "description": "Tesla in MSFT workspace — override",
+    "input": {
+      "query": "How has Tesla's energy storage segment revenue ramped and what's the margin profile?",
+      "workspace": { "ticker": "MSFT", "companyName": "Microsoft", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "TSLA",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "workspace-override-03",
+    "category": "workspace_override",
+    "description": "NVDA in AAPL workspace — override",
+    "input": {
+      "query": "NVDA's inference revenue as a percentage of data center — is the mix shifting from training?",
+      "workspace": { "ticker": "AAPL", "companyName": "Apple", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "NVDA",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "workspace-override-04",
+    "category": "workspace_override",
+    "description": "Amazon in TSLA workspace — override",
+    "input": {
+      "query": "What's Amazon's advertising revenue run-rate and how does the margin compare to Google's ad business?",
+      "workspace": { "ticker": "TSLA", "companyName": "Tesla", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "AMZN",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "workspace-override-05",
+    "category": "workspace_override",
+    "description": "Google in ABNB workspace — override",
+    "input": {
+      "query": "What's Google's search revenue growth ex-TAC and how sustainable is the AI Overviews monetization?",
+      "workspace": { "ticker": "ABNB", "companyName": "Airbnb", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "GOOGL",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "workspace-override-06",
+    "category": "workspace_override",
+    "description": "Product reference — iPhone maker = AAPL",
+    "input": {
+      "query": "How much does the iPhone maker spend on R&D relative to revenue?",
+      "workspace": { "ticker": "ABNB", "companyName": "Airbnb", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "AAPL",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "workspace-override-07",
+    "category": "workspace_override",
+    "description": "Subsidiary reference — AWS = AMZN",
+    "input": {
+      "query": "What's AWS's operating margin and how has it trended since the optimization cycle ended?",
+      "workspace": { "ticker": "ABNB", "companyName": "Airbnb", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "AMZN",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "workspace-override-08",
+    "category": "workspace_override",
+    "description": "Subsidiary reference — YouTube = GOOGL",
+    "input": {
+      "query": "YouTube's ad revenue growth rate and how does Shorts monetization compare to long-form?",
+      "workspace": { "ticker": "ABNB", "companyName": "Airbnb", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "GOOGL",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "workspace-override-09",
+    "category": "workspace_override",
+    "description": "Subsidiary reference — Azure = MSFT",
+    "input": {
+      "query": "Azure's revenue growth in constant currency and AI services contribution to the acceleration",
+      "workspace": { "ticker": "ABNB", "companyName": "Airbnb", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "MSFT",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "workspace-override-10",
+    "category": "workspace_override",
+    "description": "Subsidiary reference — Instagram = META",
+    "input": {
+      "query": "How is Instagram Reels monetization trending relative to feed and Stories?",
+      "workspace": { "ticker": "ABNB", "companyName": "Airbnb", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "META",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "coreference-01",
+    "category": "coreference",
+    "description": "Pronoun 'it' resolves from conversation history",
+    "input": {
+      "query": "How has it trended over the past 3 years and what's driving the change?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" },
+      "conversation_history": [
+        { "role": "user", "content": "What is Tesla's free cash flow?" },
+        { "role": "assistant", "summary": "TSLA FCF was $4.4B in FY2024, up from $1.1B in FY2023" }
+      ]
+    },
+    "expected": {
+      "primaryTicker": "TSLA",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "coreference-02",
+    "category": "coreference",
+    "description": "'their' resolves from conversation history",
+    "input": {
+      "query": "What about their operating margin — is the leverage story intact?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" },
+      "conversation_history": [
+        { "role": "user", "content": "Walk me through NVDA's data center revenue" },
+        { "role": "assistant", "summary": "NVDA data center revenue was $47.5B in FY2025, up 217% YoY" }
+      ]
+    },
+    "expected": {
+      "primaryTicker": "NVDA",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "coreference-03",
+    "category": "coreference",
+    "description": "'the company' resolves from conversation history",
+    "input": {
+      "query": "What risks does the company face from the DOJ antitrust case?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" },
+      "conversation_history": [
+        { "role": "user", "content": "Tell me about Google's search advertising revenue" },
+        { "role": "assistant", "summary": "GOOGL search revenue was $198B in FY2024" }
+      ]
+    },
+    "expected": {
+      "primaryTicker": "GOOGL",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "coreference-04",
+    "category": "coreference",
+    "description": "Follow-up with no entity — falls back to workspace",
+    "input": {
+      "query": "Show me the balance sheet and highlight any red flags",
+      "workspace": { "ticker": "ABNB", "companyName": "Airbnb", "domain": "public_equity" },
+      "conversation_history": []
+    },
+    "expected": {
+      "primaryTicker": "ABNB",
+      "isValidQuery": true,
+      "useWorkspaceContext": true
+    }
+  },
+  {
+    "id": "coreference-05",
+    "category": "coreference",
+    "description": "Compare to peers — resolves from history",
+    "input": {
+      "query": "How does that compare to peers in the space?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" },
+      "conversation_history": [
+        { "role": "user", "content": "What is Apple's gross margin?" },
+        { "role": "assistant", "summary": "AAPL gross margin was 46.6% in FY2024, up 90bps YoY" }
+      ]
+    },
+    "expected": {
+      "primaryTicker": "AAPL",
+      "isValidQuery": true,
+      "useWorkspaceContext": false,
+      "needsPeerComparison": true
+    }
+  },
+  {
+    "id": "coreference-06",
+    "category": "coreference",
+    "description": "New entity overrides conversation history",
+    "input": {
+      "query": "Actually, switch to Amazon — what's their AWS margin trajectory?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" },
+      "conversation_history": [
+        { "role": "user", "content": "What is Apple's gross margin?" },
+        { "role": "assistant", "summary": "AAPL gross margin was 46.6%" }
+      ]
+    },
+    "expected": {
+      "primaryTicker": "AMZN",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "coreference-07",
+    "category": "coreference",
+    "description": "Implicit follow-up — same metric different period",
+    "input": {
+      "query": "What about the prior year? Was there a step-change?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" },
+      "conversation_history": [
+        { "role": "user", "content": "TSLA revenue for FY2024" },
+        { "role": "assistant", "summary": "TSLA revenue was $96.8B in FY2024" }
+      ]
+    },
+    "expected": {
+      "primaryTicker": "TSLA",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "coreference-08",
+    "category": "coreference",
+    "description": "Drill-down follow-up on segment",
+    "input": {
+      "query": "Can you break that down by segment?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" },
+      "conversation_history": [
+        { "role": "user", "content": "What's Microsoft's total revenue?" },
+        { "role": "assistant", "summary": "MSFT total revenue was $245B in FY2025" }
+      ]
+    },
+    "expected": {
+      "primaryTicker": "MSFT",
+      "intent": "SEGMENT_ANALYSIS",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "coreference-09",
+    "category": "coreference",
+    "description": "Why question follow-up",
+    "input": {
+      "query": "Why did it decline? Was it macro or company-specific?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" },
+      "conversation_history": [
+        { "role": "user", "content": "META's ad revenue growth last quarter" },
+        { "role": "assistant", "summary": "META ad revenue grew 18% YoY in Q3, decelerating from 22% in Q2" }
+      ]
+    },
+    "expected": {
+      "primaryTicker": "META",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "coreference-10",
+    "category": "coreference",
+    "description": "Thesis challenge follow-up",
+    "input": {
+      "query": "What could go wrong with this thesis?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" },
+      "conversation_history": [
+        { "role": "user", "content": "Make the bull case for NVDA" },
+        { "role": "assistant", "summary": "NVDA bull case: AI infrastructure spend accelerating, dominant market share, expanding TAM" }
+      ]
+    },
+    "expected": {
+      "primaryTicker": "NVDA",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "pe-deal-01",
+    "category": "pe_deal",
+    "description": "CIM customer concentration risk",
+    "input": {
+      "query": "What's the customer concentration in the CIM — top 10 clients as a percentage of revenue?",
+      "workspace": { "ticker": null, "domain": "private_equity", "dealName": "Project Falcon" },
+      "uploaded_documents": [
+        { "id": "doc_001", "name": "Project_Falcon_CIM.pdf", "type": "CIM", "entity": "TargetCo Inc." }
+      ]
+    },
+    "expected": {
+      "intent": "DEAL_ANALYSIS",
+      "domain": "private_equity",
+      "isValidQuery": true,
+      "useWorkspaceContext": false,
+      "entityType": "uploaded_entity"
+    }
+  },
+  {
+    "id": "pe-deal-02",
+    "category": "pe_deal",
+    "description": "Management depth assessment",
+    "input": {
+      "query": "Assess key person risk — is there a credible #2 and what's the management bench depth?",
+      "workspace": { "ticker": null, "domain": "private_equity", "dealName": "Project Falcon" },
+      "uploaded_documents": [
+        { "id": "doc_001", "name": "Project_Falcon_CIM.pdf", "type": "CIM", "entity": "TargetCo Inc." }
+      ]
+    },
+    "expected": {
+      "intent": "MANAGEMENT_ASSESSMENT",
+      "domain": "private_equity",
+      "isValidQuery": true,
+      "entityType": "uploaded_entity"
+    }
+  },
+  {
+    "id": "pe-deal-03",
+    "category": "pe_deal",
+    "description": "Quality of earnings from CIM",
+    "input": {
+      "query": "What are the EBITDA add-backs and how defensible are the pro forma adjustments?",
+      "workspace": { "ticker": null, "domain": "private_equity", "dealName": "Project Falcon" },
+      "uploaded_documents": [
+        { "id": "doc_001", "name": "Project_Falcon_CIM.pdf", "type": "CIM", "entity": "TargetCo Inc." }
+      ]
+    },
+    "expected": {
+      "intent": "DEAL_ANALYSIS",
+      "domain": "private_equity",
+      "isValidQuery": true,
+      "entityType": "uploaded_entity"
+    }
+  },
+  {
+    "id": "pe-deal-04",
+    "category": "pe_deal",
+    "description": "Revenue quality and recurring mix",
+    "input": {
+      "query": "What percentage of revenue is recurring vs project-based and how has retention trended?",
+      "workspace": { "ticker": null, "domain": "private_equity", "dealName": "Project Falcon" },
+      "uploaded_documents": [
+        { "id": "doc_001", "name": "Project_Falcon_CIM.pdf", "type": "CIM", "entity": "TargetCo Inc." }
+      ]
+    },
+    "expected": {
+      "domain": "private_equity",
+      "isValidQuery": true,
+      "entityType": "uploaded_entity"
+    }
+  },
+  {
+    "id": "pe-deal-05",
+    "category": "pe_deal",
+    "description": "TargetCo EBITDA margin",
+    "input": {
+      "query": "What's TargetCo's adjusted EBITDA margin and how does it compare to the sector median?",
+      "workspace": { "ticker": null, "domain": "private_equity", "dealName": "Project Falcon" },
+      "uploaded_documents": [
+        { "id": "doc_001", "name": "Project_Falcon_CIM.pdf", "type": "CIM", "entity": "TargetCo Inc." }
+      ]
+    },
+    "expected": {
+      "domain": "private_equity",
+      "isValidQuery": true,
+      "entityType": "uploaded_entity"
+    }
+  },
+  {
+    "id": "pe-deal-06",
+    "category": "pe_deal",
+    "description": "Working capital and cash conversion",
+    "input": {
+      "query": "What's the working capital profile — DSO, DPO, and any seasonality in cash conversion?",
+      "workspace": { "ticker": null, "domain": "private_equity", "dealName": "Project Falcon" },
+      "uploaded_documents": [
+        { "id": "doc_001", "name": "Project_Falcon_CIM.pdf", "type": "CIM", "entity": "TargetCo Inc." }
+      ]
+    },
+    "expected": {
+      "domain": "private_equity",
+      "isValidQuery": true,
+      "entityType": "uploaded_entity"
+    }
+  },
+  {
+    "id": "pe-deal-07",
+    "category": "pe_deal",
+    "description": "Capex requirements and maintenance vs growth",
+    "input": {
+      "query": "Break down capex into maintenance vs growth — what's the true free cash flow to equity?",
+      "workspace": { "ticker": null, "domain": "private_equity", "dealName": "Project Falcon" },
+      "uploaded_documents": [
+        { "id": "doc_001", "name": "Project_Falcon_CIM.pdf", "type": "CIM", "entity": "TargetCo Inc." }
+      ]
+    },
+    "expected": {
+      "domain": "private_equity",
+      "isValidQuery": true,
+      "entityType": "uploaded_entity"
+    }
+  },
+  {
+    "id": "pe-deal-08",
+    "category": "pe_deal",
+    "description": "Red flags in the CIM",
+    "input": {
+      "query": "Any red flags in the CIM — related party transactions, unusual accounting, or contingent liabilities?",
+      "workspace": { "ticker": null, "domain": "private_equity", "dealName": "Project Falcon" },
+      "uploaded_documents": [
+        { "id": "doc_001", "name": "Project_Falcon_CIM.pdf", "type": "CIM", "entity": "TargetCo Inc." }
+      ]
+    },
+    "expected": {
+      "intent": "RED_FLAG_DETECTION",
+      "domain": "private_equity",
+      "isValidQuery": true
+    }
+  },
+  {
+    "id": "pe-deal-09",
+    "category": "pe_deal",
+    "description": "Growth runway and TAM",
+    "input": {
+      "query": "What's the total addressable market and how much runway does the target have for organic growth?",
+      "workspace": { "ticker": null, "domain": "private_equity", "dealName": "Project Falcon" },
+      "uploaded_documents": [
+        { "id": "doc_001", "name": "Project_Falcon_CIM.pdf", "type": "CIM", "entity": "TargetCo Inc." }
+      ]
+    },
+    "expected": {
+      "domain": "private_equity",
+      "isValidQuery": true,
+      "entityType": "uploaded_entity"
+    }
+  },
+  {
+    "id": "pe-deal-10",
+    "category": "pe_deal",
+    "description": "IC memo generation",
+    "input": {
+      "query": "Generate an IC memo summarizing the investment thesis, key risks, and return profile",
+      "workspace": { "ticker": null, "domain": "private_equity", "dealName": "Project Falcon" },
+      "uploaded_documents": [
+        { "id": "doc_001", "name": "Project_Falcon_CIM.pdf", "type": "CIM", "entity": "TargetCo Inc." }
+      ]
+    },
+    "expected": {
+      "intent": "IC_MEMO_GENERATION",
+      "domain": "private_equity",
+      "isValidQuery": true
+    }
+  },
+  {
+    "id": "cross-domain-01",
+    "category": "cross_domain",
+    "description": "PE target vs public comps EBITDA margin",
+    "input": {
+      "query": "How does TargetCo's EBITDA margin stack up against AAPL and MSFT?",
+      "workspace": { "ticker": null, "domain": "private_equity", "dealName": "Project Falcon" },
+      "uploaded_documents": [
+        { "id": "doc_001", "name": "Project_Falcon_CIM.pdf", "type": "CIM", "entity": "TargetCo Inc." }
+      ]
+    },
+    "expected": {
+      "domain": "cross_domain",
+      "isValidQuery": true,
+      "needsPeerComparison": true,
+      "entityCount_gte": 2
+    }
+  },
+  {
+    "id": "cross-domain-02",
+    "category": "cross_domain",
+    "description": "PE target revenue growth vs public benchmark",
+    "input": {
+      "query": "Is the target's revenue growth rate above or below the public comp median?",
+      "workspace": { "ticker": null, "domain": "private_equity", "dealName": "Project Falcon" },
+      "uploaded_documents": [
+        { "id": "doc_001", "name": "Project_Falcon_CIM.pdf", "type": "CIM", "entity": "TargetCo Inc." }
+      ]
+    },
+    "expected": {
+      "intent": "DEAL_COMPARISON",
+      "isValidQuery": true,
+      "entityCount_gte": 1
+    }
+  },
+  {
+    "id": "cross-domain-03",
+    "category": "cross_domain",
+    "description": "Public company in PE workspace",
+    "input": {
+      "query": "Pull up AAPL's latest revenue and margin — I want to use it as a comp",
+      "workspace": { "ticker": null, "domain": "private_equity", "dealName": "Project Falcon" },
+      "uploaded_documents": [
+        { "id": "doc_001", "name": "Project_Falcon_CIM.pdf", "type": "CIM", "entity": "TargetCo Inc." }
+      ]
+    },
+    "expected": {
+      "primaryTicker": "AAPL",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "cross-domain-04",
+    "category": "cross_domain",
+    "description": "PE target valuation vs precedent transactions",
+    "input": {
+      "query": "How does the implied EV/EBITDA for TargetCo compare to recent precedent transactions in the space?",
+      "workspace": { "ticker": null, "domain": "private_equity", "dealName": "Project Falcon" },
+      "uploaded_documents": [
+        { "id": "doc_001", "name": "Project_Falcon_CIM.pdf", "type": "CIM", "entity": "TargetCo Inc." }
+      ]
+    },
+    "expected": {
+      "intent": "DEAL_COMPARISON",
+      "isValidQuery": true
+    }
+  },
+  {
+    "id": "cross-domain-05",
+    "category": "cross_domain",
+    "description": "PE target growth vs public SaaS benchmarks",
+    "input": {
+      "query": "Benchmark TargetCo's Rule of 40 against CRM, NOW, and WDAY",
+      "workspace": { "ticker": null, "domain": "private_equity", "dealName": "Project Falcon" },
+      "uploaded_documents": [
+        { "id": "doc_001", "name": "Project_Falcon_CIM.pdf", "type": "CIM", "entity": "TargetCo Inc." }
+      ]
+    },
+    "expected": {
+      "domain": "cross_domain",
+      "isValidQuery": true,
+      "needsPeerComparison": true,
+      "entityCount_gte": 2
+    }
+  },
+  {
+    "id": "multi-part-01",
+    "category": "multi_part",
+    "description": "Three-part: current + trend + comparison",
+    "input": {
+      "query": "What's NVDA's cash position, how has it changed over 5 years, and how does it compare to AMD's?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "NVDA",
+      "isValidQuery": true,
+      "useWorkspaceContext": false,
+      "hasSubQueries": true
+    }
+  },
+  {
+    "id": "multi-part-02",
+    "category": "multi_part",
+    "description": "Revenue and margin comparison across peers",
+    "input": {
+      "query": "Compare AAPL, MSFT, and GOOGL on revenue growth, operating margins, and FCF yield",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "isValidQuery": true,
+      "useWorkspaceContext": false,
+      "entityCount_gte": 2,
+      "needsPeerComparison": true
+    }
+  },
+  {
+    "id": "multi-part-03",
+    "category": "multi_part",
+    "description": "Trend plus causal explanation",
+    "input": {
+      "query": "Show me TSLA's gross margin trend over 3 years and explain what drove the compression — was it pricing, mix, or input costs?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "TSLA",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "multi-part-04",
+    "category": "multi_part",
+    "description": "Segment + margin + guidance",
+    "input": {
+      "query": "Break down AMZN's revenue by segment, show the margin for each, and what did management guide for next quarter?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "AMZN",
+      "isValidQuery": true,
+      "useWorkspaceContext": false,
+      "complexity": "multi_part",
+      "hasSubQueries": true
+    }
+  },
+  {
+    "id": "multi-part-05",
+    "category": "multi_part",
+    "description": "Balance sheet + cash flow + capital return",
+    "input": {
+      "query": "What's AAPL's net cash position, how much FCF did they generate, and how much went to buybacks vs dividends?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "AAPL",
+      "isValidQuery": true,
+      "useWorkspaceContext": false,
+      "complexity": "multi_part",
+      "hasSubQueries": true
+    }
+  },
+  {
+    "id": "gibberish-01",
+    "category": "gibberish",
+    "description": "Random characters",
+    "input": {
+      "query": "asdfghjkl",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "intent": "INVALID",
+      "isValidQuery": false
+    }
+  },
+  {
+    "id": "gibberish-02",
+    "category": "gibberish",
+    "description": "Keyboard mashing",
+    "input": {
+      "query": "qwertyuiop",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "intent": "INVALID",
+      "isValidQuery": false
+    }
+  },
+  {
+    "id": "gibberish-03",
+    "category": "gibberish",
+    "description": "Single character",
+    "input": {
+      "query": "a",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "intent": "INVALID",
+      "isValidQuery": false
+    }
+  },
+  {
+    "id": "gibberish-04",
+    "category": "gibberish",
+    "description": "Numbers only",
+    "input": {
+      "query": "123456",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "intent": "INVALID",
+      "isValidQuery": false
+    }
+  },
+  {
+    "id": "gibberish-05",
+    "category": "gibberish",
+    "description": "Special characters only",
+    "input": {
+      "query": "!!!???###",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "intent": "INVALID",
+      "isValidQuery": false
+    }
+  },
+  {
+    "id": "ambiguous-01",
+    "category": "ambiguous",
+    "description": "Very vague — defaults to workspace",
+    "input": {
+      "query": "Tell me about the company",
+      "workspace": { "ticker": "ABNB", "companyName": "Airbnb", "domain": "public_equity" }
+    },
+    "expected": {
+      "isValidQuery": true,
+      "primaryTicker": "ABNB",
+      "useWorkspaceContext": true
+    }
+  },
+  {
+    "id": "ambiguous-02",
+    "category": "ambiguous",
+    "description": "Open-ended research question",
+    "input": {
+      "query": "What should I be focused on here?",
+      "workspace": { "ticker": "TSLA", "companyName": "Tesla", "domain": "public_equity" }
+    },
+    "expected": {
+      "isValidQuery": true,
+      "primaryTicker": "TSLA",
+      "useWorkspaceContext": true
+    }
+  },
+  {
+    "id": "ambiguous-03",
+    "category": "ambiguous",
+    "description": "Short abbreviation — interpretable",
+    "input": {
+      "query": "rev",
+      "workspace": { "ticker": "ABNB", "companyName": "Airbnb", "domain": "public_equity" }
+    },
+    "expected": {
+      "isValidQuery": true,
+      "primaryTicker": "ABNB",
+      "useWorkspaceContext": true
+    }
+  },
+  {
+    "id": "ambiguous-04",
+    "category": "ambiguous",
+    "description": "Typo but clear intent",
+    "input": {
+      "query": "Appel revnue and margns",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "primaryTicker": "AAPL",
+      "isValidQuery": true,
+      "useWorkspaceContext": false
+    }
+  },
+  {
+    "id": "ambiguous-05",
+    "category": "ambiguous",
+    "description": "Abbreviated metric — FCF",
+    "input": {
+      "query": "fcf",
+      "workspace": { "ticker": "ABNB", "companyName": "Airbnb", "domain": "public_equity" }
+    },
+    "expected": {
+      "isValidQuery": true,
+      "primaryTicker": "ABNB",
+      "useWorkspaceContext": true
+    }
+  },
+  {
+    "id": "intent-metric-lookup-01",
+    "category": "intent_classification",
+    "description": "Simple metric lookup — net income",
+    "input": {
+      "query": "What was AAPL's net income last fiscal year?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "intent": "METRIC_LOOKUP",
+      "isValidQuery": true,
+      "primaryTicker": "AAPL"
+    }
+  },
+  {
+    "id": "intent-metric-trend-01",
+    "category": "intent_classification",
+    "description": "Metric trend — revenue CAGR",
+    "input": {
+      "query": "What's TSLA's revenue CAGR over the last 5 years?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "intent": "METRIC_TREND",
+      "isValidQuery": true,
+      "primaryTicker": "TSLA"
+    }
+  },
+  {
+    "id": "intent-comparison-01",
+    "category": "intent_classification",
+    "description": "Metric comparison — margins across peers",
+    "input": {
+      "query": "Compare AAPL and MSFT gross margins and operating leverage",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "intent": "METRIC_COMPARISON",
+      "isValidQuery": true,
+      "needsPeerComparison": true,
+      "entityCount_gte": 2
+    }
+  },
+  {
+    "id": "intent-narrative-01",
+    "category": "intent_classification",
+    "description": "Narrative search — management commentary",
+    "input": {
+      "query": "What did Jensen Huang say about sovereign AI demand on the last earnings call?",
+      "workspace": { "ticker": "NVDA", "companyName": "NVIDIA", "domain": "public_equity" }
+    },
+    "expected": {
+      "intent": "NARRATIVE_SEARCH",
+      "isValidQuery": true,
+      "primaryTicker": "NVDA"
+    }
+  },
+  {
+    "id": "intent-hybrid-01",
+    "category": "intent_classification",
+    "description": "Hybrid analysis — why did margins decline",
+    "input": {
+      "query": "Why did AAPL's gross margin compress in the September quarter — was it product mix or component costs?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "isValidQuery": true,
+      "primaryTicker": "AAPL"
+    }
+  },
+  {
+    "id": "intent-segment-01",
+    "category": "intent_classification",
+    "description": "Segment analysis — revenue by business line",
+    "input": {
+      "query": "Break down AMZN's revenue by segment — North America, International, and AWS — with operating margins for each",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "intent": "SEGMENT_ANALYSIS",
+      "isValidQuery": true,
+      "primaryTicker": "AMZN"
+    }
+  },
+  {
+    "id": "intent-red-flag-01",
+    "category": "intent_classification",
+    "description": "Red flag detection — accounting quality",
+    "input": {
+      "query": "Any accounting red flags — unusual accruals, revenue recognition changes, or off-balance sheet items?",
+      "workspace": { "ticker": "ABNB", "companyName": "Airbnb", "domain": "public_equity" }
+    },
+    "expected": {
+      "intent": "RED_FLAG_DETECTION",
+      "isValidQuery": true,
+      "primaryTicker": "ABNB"
+    }
+  },
+  {
+    "id": "intent-provocation-01",
+    "category": "intent_classification",
+    "description": "Provocation — thesis challenge",
+    "input": {
+      "query": "What's the bear case for TSLA — what could structurally impair the growth story?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "isValidQuery": true,
+      "primaryTicker": "TSLA"
+    }
+  },
+  {
+    "id": "intent-uploaded-doc-01",
+    "category": "intent_classification",
+    "description": "Uploaded document query — analyst report",
+    "input": {
+      "query": "What price target does the analyst set and what's the key driver of the upgrade?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" },
+      "uploaded_documents": [
+        { "id": "doc_001", "name": "AAPL_GS_Initiation.pdf", "type": "analyst_report", "entity": "Apple Inc.", "ticker": "AAPL" }
+      ]
+    },
+    "expected": {
+      "isValidQuery": true
+    }
+  },
+  {
+    "id": "intent-peer-screen-01",
+    "category": "intent_classification",
+    "description": "Peer screening — FCF yield filter",
+    "input": {
+      "query": "Which mega-cap tech names have an FCF yield above 4% and are growing revenue double-digits?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "intent": "PEER_SCREENING",
+      "isValidQuery": true,
+      "needsPeerComparison": true
+    }
+  },
+  {
+    "id": "temporal-latest-01",
+    "category": "temporal",
+    "description": "Latest period implied",
+    "input": {
+      "query": "What's AAPL's current gross margin?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "isValidQuery": true,
+      "primaryTicker": "AAPL",
+      "temporalType": "latest"
+    }
+  },
+  {
+    "id": "temporal-range-01",
+    "category": "temporal",
+    "description": "5-year range",
+    "input": {
+      "query": "Show me MSFT's revenue trajectory over the last 5 fiscal years",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "isValidQuery": true,
+      "primaryTicker": "MSFT",
+      "temporalType": "range"
+    }
+  },
+  {
+    "id": "temporal-specific-01",
+    "category": "temporal",
+    "description": "Specific fiscal year",
+    "input": {
+      "query": "What was AAPL's services revenue in FY2023?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "isValidQuery": true,
+      "primaryTicker": "AAPL",
+      "temporalType": "specific_period"
+    }
+  },
+  {
+    "id": "temporal-trailing-01",
+    "category": "temporal",
+    "description": "TTM / trailing twelve months",
+    "input": {
+      "query": "What's TSLA's TTM free cash flow and how does it compare to the prior TTM?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "isValidQuery": true,
+      "primaryTicker": "TSLA"
+    }
+  },
+  {
+    "id": "temporal-quarter-01",
+    "category": "temporal",
+    "description": "Specific quarter",
+    "input": {
+      "query": "NVDA's data center revenue in the January quarter — Q4 FY2025",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "expected": {
+      "isValidQuery": true,
+      "primaryTicker": "NVDA",
+      "temporalType": "specific_period"
+    }
+  }
+]

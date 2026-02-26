@@ -836,6 +836,7 @@ Now generate your investment-grade analysis.`;
    * Format metric value for display
    */
   private formatMetricValue(value: number, metric: string): string {
+    if (value === null || value === undefined) return String(value ?? 'N/A');
     // Percentages
     if (metric.includes('margin') || metric.includes('pct')) {
       return `${value.toFixed(2)}%`;

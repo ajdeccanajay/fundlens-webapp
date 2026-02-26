@@ -358,32 +358,17 @@ export class PerformanceOptimizerService {
     this.logger.log(`   metrics.length: ${metrics.length}`);
     this.logger.log(`   narratives.length: ${narratives.length}`);
     
-    // Don't use LLM for simple metric lookups — but DO use LLM for comparisons
-    if (intent.type === 'structured' && metrics.length > 0 && !intent.needsNarrative && !intent.needsComparison) {
-      this.logger.log(`   ❌ Skipping LLM: simple structured lookup`);
-      return false;
-    }
-    
     // Don't use LLM if no data found
     if (metrics.length === 0 && narratives.length === 0) {
       this.logger.log(`   ❌ Skipping LLM: no data found`);
       return false;
     }
     
-    // Use LLM for hybrid and semantic queries
-    if (intent.type === 'hybrid' || intent.type === 'semantic') {
-      this.logger.log(`   ✅ Using LLM: ${intent.type} query`);
-      return true;
-    }
-    
-    // Use LLM if narrative explanation needed
-    if (intent.needsNarrative || intent.needsComputation || intent.needsComparison) {
-      this.logger.log(`   ✅ Using LLM: narrative/computation/comparison needed`);
-      return true;
-    }
-    
-    this.logger.log(`   ❌ Skipping LLM: default case`);
-    return false;
+    // Always use LLM when we have data — equity analysts expect analytical
+    // commentary, not just raw tables. The synthesis prompt handles brevity
+    // for simple queries via the 400-word limit.
+    this.logger.log(`   ✅ Using LLM: data available (${metrics.length} metrics, ${narratives.length} narratives)`);
+    return true;
   }
   
   /**

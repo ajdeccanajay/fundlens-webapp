@@ -68,28 +68,22 @@ export class StructuredRetrieverService {
     }
 
     if (resolvedMetrics.length > 0) {
-      // Use MetricRegistry synonyms for each resolved metric (single source of truth)
-      const metricConditions: any[] = [];
-      
+      // Collect all synonyms across all resolved metrics into one flat list for a single IN query
+      const allSynonyms: string[] = [];
       for (const resolution of resolvedMetrics) {
-        // Get all synonyms from MetricRegistry for this canonical metric
         const synonyms = this.metricRegistry.getSynonymsForDbColumn(resolution.canonical_id);
-        for (const syn of synonyms) {
-          metricConditions.push({
-            normalizedMetric: { equals: syn, mode: 'insensitive' as const }
-          });
-        }
+        allSynonyms.push(...synonyms);
       }
       
-      if (metricConditions.length > 0) {
-        where.OR = metricConditions;
+      if (allSynonyms.length > 0) {
+        where.normalizedMetric = { in: allSynonyms, mode: 'insensitive' as const };
       }
       
       // DEBUG: Log the query conditions
       this.logger.log(`🔍 STRUCTURED RETRIEVER: Metric Query Conditions:`);
       this.logger.log(`   Searching for metrics: ${JSON.stringify(resolvedMetrics.map(m => m.canonical_id))}`);
-      this.logger.log(`   Generated ${metricConditions.length} OR conditions`);
-      this.logger.log(`   Sample condition: ${JSON.stringify(metricConditions[0])}`);
+      this.logger.log(`   Total synonyms in IN clause: ${allSynonyms.length}`);
+      this.logger.log(`   Sample synonyms: ${JSON.stringify(allSynonyms.slice(0, 5))}`);
       
       if (query.metrics.length !== resolvedMetrics.length) {
         const unresolvedCount = query.metrics.length - resolvedMetrics.length;
@@ -645,17 +639,13 @@ export class StructuredRetrieverService {
     for (const metric of metrics) {
       const values: any[] = [];
 
-      // Try multiple case variations
-      const metricVariations = [
-        metric.toLowerCase(),
-        metric.charAt(0).toUpperCase() + metric.slice(1).toLowerCase(),
-        metric.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join('_'),
-      ];
+      // Use MetricRegistry synonyms (single source of truth) instead of manual case variations
+      const synonyms = this.metricRegistry.getSynonymsForDbColumn(metric);
 
       for (const ticker of tickers) {
         const where: any = {
           ticker,
-          normalizedMetric: { in: metricVariations },
+          normalizedMetric: { in: synonyms, mode: 'insensitive' as const },
         };
 
         if (period) {
@@ -709,16 +699,12 @@ export class StructuredRetrieverService {
   }> {
     this.logger.log(`Getting time series for ${ticker} ${metric}`);
 
-    // Try multiple case variations
-    const metricVariations = [
-      metric.toLowerCase(),
-      metric.charAt(0).toUpperCase() + metric.slice(1).toLowerCase(),
-      metric.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join('_'),
-    ];
+    // Use MetricRegistry synonyms (single source of truth) instead of manual case variations
+    const synonyms = this.metricRegistry.getSynonymsForDbColumn(metric);
 
     const where: any = {
       ticker,
-      normalizedMetric: { in: metricVariations },
+      normalizedMetric: { in: synonyms, mode: 'insensitive' as const },
     };
 
     if (filingType) {

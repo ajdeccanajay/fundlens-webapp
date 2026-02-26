@@ -118,13 +118,14 @@ export class DocumentIndexingService {
   /**
    * Vector similarity search across uploaded document chunks.
    * Spec §7.1 Source 2: OpenSearch ephemeral (we use pgvector equivalent).
-   * Tenant-scoped, deal-filtered.
+   * Tenant-scoped (cross-deal) — searches ALL uploaded docs for the tenant.
+   * Optionally filters by companyTicker if provided.
    */
   async searchChunks(
     query: string,
     tenantId: string,
     dealId: string,
-    options: { topK?: number; minScore?: number } = {},
+    options: { topK?: number; minScore?: number; companyTicker?: string } = {},
   ): Promise<VectorSearchResult[]> {
     const topK = options.topK || 10;
     const minScore = options.minScore || 0.5;
@@ -133,36 +134,59 @@ export class DocumentIndexingService {
       const queryEmbedding = await this.bedrock.generateEmbedding(query);
       const embeddingStr = `[${queryEmbedding.join(',')}]`;
 
-      const results = await this.prisma.$queryRawUnsafe<any[]>(
-        `
-        SELECT
-          c.id,
-          c.document_id AS "documentId",
-          c.content,
-          c.section_type AS "sectionType",
-          c.page_number AS "pageNumber",
-          d.file_name AS "fileName",
-          d.document_type AS "documentType",
-          d.company_ticker AS "companyTicker",
-          1 - (c.embedding <=> $1::vector) AS score
-        FROM intel_document_chunks c
-        JOIN intel_documents d ON c.document_id = d.document_id
-        WHERE c.tenant_id = $2::uuid
-          AND c.deal_id = $3::uuid
-          AND c.embedding IS NOT NULL
-        ORDER BY c.embedding <=> $1::vector
-        LIMIT $4
-        `,
-        embeddingStr,
-        tenantId,
-        dealId,
-        topK,
-      );
+      // Tenant-scoped search (cross-deal) — finds docs uploaded under ANY deal
+      // Optionally filter by company_ticker on intel_documents if provided
+      let sql: string;
+      let params: any[];
 
+      if (options.companyTicker) {
+        sql = `
+          SELECT
+            c.id,
+            c.document_id AS "documentId",
+            c.content,
+            c.section_type AS "sectionType",
+            c.page_number AS "pageNumber",
+            d.file_name AS "fileName",
+            d.document_type AS "documentType",
+            d.company_ticker AS "companyTicker",
+            1 - (c.embedding <=> $1::vector) AS score
+          FROM intel_document_chunks c
+          JOIN intel_documents d ON c.document_id = d.document_id
+          WHERE c.tenant_id = $2::uuid
+            AND UPPER(d.company_ticker) = UPPER($3)
+            AND c.embedding IS NOT NULL
+          ORDER BY c.embedding <=> $1::vector
+          LIMIT $4
+        `;
+        params = [embeddingStr, tenantId, options.companyTicker, topK];
+      } else {
+        sql = `
+          SELECT
+            c.id,
+            c.document_id AS "documentId",
+            c.content,
+            c.section_type AS "sectionType",
+            c.page_number AS "pageNumber",
+            d.file_name AS "fileName",
+            d.document_type AS "documentType",
+            d.company_ticker AS "companyTicker",
+            1 - (c.embedding <=> $1::vector) AS score
+          FROM intel_document_chunks c
+          JOIN intel_documents d ON c.document_id = d.document_id
+          WHERE c.tenant_id = $2::uuid
+            AND c.embedding IS NOT NULL
+          ORDER BY c.embedding <=> $1::vector
+          LIMIT $3
+        `;
+        params = [embeddingStr, tenantId, topK];
+      }
+
+      const results = await this.prisma.$queryRawUnsafe<any[]>(sql, ...params);
       const filtered = results.filter(r => r.score >= minScore);
 
       this.logger.log(
-        `Vector search: ${filtered.length} chunks above ${minScore} threshold (top score: ${filtered[0]?.score?.toFixed(3) || 'N/A'})`,
+        `Vector search (tenant-scoped${options.companyTicker ? `, ticker=${options.companyTicker}` : ''}): ${filtered.length} chunks above ${minScore} threshold (top score: ${filtered[0]?.score?.toFixed(3) || 'N/A'})`,
       );
 
       return filtered;
@@ -175,43 +199,70 @@ export class DocumentIndexingService {
   /**
    * Query extracted metrics from intel_document_extractions.
    * Spec §7.1 Source 1: Deterministic metric lookup (< 50ms).
+   * Tenant-scoped (cross-deal) — searches ALL uploaded docs for the tenant.
+   * Optionally filters by companyTicker if provided.
    */
   async queryMetrics(
     metricKeys: string[],
     tenantId: string,
     dealId: string,
+    options: { companyTicker?: string } = {},
   ): Promise<any[]> {
     if (metricKeys.length === 0) return [];
 
     try {
-      // Use JSONB query to find metrics by metric_key
-      const results = await this.prisma.$queryRawUnsafe<any[]>(
-        `
-        SELECT
-          e.id,
-          e.document_id AS "documentId",
-          e.data,
-          e.confidence,
-          e.verified,
-          e.page_number AS "pageNumber",
-          d.file_name AS "fileName",
-          d.document_type AS "documentType",
-          d.company_ticker AS "companyTicker"
-        FROM intel_document_extractions e
-        JOIN intel_documents d ON e.document_id = d.document_id
-        WHERE e.tenant_id = $1::uuid
-          AND e.deal_id = $2::uuid
-          AND e.extraction_type IN ('metric', 'headline')
-          AND e.data->>'metric_key' = ANY($3::text[])
-        ORDER BY e.confidence DESC
-        `,
-        tenantId,
-        dealId,
-        metricKeys,
-      );
+      // Tenant-scoped search (cross-deal) — finds extractions from ANY deal
+      // Optionally filter by company_ticker on intel_documents if provided
+      let sql: string;
+      let params: any[];
+
+      if (options.companyTicker) {
+        sql = `
+          SELECT
+            e.id,
+            e.document_id AS "documentId",
+            e.data,
+            e.confidence,
+            e.verified,
+            e.page_number AS "pageNumber",
+            d.file_name AS "fileName",
+            d.document_type AS "documentType",
+            d.company_ticker AS "companyTicker"
+          FROM intel_document_extractions e
+          JOIN intel_documents d ON e.document_id = d.document_id
+          WHERE e.tenant_id = $1::uuid
+            AND UPPER(d.company_ticker) = UPPER($2)
+            AND e.extraction_type IN ('metric', 'headline')
+            AND e.data->>'metric_key' = ANY($3::text[])
+          ORDER BY e.confidence DESC
+        `;
+        params = [tenantId, options.companyTicker, metricKeys];
+      } else {
+        sql = `
+          SELECT
+            e.id,
+            e.document_id AS "documentId",
+            e.data,
+            e.confidence,
+            e.verified,
+            e.page_number AS "pageNumber",
+            d.file_name AS "fileName",
+            d.document_type AS "documentType",
+            d.company_ticker AS "companyTicker"
+          FROM intel_document_extractions e
+          JOIN intel_documents d ON e.document_id = d.document_id
+          WHERE e.tenant_id = $1::uuid
+            AND e.extraction_type IN ('metric', 'headline')
+            AND e.data->>'metric_key' = ANY($2::text[])
+          ORDER BY e.confidence DESC
+        `;
+        params = [tenantId, metricKeys];
+      }
+
+      const results = await this.prisma.$queryRawUnsafe<any[]>(sql, ...params);
 
       this.logger.log(
-        `Metric lookup: found ${results.length} metrics for keys [${metricKeys.join(', ')}]`,
+        `Metric lookup (tenant-scoped${options.companyTicker ? `, ticker=${options.companyTicker}` : ''}): found ${results.length} metrics for keys [${metricKeys.join(', ')}]`,
       );
 
       return results.map(r => ({

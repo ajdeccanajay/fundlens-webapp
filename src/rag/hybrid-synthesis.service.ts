@@ -43,6 +43,7 @@ export interface FinancialAnalysisContext {
   metrics: MetricResult[];
   narratives: ChunkResult[];
   computedResults: ComputedMetricResult[];
+  computedSummary?: any;
   peerData?: PeerComparisonResult;
   subQueryResults?: SubQueryResult[];
   unifyingInstruction?: string;
@@ -194,15 +195,27 @@ export class HybridSynthesisService {
         'You are a senior equity research analyst at a top-tier investment bank.',
         'Write a concise, investment-grade research note answering the query below.',
         'Use ONLY the data provided. Do NOT fabricate numbers.',
+        'If the provided data does not directly address the query, synthesize the MOST RELEVANT information you have and note what specific data is missing. NEVER respond with "Query Mismatch" or "No data available" — always provide value from whatever data IS available.',
+        '',
+        'CRITICAL CALCULATION RULES:',
+        '- NEVER calculate, derive, estimate, or project any financial metrics yourself.',
+        '- NEVER create forward estimates (e.g., "FY2025E") or projected values.',
+        '- For margins, ratios, and derived metrics: use ONLY the values from the COMPUTED FINANCIAL METRICS section below. These were calculated by a deterministic engine and are authoritative.',
+        '- If a margin or ratio is not in the COMPUTED FINANCIAL METRICS section, state that it is not available — do NOT attempt to calculate it from raw numbers.',
+        '- Report only actual historical data from the provided sources. Do not extrapolate trends.',
         '',
         'FORMATTING RULES:',
+        '- Use markdown ## headings for each major section (e.g., ## Executive Summary, ## Revenue Analysis).',
+        '- Always put a blank line before and after each heading.',
         '- Write in natural prose with markdown formatting (bold, tables, bullet points).',
         '- Do NOT use labels like "Step 1", "Step 2", or any numbered scaffolding.',
-        '- Start with a brief executive summary (1-2 sentences).',
+        '- Do NOT use **Bold Text:** as inline section headers — always use ## Heading on its own line.',
+        '- Start with a brief executive summary (1-2 sentences) under ## Executive Summary.',
         '- Present key figures in a comparison table when multiple tickers are involved.',
         '- Follow with analytical commentary: what the numbers mean, key differences, and implications.',
-        '- End with a sharp, thought-provoking question for an investment committee.',
-        '- Keep the total response under 400 words.',
+        '- End with a sharp, thought-provoking question under ## Investment Committee Challenge.',
+        '- Keep the total response under 500 words.',
+        '- Do NOT describe or narrate any charts — if a chart is generated, it will be rendered separately.',
         '',
         `QUERY: ${ctx.originalQuery}`,
         '',
@@ -214,10 +227,67 @@ export class HybridSynthesisService {
         sections.push('=== QUANTITATIVE DATA (ground truth) ===', metricsTable, '');
       }
 
-      // ── Narrative data (Req 8.4) ─────────────────────────────────
-      const narrativeBlock = this.formatNarratives(ctx.narratives);
-      if (narrativeBlock) {
-        sections.push('=== NARRATIVE CONTEXT ===', narrativeBlock, '');
+      // ── Computed summary from FinancialCalculatorService ──────────
+      if (ctx.computedSummary) {
+        const summaries = Array.isArray(ctx.computedSummary) ? ctx.computedSummary : [ctx.computedSummary];
+        const computedLines: string[] = [];
+        for (const s of summaries) {
+          if (s?.ticker && s?.metrics) {
+            const ticker = s.ticker.toUpperCase();
+            computedLines.push(`${ticker}:`);
+            const prof = s.metrics.profitability;
+            if (prof) {
+              if (prof.grossMargin?.ttm != null) computedLines.push(`  • Gross Margin (TTM): ${(prof.grossMargin.ttm * 100).toFixed(1)}%`);
+              if (prof.operatingMargin?.ttm != null) computedLines.push(`  • Operating Margin (TTM): ${(prof.operatingMargin.ttm * 100).toFixed(1)}%`);
+              if (prof.netMargin?.ttm != null) computedLines.push(`  • Net Margin (TTM): ${(prof.netMargin.ttm * 100).toFixed(1)}%`);
+              if (prof.ebitdaMargin?.ttm != null) computedLines.push(`  • EBITDA Margin (TTM): ${(prof.ebitdaMargin.ttm * 100).toFixed(1)}%`);
+              if (prof.grossProfit?.ttm != null) computedLines.push(`  • Gross Profit (TTM): ${this.formatValue(prof.grossProfit.ttm, 'gross_profit')}`);
+              if (prof.operatingIncome?.ttm != null) computedLines.push(`  • Operating Income (TTM): ${this.formatValue(prof.operatingIncome.ttm, 'operating_income')}`);
+              if (prof.netIncome?.ttm != null) computedLines.push(`  • Net Income (TTM): ${this.formatValue(prof.netIncome.ttm, 'net_income')}`);
+            }
+            const rev = s.metrics.revenue;
+            if (rev?.ttm != null) computedLines.push(`  • Revenue (TTM): ${this.formatValue(rev.ttm, 'revenue')}`);
+            if (rev?.cagr != null) computedLines.push(`  • Revenue CAGR: ${this.formatValue(rev.cagr, 'cagr')}`);
+          }
+        }
+        if (computedLines.length > 0) {
+          sections.push('=== COMPUTED FINANCIAL METRICS (authoritative — use these values, do NOT recalculate) ===', computedLines.join('\n'), '');
+        }
+      }
+
+      // ── Separate uploaded doc narratives from SEC narratives ──────
+      const uploadedDocNarratives = (ctx.narratives || []).filter(
+        n => n.metadata?.filingType === 'uploaded-document' || n.metadata?.sectionType === 'uploaded-document',
+      );
+      const secNarratives = (ctx.narratives || []).filter(
+        n => n.metadata?.filingType !== 'uploaded-document' && n.metadata?.sectionType !== 'uploaded-document',
+      );
+
+      // Format ALL narratives with continuous [N] numbering matching ctx.narratives order
+      // (extractCitations maps [N] → ctx.narratives[N-1], so numbering must match)
+      const allNarrativeBlock = this.formatNarratives(ctx.narratives);
+
+      if (uploadedDocNarratives.length > 0 && secNarratives.length > 0) {
+        // Both sources present — add guidance about uploaded docs being primary
+        sections.push(
+          '=== UPLOADED DOCUMENT DATA (analyst reports, user-provided) ===',
+          'IMPORTANT: Some of the narrative sources below come from documents uploaded by the analyst. These are PRIMARY, authoritative evidence. If they contain metric values (margins, revenue, etc.), use them directly and cite them.',
+          '',
+        );
+        sections.push('=== ALL NARRATIVE SOURCES ===', allNarrativeBlock!, '');
+      } else if (uploadedDocNarratives.length > 0) {
+        sections.push(
+          '=== UPLOADED DOCUMENT DATA (analyst reports, user-provided) ===',
+          'IMPORTANT: This data comes from documents uploaded by the analyst. Treat it as PRIMARY, authoritative evidence.',
+          allNarrativeBlock!,
+          '',
+        );
+      } else if (allNarrativeBlock) {
+        sections.push('=== NARRATIVE CONTEXT ===', allNarrativeBlock, '');
+      }
+
+      // Citation rule applies to all narrative sources
+      if (allNarrativeBlock) {
         sections.push(
           'CITATION RULE: Reference narrative sources using [1], [2], etc. notation corresponding to the numbered sources above. Every claim derived from narrative context MUST include a citation marker.'
         );
@@ -286,14 +356,25 @@ export class HybridSynthesisService {
         'The following query was decomposed into sub-queries that have been answered independently.',
         'Unify these answers into a single, polished research note.',
         '',
+        'CRITICAL CALCULATION RULES:',
+        '- NEVER calculate, derive, estimate, or project any financial metrics yourself.',
+        '- NEVER create forward estimates (e.g., "FY2025E") or projected values.',
+        '- For margins, ratios, and derived metrics: use ONLY the values from the COMPUTED FINANCIAL METRICS section below. These were calculated by a deterministic engine and are authoritative.',
+        '- If a margin or ratio is not in the COMPUTED FINANCIAL METRICS section, state that it is not available — do NOT attempt to calculate it from raw numbers.',
+        '- Report only actual historical data from the provided sources. Do not extrapolate trends.',
+        '',
         'FORMATTING RULES:',
+        '- Use markdown ## headings for each major section (e.g., ## Executive Summary, ## Revenue Analysis).',
+        '- Always put a blank line before and after each heading.',
         '- Write in natural prose with markdown formatting (bold, tables, bullet points).',
         '- Do NOT use labels like "Step 1", "Step 2", or any numbered scaffolding.',
-        '- Start with a brief executive summary (1-2 sentences).',
+        '- Do NOT use **Bold Text:** as inline section headers — always use ## Heading on its own line.',
+        '- Start with a brief executive summary (1-2 sentences) under ## Executive Summary.',
         '- Present key figures in a comparison table when multiple tickers are involved.',
         '- Follow with analytical commentary synthesizing all sub-query findings.',
-        '- End with a sharp, thought-provoking question for an investment committee.',
+        '- End with a sharp, thought-provoking question under ## Investment Committee Challenge.',
         '- Keep the total response under 500 words.',
+        '- Do NOT describe or narrate any charts — if a chart is generated, it will be rendered separately.',
         '',
         `ORIGINAL QUERY: ${ctx.originalQuery}`,
         '',
@@ -389,7 +470,8 @@ export class HybridSynthesisService {
 
       for (const m of metrics) {
         const label = m.displayName || this.formatMetricLabel(m.normalizedMetric);
-        const value = this.formatValue(m.value, m.normalizedMetric);
+        // Use rawValue for non-numeric metrics (e.g. rating: "Buy"), fall back to formatValue
+        const value = (m as any).rawValue || this.formatValue(m.value, m.normalizedMetric);
         rows.push(
           `| ${m.ticker.toUpperCase()} | ${label} | ${m.fiscalPeriod} | ${value} | ${m.filingType} |`,
         );
@@ -676,9 +758,18 @@ export class HybridSynthesisService {
 
   /** Format a numeric value with appropriate precision */
   private formatValue(value: number, metricId: string): string {
+    if (value == null || typeof value !== 'number' || isNaN(value)) return String(value ?? 'N/A');
     const lower = metricId.toLowerCase();
-    if (/margin|rate|ratio|growth|pct/.test(lower)) {
-      return `${value.toFixed(2)}%`;
+    if (/margin|rate|ratio|pct/.test(lower)) {
+      // Margins/rates from MetricsSummary are stored as decimals (0.48 = 48%)
+      // Values < 1 are decimals that need *100; values >= 1 are already percentages
+      const pctValue = Math.abs(value) < 1 ? value * 100 : value;
+      return `${pctValue.toFixed(1)}%`;
+    }
+    if (/growth|cagr/.test(lower)) {
+      // Growth rates: same decimal convention
+      const pctValue = Math.abs(value) < 1 ? value * 100 : value;
+      return `${pctValue.toFixed(1)}%`;
     }
     if (Math.abs(value) >= 1_000_000_000) {
       return `$${(value / 1_000_000_000).toFixed(2)}B`;

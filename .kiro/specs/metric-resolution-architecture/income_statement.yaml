@@ -162,8 +162,8 @@ gross_profit:
   industry: all
   synonyms:
   - Gross Profit
-  - Gross Margin
   - Gross Income
+  # NOTE: "Gross Margin" removed — belongs to gross_margin_pct (computed)
   xbrl_tags:
   - us-gaap:GrossProfit
   - ifrs-full:GrossProfit

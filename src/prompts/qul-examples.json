@@ -1,0 +1,234 @@
+[
+  {
+    "description": "Company name overrides workspace ticker",
+    "input": {
+      "query": "What does the analyst say about Apple's services segment?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "output": {
+      "entities": [{ "name": "Apple Inc.", "ticker": "AAPL", "entityType": "public_company", "source": "explicit" }],
+      "intent": "NARRATIVE_SEARCH",
+      "domain": "public_equity",
+      "isValidQuery": true,
+      "confidence": 0.95,
+      "temporalScope": { "type": "latest" },
+      "normalizedQuery": "Apple AAPL analyst commentary services segment"
+    }
+  },
+  {
+    "description": "Workspace context correctly applied",
+    "input": {
+      "query": "What's the revenue?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "output": {
+      "entities": [{ "name": "Airbnb", "ticker": "ABNB", "entityType": "public_company", "source": "workspace_context" }],
+      "intent": "METRIC_LOOKUP",
+      "domain": "public_equity",
+      "isValidQuery": true,
+      "confidence": 0.92,
+      "temporalScope": { "type": "latest" },
+      "normalizedQuery": "ABNB revenue latest",
+      "suggestedChart": "metric_card"
+    }
+  },
+  {
+    "description": "Gibberish rejection",
+    "input": {
+      "query": "asdfghjkl",
+      "workspace": { "ticker": "ABNB" }
+    },
+    "output": {
+      "entities": [],
+      "intent": "INVALID",
+      "isValidQuery": false,
+      "domain": "public_equity",
+      "queryQualityScore": 0.05,
+      "rejectionReason": "Query appears to be random characters.",
+      "confidence": 0.99,
+      "temporalScope": { "type": "latest" },
+      "normalizedQuery": ""
+    }
+  },
+  {
+    "description": "Coreference resolution from conversation history",
+    "input": {
+      "query": "How has it changed over the past 3 years?",
+      "workspace": { "ticker": "ABNB" },
+      "conversation_history": [
+        { "role": "user", "content": "What is Tesla's free cash flow?" },
+        { "role": "assistant", "summary": "TSLA FCF was $4.4B in FY2024" }
+      ]
+    },
+    "output": {
+      "entities": [{ "name": "Tesla", "ticker": "TSLA", "entityType": "public_company", "source": "coreference" }],
+      "intent": "METRIC_TREND",
+      "domain": "public_equity",
+      "isValidQuery": true,
+      "confidence": 0.88,
+      "temporalScope": { "type": "range", "rangeStart": "FY2022", "rangeEnd": "FY2024" },
+      "normalizedQuery": "TSLA free cash flow trend FY2022 to FY2024",
+      "suggestedChart": "line_chart"
+    }
+  },
+  {
+    "description": "Coreference follow-up: 'what about their margin' resolves from history",
+    "input": {
+      "query": "What about their operating margin?",
+      "workspace": { "ticker": "ABNB" },
+      "conversation_history": [
+        { "role": "user", "content": "Show me NVDA revenue" },
+        { "role": "assistant", "summary": "NVDA revenue was $130.5B in FY2025, up 114% YoY" }
+      ]
+    },
+    "output": {
+      "entities": [{ "name": "NVIDIA", "ticker": "NVDA", "entityType": "public_company", "source": "coreference" }],
+      "intent": "METRIC_LOOKUP",
+      "domain": "public_equity",
+      "isValidQuery": true,
+      "confidence": 0.90,
+      "useWorkspaceContext": false,
+      "temporalScope": { "type": "latest" },
+      "normalizedQuery": "NVDA operating margin latest"
+    }
+  },
+  {
+    "description": "Multi-company comparison",
+    "input": {
+      "query": "Compare Apple and Google's revenue growth",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" }
+    },
+    "output": {
+      "entities": [
+        { "name": "Apple Inc.", "ticker": "AAPL", "entityType": "public_company", "source": "explicit" },
+        { "name": "Alphabet Inc.", "ticker": "GOOGL", "entityType": "public_company", "source": "explicit" }
+      ],
+      "intent": "METRIC_COMPARISON",
+      "domain": "public_equity",
+      "isValidQuery": true,
+      "confidence": 0.93,
+      "complexity": "comparative",
+      "temporalScope": { "type": "latest" },
+      "normalizedQuery": "AAPL GOOGL revenue growth comparison",
+      "suggestedChart": "bar_chart",
+      "needsPeerComparison": true
+    }
+  },
+  {
+    "description": "Uploaded document query",
+    "input": {
+      "query": "What is the analyst rating for AAPL?",
+      "workspace": { "ticker": "ABNB", "domain": "public_equity" },
+      "uploaded_documents": [
+        { "id": "doc_001", "name": "AAPL_Analyst_Report.pdf", "type": "analyst_report", "entity": "Apple Inc.", "ticker": "AAPL" }
+      ]
+    },
+    "output": {
+      "entities": [{ "name": "Apple Inc.", "ticker": "AAPL", "entityType": "public_company", "source": "explicit" }],
+      "intent": "UPLOADED_DOC_QUERY",
+      "domain": "uploaded_doc",
+      "isValidQuery": true,
+      "confidence": 0.95,
+      "temporalScope": { "type": "latest" },
+      "normalizedQuery": "AAPL analyst rating recommendation"
+    }
+  },
+  {
+    "description": "PE deal document query",
+    "input": {
+      "query": "What are the key customer concentration risks in the CIM?",
+      "workspace": { "ticker": null, "domain": "private_equity", "deal_name": "Project Falcon" },
+      "uploaded_documents": [
+        { "id": "doc_001", "name": "Project_Falcon_CIM.pdf", "type": "CIM", "entity": "TargetCo Inc.", "ticker": null }
+      ]
+    },
+    "output": {
+      "entities": [{ "name": "TargetCo Inc.", "entityType": "uploaded_entity", "source": "uploaded_document", "documentId": "doc_001" }],
+      "intent": "DEAL_ANALYSIS",
+      "domain": "private_equity",
+      "isValidQuery": true,
+      "confidence": 0.95,
+      "temporalScope": { "type": "all_available" },
+      "normalizedQuery": "customer concentration risks CIM Project Falcon"
+    }
+  },
+  {
+    "description": "Multi-part query with decomposition",
+    "input": {
+      "query": "What is NVDA's cash position, how has it changed over 5 years, and how does it compare to AMZN?",
+      "workspace": { "ticker": "ABNB" }
+    },
+    "output": {
+      "entities": [
+        { "name": "NVIDIA", "ticker": "NVDA", "entityType": "public_company", "source": "explicit" },
+        { "name": "Amazon", "ticker": "AMZN", "entityType": "public_company", "source": "explicit" }
+      ],
+      "intent": "METRIC_COMPARISON",
+      "domain": "public_equity",
+      "isValidQuery": true,
+      "confidence": 0.92,
+      "complexity": "multi_part",
+      "temporalScope": { "type": "range", "rangeStart": "FY2020", "rangeEnd": "FY2024" },
+      "normalizedQuery": "NVDA AMZN cash and cash equivalents 5 year trend comparison",
+      "subQueries": [
+        { "intent": "METRIC_LOOKUP", "entity": "NVDA", "metric": "cash_and_cash_equivalents", "temporal": { "type": "latest" }, "path": "structured_db" },
+        { "intent": "METRIC_TREND", "entity": "NVDA", "metric": "cash_and_cash_equivalents", "temporal": { "type": "range", "rangeStart": "FY2020", "rangeEnd": "FY2024" }, "path": "structured_db" },
+        { "intent": "METRIC_TREND", "entity": "AMZN", "metric": "cash_and_cash_equivalents", "temporal": { "type": "range", "rangeStart": "FY2020", "rangeEnd": "FY2024" }, "path": "structured_db" }
+      ],
+      "unifyingInstruction": "Present NVDA current cash, then 5-year trend with YoY changes, then compare trajectory to AMZN.",
+      "suggestedChart": "line_chart"
+    }
+  },
+  {
+    "description": "Cross-domain PE target vs public comps comparison",
+    "input": {
+      "query": "How does TargetCo's EBITDA margin compare to AAPL and MSFT?",
+      "workspace": { "ticker": null, "domain": "private_equity", "deal_name": "Project Falcon" },
+      "uploaded_documents": [
+        { "id": "doc_001", "name": "Project_Falcon_CIM.pdf", "type": "CIM", "entity": "TargetCo Inc.", "ticker": null }
+      ]
+    },
+    "output": {
+      "entities": [
+        { "name": "TargetCo Inc.", "entityType": "uploaded_entity", "source": "uploaded_document", "documentId": "doc_001" },
+        { "name": "Apple Inc.", "ticker": "AAPL", "entityType": "public_company", "source": "explicit" },
+        { "name": "Microsoft", "ticker": "MSFT", "entityType": "public_company", "source": "explicit" }
+      ],
+      "intent": "DEAL_COMPARISON",
+      "domain": "cross_domain",
+      "isValidQuery": true,
+      "confidence": 0.90,
+      "complexity": "comparative",
+      "temporalScope": { "type": "latest" },
+      "normalizedQuery": "TargetCo EBITDA margin comparison AAPL MSFT public comps",
+      "subQueries": [
+        { "intent": "METRIC_LOOKUP", "entity": { "name": "TargetCo Inc.", "entityType": "uploaded_entity", "source": "uploaded_document", "documentId": "doc_001" }, "metric": "ebitda_margin", "path": "uploaded_doc_rag" },
+        { "intent": "METRIC_LOOKUP", "entity": "AAPL", "metric": "ebitda_margin", "path": "structured_db" },
+        { "intent": "METRIC_LOOKUP", "entity": "MSFT", "metric": "ebitda_margin", "path": "structured_db" }
+      ],
+      "unifyingInstruction": "Compare TargetCo EBITDA margin from CIM against public comps. Note any differences in margin definition or period.",
+      "suggestedChart": "bar_chart",
+      "needsPeerComparison": true
+    }
+  },
+  {
+    "description": "PE management assessment from uploaded docs",
+    "input": {
+      "query": "Assess key person risk and management depth",
+      "workspace": { "ticker": null, "domain": "private_equity", "deal_name": "Project Falcon" },
+      "uploaded_documents": [
+        { "id": "doc_001", "name": "Project_Falcon_CIM.pdf", "type": "CIM", "entity": "TargetCo Inc.", "ticker": null },
+        { "id": "doc_002", "name": "Management_Presentation.pptx", "type": "management_presentation", "entity": "TargetCo Inc.", "ticker": null }
+      ]
+    },
+    "output": {
+      "entities": [{ "name": "TargetCo Inc.", "entityType": "uploaded_entity", "source": "uploaded_document", "documentId": "doc_001" }],
+      "intent": "MANAGEMENT_ASSESSMENT",
+      "domain": "private_equity",
+      "isValidQuery": true,
+      "confidence": 0.90,
+      "temporalScope": { "type": "all_available" },
+      "normalizedQuery": "key person risk management depth assessment TargetCo"
+    }
+  }
+]

@@ -34,6 +34,9 @@
         .message-assistant table, .message-assistant .markdown-table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.875rem; }
         .message-assistant th, .message-assistant td { border: 1px solid #e5e7eb; padding: 8px 12px; text-align: left; }
         .message-assistant th { background: #f9fafb; font-weight: 600; }
+        .message-assistant h2 { font-size: 1.1rem; font-weight: 700; color: #1e40af; margin-top: 1.25rem; padding-top: 0.75rem; border-top: 1px solid #e2e8f0; margin-bottom: 0.5rem; }
+        .message-assistant h3 { font-size: 1rem; font-weight: 600; color: #374151; margin-top: 1rem; margin-bottom: 0.4rem; }
+        .message-assistant h2:first-child { margin-top: 0; padding-top: 0; border-top: none; }
         .typing-indicator { display: flex; gap: 4px; padding: 8px 0; }
         .typing-dot { width: 8px; height: 8px; border-radius: 50%; background: #9ca3af; animation: typingBounce 1.4s infinite ease-in-out; }
         .typing-dot:nth-child(2) { animation-delay: 0.2s; }
@@ -128,6 +131,7 @@
                 if (resp.ok) {
                     var data = await resp.json();
                     this.researchMessages = (data.data || []).map(function(m) { return { id: m.id, role: m.role, content: m.content, sources: m.sources || [], citations: m.citations || [], visualization: m.visualization || null, peerComparison: m.peerComparison || null }; });
+                    this._renderedCharts = {};
                     this.$nextTick(() => { this.renderExistingCharts(); this.scrollResearchToBottom(); });
                 }
             } catch (e) { console.error('Failed to load conversation:', e); }
@@ -143,8 +147,16 @@
 
         async sendResearchMessage() {
             if (!this.researchInput.trim()) return;
-            if (this.instantRagSession && this.instantRagSession.status === 'active') { await this.sendInstantRagQuery(); return; }
+            // If files are pending upload, upload them first (user pressed Enter before uploading)
             if (this.instantRagFiles.some(function(f) { return f.status === 'pending'; })) { await this.uploadInstantRagFiles(); return; }
+            // NOTE: We no longer fork to sendInstantRagQuery() when an instant RAG session is active.
+            // Instead, we always go through the Research Assistant endpoint and pass instantRagSessionId
+            // in the context so the full hybrid RAG pipeline (SEC + uploaded docs) is used.
+            // Reset session timer on each query so the session stays alive while user is active
+            if (this.instantRagSession && this.instantRagSession.status === 'active') {
+                this.instantRagTimeRemaining = 600;
+                this.instantRagTimeoutWarning = false;
+            }
             if (!this.conversationId) { this.conversationId = await this.createConversation(); if (!this.conversationId) return; }
             var userMessage = { id: Date.now(), role: 'user', content: this.researchInput };
             this.researchMessages.push(userMessage);
@@ -263,7 +275,7 @@
             } catch (error) { console.error('Error creating conversation:', error); return null; }
         },
 
-        clearConversation() { this.conversationId = null; this.researchMessages = []; var urlParams = new URLSearchParams(window.location.search); urlParams.delete('conv'); window.history.replaceState({}, '', '?' + urlParams.toString()); },
+        clearConversation() { this.conversationId = null; this.researchMessages = []; this._renderedCharts = {}; var urlParams = new URLSearchParams(window.location.search); urlParams.delete('conv'); window.history.replaceState({}, '', '?' + urlParams.toString()); },
 
         canSaveToScratchpad(message) {
             if (message.role !== 'assistant') return false;
@@ -384,7 +396,11 @@
                 if (typeof hljs !== 'undefined') { setTimeout(function() { document.querySelectorAll('.message-assistant pre code').forEach(function(block) { if (!block.classList.contains('hljs')) hljs.highlightElement(block); }); }, 0); }
                 finalHtml = this.convertSeverityBadges(finalHtml);
                 finalHtml = this.convertSectionHeadings(finalHtml);
-                finalHtml = finalHtml.replace(/([^>])\n([^<])/g, '$1<br>\n$2');
+                // Convert bold-colon patterns that the LLM uses as inline headings
+                // e.g., <strong>Risk Factors:</strong> text → proper section divider
+                finalHtml = finalHtml.replace(/<p>\s*<strong>([^<]{3,40}?):\s*<\/strong>\s*/gi, function(match, heading) {
+                    return '<div style="margin-top:1.25rem;padding-top:0.75rem;border-top:1px solid #e2e8f0;"><p><strong style="color:#1e40af;font-size:1.05em;">' + heading + ':</strong> ';
+                });
                 return finalHtml;
             } catch (error) { console.error('Error rendering markdown:', error); return text.replace(/\n/g, '<br>'); }
         },
@@ -619,6 +635,15 @@
                 return;
             }
             var canvasId = 'chart-' + messageId;
+            
+            // Guard: track rendered charts to prevent duplicate render calls
+            if (!this._renderedCharts) this._renderedCharts = {};
+            if (this._renderedCharts[canvasId]) {
+                console.log('[renderChart] Already rendered chart for:', canvasId, '— skipping');
+                return;
+            }
+            this._renderedCharts[canvasId] = true;
+            
             console.log('[renderChart] Looking for canvas:', canvasId);
             var self = this;
 

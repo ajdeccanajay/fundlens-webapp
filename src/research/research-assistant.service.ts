@@ -25,7 +25,9 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { RAGService } from '../rag/rag.service';
 import { CitationService } from '../rag/citation.service';
 import { BedrockService } from '../rag/bedrock.service';
+import { QueryUnderstandingService } from '../rag/query-understanding.service';
 import { TenantContext, TENANT_CONTEXT_KEY } from '../tenant/tenant-context';
+import type { WorkspaceContext, UploadedDocumentMeta, ConversationMessage } from '../rag/types/query-understanding.types';
 
 export interface CreateConversationDto {
   title?: string;
@@ -102,6 +104,7 @@ export class ResearchAssistantService {
     private readonly ragService: RAGService,
     private readonly citationService: CitationService,
     private readonly bedrockService: BedrockService,
+    private readonly queryUnderstanding: QueryUnderstandingService,
     @Inject(REQUEST) private readonly request: Request,
   ) {}
 
@@ -466,53 +469,157 @@ export class ResearchAssistantService {
         tokensUsed: 0,
       });
 
-      // Extract tickers from context or query
-      let tickers = this.extractTickers(dto.content, dto.context?.tickers);
-      const primaryTicker = tickers[0] || undefined;
-      
-      this.logger.log(`🔍 Query: "${dto.content}"`);
-      this.logger.log(`📊 Primary Ticker: ${primaryTicker || 'auto-detect'}`);
+      // ── QUL: Query Understanding Layer ─────────────────────────────
+      // Replaces extractTickers() + enhancedQuery + manual intent detection
+      // with a single Haiku call that provides semantic understanding.
+      const workspaceTickers = dto.context?.tickers || [];
+      const workspaceTicker = workspaceTickers[0] || undefined;
 
-      // Check for peer comparison intent
+      // Build workspace context for QUL
+      // Detect PE workspace from deal metadata
+      let workspaceDomain: 'public_equity' | 'private_equity' | 'uploaded_docs' = 'public_equity';
+      let dealName: string | undefined;
+      if (workspaceTicker) {
+        try {
+          const dealInfo = await this.prisma.$queryRaw<{ name: string; deal_type: string }[]>`
+            SELECT d.name, d.deal_type FROM deals d
+            WHERE d.tenant_id = ${tenantId}::uuid
+            AND UPPER(d.ticker) = UPPER(${workspaceTicker})
+            LIMIT 1
+          `;
+          if (dealInfo.length > 0) {
+            dealName = dealInfo[0].name;
+            if (dealInfo[0].deal_type === 'private_equity' || dealInfo[0].deal_type === 'pe') {
+              workspaceDomain = 'private_equity';
+            }
+          }
+        } catch (e) {
+          this.logger.debug(`Could not fetch deal context: ${e.message}`);
+        }
+      }
+
+      const workspace: WorkspaceContext = {
+        ticker: workspaceTicker,
+        domain: workspaceDomain,
+        dealName,
+      };
+
+      // Build uploaded documents metadata for QUL
+      // Query tenant's uploaded documents so QUL knows what's available
+      let uploadedDocs: UploadedDocumentMeta[] = [];
+      try {
+        const docs = await this.prisma.$queryRaw<{ document_id: string; file_name: string; company_ticker: string }[]>`
+          SELECT d.document_id, d.file_name, d.company_ticker
+          FROM intel_documents d
+          WHERE d.tenant_id = ${tenantId}::uuid
+          AND d.status IN ('queryable', 'fully-indexed')
+          ORDER BY d.created_at DESC
+          LIMIT 20
+        `;
+        uploadedDocs = docs.map(d => ({
+          id: d.document_id,
+          name: d.file_name,
+          ticker: d.company_ticker || undefined,
+          entity: d.company_ticker || undefined,
+        }));
+      } catch (e) {
+        this.logger.warn(`⚠️ Could not fetch uploaded docs for QUL: ${e.message}`);
+      }
+
+      // Build conversation history for coreference resolution
+      let conversationHistory: ConversationMessage[] = [];
+      try {
+        const recentMessages = await this.prisma.$queryRaw<{ role: string; content: string }[]>`
+          SELECT role, content FROM research_messages
+          WHERE conversation_id = ${conversationId}::uuid
+          ORDER BY created_at DESC LIMIT 6
+        `;
+        conversationHistory = recentMessages.reverse().map(m => ({
+          role: m.role as 'user' | 'assistant',
+          content: m.role === 'user' ? m.content : undefined,
+          summary: m.role === 'assistant' ? m.content.substring(0, 200) : undefined,
+        }));
+      } catch (e) {
+        this.logger.warn(`⚠️ Could not fetch conversation history for QUL: ${e.message}`);
+      }
+
+      // Run QUL
+      const understanding = await this.queryUnderstanding.understand(
+        dto.content, workspace, uploadedDocs, conversationHistory,
+      );
+
+      this.logger.log(`🧠 QUL Result: intent=${understanding.intent}, entity=${understanding.primaryEntity?.ticker || 'none'}, confidence=${understanding.confidence.toFixed(2)}`);
+
+      // Handle invalid queries
+      if (!understanding.isValidQuery) {
+        this.logger.log(`❌ QUL rejected query: ${understanding.rejectionReason}`);
+        const rejectMessage = await this.saveMessage(conversationId, 'assistant',
+          understanding.rejectionReason || 'I couldn\'t understand that query. Could you rephrase it?',
+          { sources: [], metadata: { qul: understanding }, tokensUsed: 0 },
+        );
+        yield { type: 'token', data: { text: rejectMessage.content } };
+        yield { type: 'done', data: { complete: true } };
+        return;
+      }
+
+      // Extract tickers from QUL entities for downstream compatibility
+      let tickers = understanding.entities
+        .filter(e => e.ticker)
+        .map(e => e.ticker!);
+      const primaryTicker = understanding.primaryEntity?.ticker || workspaceTicker || undefined;
+
+      // If QUL found no tickers but workspace has one, use it
+      if (tickers.length === 0 && workspaceTicker) {
+        tickers = [workspaceTicker];
+      }
+
+      this.logger.log(`🔍 Query: "${dto.content}"`);
+      this.logger.log(`📊 Primary Ticker (QUL): ${primaryTicker || 'none'}`);
+      this.logger.log(`📊 All Tickers (QUL): ${tickers.join(', ') || 'none'}`);
+
+      // Check for peer comparison intent from QUL
       let peerComparisonMetadata: PeerComparisonMetadata | undefined;
-      const isPeerComparisonQuery = this.detectPeerComparisonIntent(dto.content);
+      const isPeerComparisonQuery = understanding.needsPeerComparison;
+      
+      // Explicit entities are sacred — never dropped by peer expansion.
+      // Peer expansion only fills gaps when the user didn't name specific companies.
+      const explicitTickers = understanding.entities
+        .filter(e => e.source === 'explicit' && e.ticker)
+        .map(e => e.ticker!);
       
       if (isPeerComparisonQuery && primaryTicker) {
-        this.logger.log(`🔄 Peer comparison detected, identifying peers for ${primaryTicker}`);
+        this.logger.log(`🔄 Peer comparison detected by QUL, identifying peers for ${primaryTicker}`);
         
         try {
           const peerResult = await this.identifyPeersFromDeals(primaryTicker);
+          const peerTickers = peerResult.found.slice(0, 4);
           
-          // Expand tickers with found peers (max 5 total)
-          const peerTickers = peerResult.found.slice(0, 4); // Leave room for primary
-          tickers = [primaryTicker, ...peerTickers].slice(0, 5);
+          // Preserve explicit entities, only add peers that aren't already named
+          const peersToAdd = peerTickers.filter(t => !explicitTickers.includes(t));
+          tickers = [...new Set([...explicitTickers, ...peersToAdd])].slice(0, 5);
           
-          this.logger.log(`📊 Expanded tickers for peer comparison: ${tickers.join(', ')}`);
+          this.logger.log(`📊 Expanded tickers for peer comparison: ${tickers.join(', ')} (explicit: [${explicitTickers.join(', ')}], peers added: [${peersToAdd.join(', ')}])`);
           
-          // Build peer comparison metadata for response
           peerComparisonMetadata = {
             primaryTicker,
-            peersIncluded: peerTickers,
+            peersIncluded: peersToAdd,
             missingPeers: peerResult.missing.map(ticker => ({
               ticker,
               reason: peerResult.rationale,
             })),
           };
-          
-          this.logger.log(`✅ Peer comparison metadata: ${JSON.stringify(peerComparisonMetadata)}`);
         } catch (error) {
           this.logger.error(`❌ Peer identification failed: ${error.message}`);
-          // Continue with single ticker if peer identification fails
         }
+      } else if (explicitTickers.length > 1) {
+        this.logger.log(`📊 Direct comparison: ${explicitTickers.length} explicit tickers [${explicitTickers.join(', ')}] — no peer expansion needed`);
       }
 
-      // Enhance query with ticker context if provided
-      let enhancedQuery = dto.content;
-      if (tickers.length > 0 && !dto.content.match(/\b(AAPL|MSFT|GOOGL|GOOG|AMZN|TSLA|META|NVDA|JPM|BAC|WFC|V|MA|DIS|NFLX|INTC|AMD|ORCL|CRM|ADBE|PYPL|CSCO|PFE|MRK|JNJ|UNH|CVS|WMT|TGT|HD|LOW|NKE|SBUX|MCD|KO|PEP|RH)\b/i)) {
-        // Query doesn't contain ticker, prepend it for intent detection
-        enhancedQuery = `${tickers.join(' and ')} ${dto.content}`;
-        this.logger.log(`🔧 Enhanced query with ticker context: "${enhancedQuery}"`);
-      }
+      // Use QUL's normalizedQuery for retrieval — this is the key fix.
+      // QUL scopes the query to the correct entity, so "What does the analyst
+      // say about Apple's services segment?" becomes "Apple AAPL analyst
+      // commentary services segment" instead of "ABNB What does the analyst..."
+      const enhancedQuery = understanding.normalizedQuery || dto.content;
 
       // Resolve dealId from primaryTicker so uploaded document Sources 1+2 activate
       const dealId = primaryTicker ? await this.getDealIdForTicker(primaryTicker) : undefined;
@@ -528,6 +635,7 @@ export class ResearchAssistantService {
         tickers: tickers.length > 1 ? tickers : undefined, // Pass peer tickers for multi-ticker retrieval
         instantRagSessionId: dto.context?.instantRagSessionId, // Cross-source retrieval from Instant RAG session
         dealId, // Spec §7.1: enables Sources 1+2 (uploaded doc extractions + vector chunks)
+        understanding, // QUL Phase 2: pass pre-computed understanding to bypass legacy intent detection
       });
 
       this.logger.log(`✅ RAG Result: ${ragResult.intent.type} query`);
@@ -749,27 +857,6 @@ export class ResearchAssistantService {
   }
 
   /**
-   * Build query context from message and options
-   */
-  private async buildQueryContext(
-    query: string,
-    context?: {
-      tickers?: string[];
-      sectors?: string[];
-      fiscalPeriod?: string;
-    },
-  ): Promise<any> {
-    const tickers = this.extractTickers(query, context?.tickers);
-
-    return {
-      tickers,
-      sectors: context?.sectors || [],
-      fiscalPeriod: context?.fiscalPeriod,
-      queryType: this.detectQueryType(query),
-    };
-  }
-
-  /**
    * Look up the deal ID for a given ticker within the current tenant.
    * Returns undefined if no deal found (non-fatal).
    */
@@ -799,88 +886,48 @@ export class ResearchAssistantService {
    * Extract ticker symbols from query
    */
   extractTickers(query: string, providedTickers?: string[]): string[] {
-    const tickers = new Set<string>(providedTickers || []);
-
-    // Common ticker pattern: 1-5 uppercase letters
+    // Extract explicit ticker symbols from query text
+    const queryTickers: string[] = [];
     const tickerPattern = /\b[A-Z]{1,5}\b/g;
     const matches = query.match(tickerPattern) || [];
 
     for (const match of matches) {
       // Filter out common words that look like tickers
       if (!['I', 'A', 'US', 'CEO', 'CFO', 'SEC', 'GAAP', 'Q', 'FY'].includes(match)) {
-        tickers.add(match);
+        queryTickers.push(match);
       }
     }
 
-    return Array.from(tickers);
-  }
-
-  /**
-   * Detect query type
-   */
-  private detectQueryType(query: string): string {
-    const lowerQuery = query.toLowerCase();
-
-    if (lowerQuery.includes('compare') || lowerQuery.includes('vs') || lowerQuery.includes('versus')) {
-      return 'comparison';
+    // Also resolve company names to tickers (e.g. "Apple" → "AAPL")
+    const companyNameMap: Record<string, string> = {
+      'apple': 'AAPL', 'microsoft': 'MSFT', 'google': 'GOOGL', 'alphabet': 'GOOGL',
+      'amazon': 'AMZN', 'tesla': 'TSLA', 'meta': 'META', 'facebook': 'META',
+      'nvidia': 'NVDA', 'netflix': 'NFLX', 'airbnb': 'ABNB', 'uber': 'UBER',
+      'disney': 'DIS', 'intel': 'INTC', 'amd': 'AMD', 'oracle': 'ORCL',
+      'salesforce': 'CRM', 'adobe': 'ADBE', 'paypal': 'PYPL', 'cisco': 'CSCO',
+      'pfizer': 'PFE', 'merck': 'MRK', 'walmart': 'WMT', 'target': 'TGT',
+      'nike': 'NKE', 'starbucks': 'SBUX', 'coca-cola': 'KO', 'pepsi': 'PEP',
+      'jpmorgan': 'JPM', 'goldman': 'GS', 'morgan stanley': 'MS',
+      'booking': 'BKNG', 'spotify': 'SPOT', 'snap': 'SNAP', 'pinterest': 'PINS',
+    };
+    const queryLower = query.toLowerCase();
+    for (const [name, ticker] of Object.entries(companyNameMap)) {
+      if (queryLower.includes(name) && !queryTickers.includes(ticker)) {
+        queryTickers.push(ticker);
+      }
     }
 
-    if (lowerQuery.includes('trend') || lowerQuery.includes('over time') || lowerQuery.includes('history')) {
-      return 'time_series';
+    // If the user explicitly mentioned a company/ticker in the query,
+    // those take priority. Only fall back to workspace context tickers
+    // if the query doesn't mention any specific company.
+    if (queryTickers.length > 0) {
+      // User asked about specific companies — use those, add workspace ticker at end
+      const tickers = new Set<string>([...queryTickers, ...(providedTickers || [])]);
+      return Array.from(tickers);
     }
 
-    if (lowerQuery.includes('why') || lowerQuery.includes('explain') || lowerQuery.includes('reason')) {
-      return 'explanation';
-    }
-
-    if (lowerQuery.includes('risk') || lowerQuery.includes('concern') || lowerQuery.includes('challenge')) {
-      return 'risk_analysis';
-    }
-
-    return 'general';
-  }
-
-  /**
-   * Detect if query is asking for peer comparison
-   * Checks for keywords indicating peer/competitor comparison intent
-   */
-  private detectPeerComparisonIntent(query: string): boolean {
-    const lowerQuery = query.toLowerCase();
-    
-    const peerKeywords = [
-      'peers',
-      'peer group',
-      'peer companies',
-      'competitors',
-      'competitor',
-      'competition',
-      'comparable',
-      'comparables',
-      'comps',
-      'industry peers',
-      'similar companies',
-      'compare to peers',
-      'compare with peers',
-      'vs peers',
-      'versus peers',
-      'against peers',
-      'relative to peers',
-      'benchmark',
-      'benchmarking',
-    ];
-
-    // Check for exact keyword matches
-    const hasKeyword = peerKeywords.some(kw => lowerQuery.includes(kw));
-    
-    // Also check for pattern "how does X compare"
-    const hasComparePattern = /how does.*compare/i.test(query);
-
-    if (hasKeyword || hasComparePattern) {
-      this.logger.log(`🔍 Peer comparison intent detected in query: "${query}"`);
-      return true;
-    }
-
-    return false;
+    // No company mentioned in query — use workspace context tickers
+    return [...(providedTickers || [])];
   }
 
   /**

@@ -7,7 +7,7 @@ import { DocumentRAGService } from './document-rag.service';
 import { ComputedMetricsService } from '../dataSources/sec/computed-metrics.service';
 import { PerformanceMonitorService } from './performance-monitor.service';
 import { PerformanceOptimizerService } from './performance-optimizer.service';
-import { QueryIntent, RAGResponse, MetricResult, ChunkResult, StructuredQuery } from './types/query-intent';
+import { QueryIntent, RAGResponse, MetricResult, ChunkResult, StructuredQuery, RetrievalPlan, SemanticQuery, PeriodType, DocumentType } from './types/query-intent';
 import { ResponseEnrichmentService } from './response-enrichment.service';
 import { MetricsSummary } from '../deals/financial-calculator.service';
 import { InstantRAGService } from '../instant-rag/instant-rag.service';
@@ -15,6 +15,11 @@ import { HybridSynthesisService, FinancialAnalysisContext, SubQueryResult } from
 import { QueryDecomposerService, DecomposedQuery } from './query-decomposer.service';
 import { classifyResponseType, ResponseClassificationInput } from './types/query-intent';
 import { DocumentIndexingService } from '../documents/document-indexing.service';
+import { QueryUnderstanding, SubQuery } from './types/query-understanding.types';
+import { DocumentMetricExtractorService, DocumentComputedResult } from './document-metric-extractor.service';
+import { MetricRegistryService } from './metric-resolution/metric-registry.service';
+import { FormulaResolutionService } from './metric-resolution/formula-resolution.service';
+import { ConceptRegistryService } from './metric-resolution/concept-registry.service';
 
 /**
  * RAG Service
@@ -49,6 +54,14 @@ export class RAGService {
     private readonly queryDecomposer?: QueryDecomposerService,
     @Optional()
     private readonly documentIndexing?: DocumentIndexingService,
+    @Optional()
+    private readonly documentMetricExtractor?: DocumentMetricExtractorService,
+    @Optional()
+    private readonly metricRegistry?: MetricRegistryService,
+    @Optional()
+    private readonly formulaResolution?: FormulaResolutionService,
+    @Optional()
+    private readonly conceptRegistry?: ConceptRegistryService,
   ) {}
 
   /**
@@ -67,15 +80,33 @@ export class RAGService {
       longContextText?: string; // Spec §7.1 Source 4: raw doc text for long-context fallback
       longContextFileName?: string; // File name for attribution
       dealId?: string; // Spec §7.1: deal scope for uploaded doc search
+      understanding?: QueryUnderstanding; // QUL Phase 2: pre-computed query understanding
     },
   ): Promise<RAGResponse> {
     const startTime = Date.now();
     this.logger.log(`🔍 Processing hybrid query: "${query}"`);
 
     try {
-      // Step 1: Route query
-      const plan = await this.queryRouter.route(query, options?.tenantId, options?.ticker);
-      const intent = await this.queryRouter.getIntent(query, options?.tenantId, options?.ticker);
+      // Step 1: Route query — use QUL data when available, fall back to legacy queryRouter
+      let plan: RetrievalPlan;
+      let intent: QueryIntent;
+
+      if (options?.understanding) {
+        // QUL Phase 2: Build plan and intent from pre-computed QueryUnderstanding
+        // This bypasses the legacy queryRouter.route() + getIntent() calls,
+        // eliminating redundant LLM calls and using QUL's superior entity resolution.
+        const qul = options.understanding;
+        this.logger.log(`🧠 QUL-aware routing: intent=${qul.intent}, entity=${qul.primaryEntity?.ticker || 'none'}`);
+
+        intent = this.buildIntentFromQUL(qul, query);
+        plan = await this.buildPlanFromQUL(qul, intent, options?.tenantId);
+
+        this.logger.log(`🔍 QUL Intent: type=${intent.type}, ticker=${JSON.stringify(intent.ticker)}, metrics=${JSON.stringify(intent.metrics)}`);
+      } else {
+        // Legacy path: use queryRouter (for non-QUL callers like chat.service.ts)
+        plan = await this.queryRouter.route(query, options?.tenantId, options?.ticker);
+        intent = await this.queryRouter.getIntent(query, options?.tenantId, options?.ticker);
+      }
       
       // DEBUG: Log intent to trace wrong data bug
       this.logger.log(`🔍 DEBUG Intent Detection:`);
@@ -143,10 +174,32 @@ export class RAGService {
         }
       }
 
+      // ── UPLOADED DOC SEARCH: Start early, await in any branch ─────────
+      // Uploaded doc search is a top-level parallel concern. It fires on
+      // every query where uploaded documents exist, regardless of whether
+      // the query gets decomposed, concept-expanded, or routed to peers.
+      const uploadedDocPromise = this.searchUploadedDocs(query, intent, {
+        tenantId: options?.tenantId,
+        ticker: options?.ticker,
+        dealId: options?.dealId,
+        understanding: options?.understanding,
+      });
+
+      // ── QUL §8 METRIC RESOLUTION: Also start early ────────────────────
+      // When QUL provides subQueries with metric hints, route them through
+      // the deterministic engine. This produces computed metrics (e.g.
+      // gross_margin_pct) that supplement standard retrieval.
+      const qulMetricPromise = (options?.understanding && options.understanding.subQueries?.length)
+        ? this.executeQULMetricResolution(options.understanding, intent, options.tenantId)
+            .catch(e => { this.logger.warn(`⚠️ §8 metric resolution failed (non-fatal): ${e.message}`); return [] as any[]; })
+        : Promise.resolve([] as any[]);
+
       // ── Step 1.7: Query Decomposition (Req 14.1) ──────────────────────
-      // After intent detection and before retrieval, check if the query
-      // has multiple information needs and should be decomposed.
-      if (this.queryDecomposer) {
+      // QUL spec §7: QueryDecomposerService is absorbed into QUL (subQueries field).
+      // When QUL is active, skip the legacy decomposer entirely — QUL's subQueries
+      // are executed through the three-layer resolution stack below, alongside
+      // uploaded doc search and computed metric resolution.
+      if (this.queryDecomposer && !options?.understanding) {
         try {
           const decomposed = await this.queryDecomposer.decompose(query, intent);
 
@@ -170,12 +223,29 @@ export class RAGService {
               // Fall through to normal retrieval flow below
             } else {
 
+            // ── Await uploaded doc + QUL metric results (started before decomposition) ──
+            const [uploadedDocResults, qulAdditionalMetrics] = await Promise.all([
+              uploadedDocPromise,
+              qulMetricPromise,
+            ]);
+
+            // Merge uploaded doc metrics + narratives into sub-query results
+            const uploadedMetrics = uploadedDocResults.metrics;
+            const uploadedNarratives = uploadedDocResults.narratives;
+            const uploadedChunkCount = uploadedDocResults.chunkCount;
+
+            if (uploadedMetrics.length > 0 || uploadedNarratives.length > 0) {
+              this.logger.log(
+                `📎 Decomposed path: merging ${uploadedMetrics.length} uploaded doc metrics + ${uploadedNarratives.length} narratives + ${qulAdditionalMetrics.length} QUL computed metrics`,
+              );
+            }
+
             // Build FinancialAnalysisContext with sub-query results (Req 14.2)
             const synthesisContext: FinancialAnalysisContext = {
               originalQuery: query,
               intent,
-              metrics: [],
-              narratives: subQueryResults.flatMap(sq => sq.narratives),
+              metrics: [...uploadedMetrics, ...qulAdditionalMetrics],
+              narratives: [...uploadedNarratives, ...subQueryResults.flatMap(sq => sq.narratives)],
               computedResults: [],
               subQueryResults,
               unifyingInstruction: decomposed.unifyingInstruction,
@@ -209,9 +279,9 @@ export class RAGService {
               usage = undefined;
             }
 
-            // Collect all metrics and narratives from sub-queries for the response
-            const allMetrics = subQueryResults.flatMap((sq) => sq.metrics);
-            const allNarratives = subQueryResults.flatMap((sq) => sq.narratives);
+            // Collect all metrics and narratives from sub-queries + uploaded docs for the response
+            const allMetrics = [...subQueryResults.flatMap((sq) => sq.metrics), ...uploadedMetrics, ...qulAdditionalMetrics];
+            const allNarratives = [...uploadedNarratives, ...subQueryResults.flatMap((sq) => sq.narratives)];
 
             const latency = Date.now() - startTime;
             const response: RAGResponse = {
@@ -228,7 +298,7 @@ export class RAGService {
               processingInfo: {
                 structuredMetrics: allMetrics.length,
                 semanticNarratives: allNarratives.length,
-                userDocumentChunks: 0,
+                userDocumentChunks: uploadedChunkCount,
                 usedBedrockKB: !!process.env.BEDROCK_KB_ID,
                 usedClaudeGeneration: !!usage,
                 hybridProcessing: true,
@@ -434,105 +504,20 @@ export class RAGService {
       }
 
       // ── UPLOADED DOCUMENT SOURCES (Spec §7.1 Sources 1+2) ──────────
-      // Source 1: Deterministic metric lookup from intel_document_extractions
-      // Source 2: Vector search across intel_document_chunks (pgvector)
+      // Await the promise started before decomposition branch.
+      // Merge uploaded doc metrics + narratives into the main results.
       let uploadedDocChunks: any[] = [];
-      if (this.documentIndexing && options?.tenantId && options?.dealId) {
-        try {
-          // Source 1: Query uploaded doc extractions
-          // Build metric keys from both intent.metrics AND raw query text matching
-          // (uploaded docs use simple keys like price_target, rating, revenue, ebitda)
-          const uploadedDocMetricKeys = new Set<string>(intent.metrics || []);
-          const queryLower = query.toLowerCase();
-          const uploadedDocKeyMap: Record<string, string[]> = {
-            price_target: ['price target', 'target price', 'pt'],
-            rating: ['rating', 'recommendation', 'buy', 'sell', 'hold', 'overweight', 'underweight'],
-            revenue: ['revenue', 'sales', 'top line'],
-            ebitda: ['ebitda'],
-            net_profit: ['net profit', 'net income', 'earnings', 'bottom line'],
-            eps: ['eps', 'earnings per share'],
-            gross_margin: ['gross margin'],
-            operating_margin: ['operating margin'],
-          };
-          for (const [key, triggers] of Object.entries(uploadedDocKeyMap)) {
-            if (triggers.some(t => queryLower.includes(t))) {
-              uploadedDocMetricKeys.add(key);
-            }
-          }
-
-          if (uploadedDocMetricKeys.size > 0) {
-            const metricKeysArray = [...uploadedDocMetricKeys];
-            this.logger.log(`📎 Source 1: Querying uploaded doc metrics for keys: [${metricKeysArray.join(', ')}]`);
-            const uploadedMetrics = await this.documentIndexing.queryMetrics(
-              metricKeysArray,
-              options.tenantId,
-              options.dealId,
-            );
-            if (uploadedMetrics.length > 0) {
-              this.logger.log(
-                `📎 Source 1: Found ${uploadedMetrics.length} uploaded doc metrics`,
-              );
-              // Merge with existing metrics, marking source clearly
-              for (const um of uploadedMetrics) {
-                metrics.push({
-                  ticker: um.companyTicker || options.ticker || '',
-                  normalizedMetric: um.metricKey,
-                  rawLabel: um.metricKey,
-                  value: um.numericValue,
-                  fiscalPeriod: um.period || '',
-                  periodType: um.isEstimate ? 'estimate' : 'actual',
-                  filingType: 'uploaded-document',
-                  statementType: 'uploaded',
-                  statementDate: null,
-                  filingDate: null,
-                  sourcePage: um.pageNumber,
-                  confidenceScore: um.confidence,
-                  source: um.source,
-                  isEstimate: um.isEstimate,
-                  fileName: um.fileName,
-                });
-              }
-            }
-          }
-
-          // Source 2: Vector search across uploaded doc chunks
-          const vectorResults = await this.documentIndexing.searchChunks(
-            query,
-            options.tenantId,
-            options.dealId,
-            { topK: 5, minScore: 0.5 },
+      {
+        const uploadedDocResults = await uploadedDocPromise;
+        if (uploadedDocResults.metrics.length > 0) {
+          metrics = [...metrics, ...uploadedDocResults.metrics];
+        }
+        if (uploadedDocResults.narratives.length > 0) {
+          uploadedDocChunks = uploadedDocResults.narratives; // for chunkCount tracking
+          narratives = [...uploadedDocResults.narratives, ...narratives];
+          this.logger.log(
+            `📎 Merged uploaded doc chunks into narratives (total: ${narratives.length})`,
           );
-          if (vectorResults.length > 0) {
-            this.logger.log(
-              `📎 Source 2: Found ${vectorResults.length} uploaded doc chunks (top score: ${vectorResults[0].score.toFixed(3)})`,
-            );
-            uploadedDocChunks = vectorResults;
-
-            // Convert to narrative format and merge
-            const uploadNarratives = vectorResults.map(r => ({
-              content: r.content,
-              score: r.score,
-              sourceType: 'UPLOADED_DOC',
-              metadata: {
-                ticker: r.companyTicker || options.ticker || '',
-                sectionType: r.sectionType || 'uploaded-document',
-                filingType: 'uploaded-document',
-                pageNumber: r.pageNumber,
-              },
-              source: {
-                location: r.fileName,
-                type: 'uploaded-document',
-                documentId: r.documentId,
-              },
-              filename: r.fileName,
-            }));
-            narratives = [...uploadNarratives, ...narratives];
-            this.logger.log(
-              `📎 Merged uploaded doc chunks into narratives (total: ${narratives.length})`,
-            );
-          }
-        } catch (error) {
-          this.logger.warn(`⚠️ Uploaded doc search failed: ${error.message}`);
         }
       }
 
@@ -567,6 +552,85 @@ export class RAGService {
 
       // INSTANT RAG SESSION DOCUMENTS PATH: Retrieve and merge session docs if session ID provided
       let sessionDocsUnavailable = false;
+
+      // ── QUL PHASE 4: Document Metric Extraction (Spec §8.4) ────────
+      // When QUL identifies uploaded entities with metric hints, use the
+      // DocumentMetricExtractorService to extract precise metric values
+      // from uploaded documents. These feed into the same formula engine
+      // as public equity metrics.
+      let documentComputedResults: DocumentComputedResult[] = [];
+      if (this.documentMetricExtractor && options?.understanding && options?.tenantId) {
+        const qul = options.understanding;
+        const uploadedEntities = qul.entities.filter(e => e.entityType === 'uploaded_entity' && e.documentId);
+        const metricHints = qul.subQueries?.filter(sq => sq.metric && sq.path === 'uploaded_doc_rag').map(sq => sq.metric!) || [];
+
+        // Also check if the main intent has metric hints for uploaded entities
+        if (uploadedEntities.length > 0 && metricHints.length === 0 && qul.subQueries) {
+          for (const sq of qul.subQueries) {
+            if (sq.metric) metricHints.push(sq.metric);
+          }
+        }
+
+        if (uploadedEntities.length > 0 && metricHints.length > 0) {
+          this.logger.log(`📐 Phase 4: Extracting metrics [${metricHints.join(', ')}] from ${uploadedEntities.length} uploaded entities`);
+
+          for (const entity of uploadedEntities) {
+            try {
+              for (const metricHint of metricHints) {
+                const result = await this.documentMetricExtractor.extractAndCompute(
+                  entity.documentId!,
+                  metricHint,
+                  options.tenantId,
+                  qul.temporalScope,
+                );
+                documentComputedResults.push(result);
+
+                if (result.value != null) {
+                  // Add to metrics array for downstream synthesis
+                  metrics.push({
+                    ticker: entity.name || entity.ticker || 'TargetCo',
+                    normalizedMetric: result.canonical_id,
+                    rawLabel: result.display_name,
+                    value: result.value,
+                    rawValue: String(result.value),
+                    fiscalPeriod: Object.values(result.resolved_inputs)[0]?.period || '',
+                    periodType: 'actual',
+                    filingType: 'uploaded-document',
+                    statementType: 'uploaded',
+                    statementDate: null,
+                    filingDate: null,
+                    sourcePage: null,
+                    confidenceScore: 0.85,
+                    source: `Computed from uploaded document (${result.formula || 'direct extraction'})`,
+                    isEstimate: false,
+                    fileName: entity.documentId,
+                    _documentComputed: true,
+                    _formula: result.formula,
+                    _resolvedInputs: result.resolved_inputs,
+                    _caveats: result.caveats,
+                  });
+                  this.logger.log(`✅ Phase 4: ${result.display_name} = ${result.value} (from doc ${entity.documentId?.slice(0, 8)})`);
+                } else {
+                  this.logger.log(`⚠️ Phase 4: Could not extract ${result.display_name}: ${result.explanation}`);
+                }
+              }
+            } catch (e) {
+              this.logger.warn(`⚠️ Phase 4 extraction failed for entity ${entity.name}: ${e.message}`);
+            }
+          }
+        }
+      }
+
+      // ── QUL §8.2-8.3: Deterministic Engine Metric Resolution ───────
+      // Await the promise started before decomposition branch.
+      {
+        const qulMetrics = await qulMetricPromise;
+        if (qulMetrics.length > 0) {
+          this.logger.log(`📐 §8 Integration: ${qulMetrics.length} additional metrics from deterministic engine`);
+          metrics = [...metrics, ...qulMetrics];
+        }
+      }
+
       if (options?.instantRagSessionId) {
         try {
           this.logger.log(`📎 Retrieving Instant RAG session documents for session ${options.instantRagSessionId}`);
@@ -577,10 +641,11 @@ export class RAGService {
           
           if (validDocs.length > 0) {
             // Convert SessionDocument[] to UserDocumentChunk[] format
+            // Use 8000 chars per doc to capture enough context for segment-level queries
             const sessionChunks = validDocs.map(doc => ({
               id: doc.id,
               documentId: doc.id,
-              content: doc.extractedText!.substring(0, 2000), // Truncate to 2000 chars
+              content: doc.extractedText!.substring(0, 8000),
               pageNumber: null,
               ticker: null,
               filename: doc.fileName,
@@ -793,14 +858,16 @@ export class RAGService {
         }
       }
 
-      // Phase 1 (Pre-LLM): Compute financial metrics for trend/computation queries
+      // Phase 1 (Pre-LLM): Compute financial metrics for richer synthesis context
+      // Always compute when we have metrics — gives the LLM growth rates, margins,
+      // and derived metrics even for simple queries like "What is AMZN's revenue?"
       let computedSummary: MetricsSummary | MetricsSummary[] | undefined;
-      if (intent.needsTrend || intent.needsComputation) {
-        const tickers = Array.isArray(intent.ticker) ? intent.ticker : [];
+      if (metrics.length > 0) {
+        const tickers = Array.isArray(intent.ticker) ? intent.ticker : intent.ticker ? [intent.ticker] : [];
         if (tickers.length > 1) {
           const summaries = await this.responseEnrichment.computeFinancialsMulti(intent, metrics);
           computedSummary = summaries.length > 0 ? summaries : undefined;
-        } else {
+        } else if (tickers.length === 1) {
           computedSummary = await this.responseEnrichment.computeFinancials(intent, metrics);
         }
       }
@@ -849,6 +916,7 @@ export class RAGService {
             metrics,
             narratives,
             computedResults: [], // Populated by computed metrics from FormulaResolutionService when available
+            computedSummary, // Pass FinancialCalculatorService results (includes computed margins for all tickers)
             modelTier: optimizationDecisions.modelTier as 'haiku' | 'sonnet' | 'opus',
             tenantId: options?.tenantId,
           };
@@ -924,14 +992,94 @@ export class RAGService {
 
       const latency = Date.now() - startTime;
 
-      // Graceful degradation: append messaging for unresolved metrics (Req 9.1–9.4)
+      // Graceful degradation: SOURCE-AWARE check (Req 9.1–9.4)
+      // Only declare metrics "unresolved" if they're missing from ALL sources
+      // (structured retriever, uploaded docs, computed metrics, narratives)
       if (plan.structuredQuery && plan.structuredQuery.metrics.length > 0) {
         const { unresolved } = this.responseEnrichment.partitionResolutions(
           plan.structuredQuery.metrics,
         );
-        const degradationMsg = this.responseEnrichment.buildUnresolvedMessage(unresolved);
+
+        // Build a set of all metric IDs resolved by ANY source
+        const allResolvedMetricIds = new Set<string>();
+
+        // From the merged metrics array (includes structured + uploaded doc metrics)
+        for (const m of metrics) {
+          if (m.normalizedMetric) allResolvedMetricIds.add(m.normalizedMetric.toLowerCase());
+        }
+
+        // From computed results (formula engine)
+        if (computedSummary) {
+          const summaries = Array.isArray(computedSummary) ? computedSummary : [computedSummary];
+          for (const s of summaries) {
+            if (s?.metrics?.profitability) {
+              const prof = s.metrics.profitability;
+              if (prof.grossMargin) allResolvedMetricIds.add('gross_margin');
+              if (prof.operatingMargin) allResolvedMetricIds.add('operating_margin');
+              if (prof.netMargin) allResolvedMetricIds.add('net_margin');
+              if (prof.grossProfit) allResolvedMetricIds.add('gross_profit');
+              if (prof.operatingIncome) allResolvedMetricIds.add('operating_income');
+              if (prof.netIncome) allResolvedMetricIds.add('net_income');
+              if (prof.ebitda) allResolvedMetricIds.add('ebitda');
+              if (prof.ebitdaMargin) allResolvedMetricIds.add('ebitda_margin');
+            }
+            if (s?.metrics?.revenue) {
+              allResolvedMetricIds.add('revenue');
+              allResolvedMetricIds.add('net_sales');
+            }
+          }
+        }
+
+        // From narrative chunks that reference specific metrics
+        for (const n of narratives) {
+          if (n.metadata?.metricsReferenced) {
+            for (const ref of n.metadata.metricsReferenced) {
+              allResolvedMetricIds.add(ref.toLowerCase());
+            }
+          }
+          // Uploaded doc narratives with filingType 'uploaded-document' contain metric data
+          if (n.metadata?.filingType === 'uploaded-document' || n.metadata?.sectionType === 'uploaded-document') {
+            // Check content for margin/profitability keywords
+            const content = (n.content || '').toLowerCase();
+            if (content.includes('gross margin') || content.includes('gross profit')) allResolvedMetricIds.add('gross_margin');
+            if (content.includes('operating margin')) allResolvedMetricIds.add('operating_margin');
+            if (content.includes('net margin') || content.includes('ni margin')) allResolvedMetricIds.add('net_margin');
+            if (content.includes('revenue') || content.includes('net sales')) allResolvedMetricIds.add('revenue');
+            if (content.includes('ebitda')) allResolvedMetricIds.add('ebitda');
+          }
+        }
+
+        // Filter out "unresolved" metrics that were actually fulfilled by other sources
+        // Also suppress qualitative concepts (sentiment, risk, outlook) when narratives
+        // are available — the LLM synthesizes these from narrative context, not from
+        // structured metric lookups.
+        const qualitativeConcepts = new Set([
+          'management_sentiment', 'sentiment', 'risk_factors', 'risk',
+          'outlook', 'guidance', 'management_commentary', 'management_tone',
+          'competitive_position', 'market_share', 'growth_drivers',
+        ]);
+        const trulyUnresolved = unresolved.filter(u => {
+          // Already resolved by another source?
+          if (allResolvedMetricIds.has(u.canonical_id?.toLowerCase()) ||
+              allResolvedMetricIds.has(u.original_query?.toLowerCase())) {
+            return false;
+          }
+          // Qualitative concept with narratives available? LLM handles it.
+          const queryLower = (u.original_query || '').toLowerCase().replace(/[^a-z]/g, '_');
+          if (narratives.length > 0 && qualitativeConcepts.has(queryLower)) {
+            this.logger.log(`🔍 Suppressing degradation for qualitative concept "${u.original_query}" — narratives available`);
+            return false;
+          }
+          return true;
+        });
+
+        this.logger.log(
+          `🔍 Degradation check: ${unresolved.length} initially unresolved, ${allResolvedMetricIds.size} resolved by all sources, ${trulyUnresolved.length} truly unresolved`,
+        );
+
+        const degradationMsg = this.responseEnrichment.buildUnresolvedMessage(trulyUnresolved);
         if (degradationMsg) {
-          this.logger.log(`⚠️ ${unresolved.length} unresolved metric(s) — appending degradation message`);
+          this.logger.log(`⚠️ ${trulyUnresolved.length} truly unresolved metric(s) — appending degradation message`);
           answer = answer ? `${answer}\n\n${degradationMsg}` : degradationMsg;
         }
       }
@@ -1248,6 +1396,385 @@ export class RAGService {
     return { metrics: mergedMetrics, narratives: mergedNarratives };
   }
 
+  // ── QUL Phase 2: Build legacy-compatible intent + plan from QueryUnderstanding ──
+
+  /**
+   * Convert QUL QueryUnderstanding → legacy QueryIntent format.
+   * This bridges the QUL output into the existing RAG pipeline without
+   * requiring changes to every downstream consumer.
+   */
+  private buildIntentFromQUL(qul: QueryUnderstanding, rawQuery: string): QueryIntent {
+    // Map QUL intent → legacy QueryType
+    const intentToType: Record<string, 'structured' | 'semantic' | 'hybrid'> = {
+      METRIC_LOOKUP: 'structured',
+      METRIC_TREND: 'structured',
+      METRIC_COMPARISON: 'structured',
+      NARRATIVE_SEARCH: 'semantic',
+      SEGMENT_ANALYSIS: 'semantic',
+      CROSS_TRANSCRIPT: 'semantic',
+      HYBRID_ANALYSIS: 'hybrid',
+      RED_FLAG_DETECTION: 'hybrid',
+      PROVOCATION: 'hybrid',
+      MANAGEMENT_ASSESSMENT: 'semantic',
+      DEAL_ANALYSIS: 'hybrid',
+      DEAL_COMPARISON: 'hybrid',
+      PEER_SCREENING: 'structured',
+      IC_MEMO_GENERATION: 'hybrid',
+      DOCUMENT_INTAKE: 'semantic',
+      UPLOADED_DOC_QUERY: 'semantic',
+      CLARIFICATION_NEEDED: 'hybrid',
+      INVALID: 'hybrid',
+    };
+
+    let type = intentToType[qul.intent] || 'hybrid';
+
+    // For PE/cross-domain queries with uploaded entities, force hybrid
+    // so both uploaded_doc_rag and structured_db paths activate
+    const hasUploadedEntity = qul.entities.some(e => e.entityType === 'uploaded_entity');
+    if (hasUploadedEntity || qul.domain === 'cross_domain' || qul.domain === 'private_equity') {
+      type = 'hybrid';
+    }
+
+    // Extract tickers from QUL entities (only public companies have tickers)
+    const tickers = qul.entities
+      .filter(e => e.ticker)
+      .map(e => e.ticker!);
+    const ticker: string | string[] | undefined =
+      tickers.length > 1 ? tickers :
+      tickers.length === 1 ? tickers[0] :
+      undefined;
+
+    // Map QUL temporal scope → legacy period fields
+    let period: string | undefined;
+    let periodType: PeriodType | undefined;
+    let periodStart: string | undefined;
+    let periodEnd: string | undefined;
+
+    if (qul.temporalScope) {
+      switch (qul.temporalScope.type) {
+        case 'latest':
+          periodType = 'latest';
+          break;
+        case 'specific_period':
+          period = qul.temporalScope.periods?.[0];
+          periodType = period?.startsWith('Q') ? 'quarterly' : 'annual';
+          break;
+        case 'range':
+          periodType = 'range';
+          periodStart = qul.temporalScope.rangeStart;
+          periodEnd = qul.temporalScope.rangeEnd;
+          break;
+        case 'trailing':
+        case 'all_available':
+          periodType = 'range';
+          break;
+      }
+    }
+
+    // Extract metric hints from QUL subQueries
+    const metrics: string[] = [];
+    if (qul.subQueries && qul.subQueries.length > 0) {
+      for (const sq of qul.subQueries) {
+        if (sq.metric) metrics.push(sq.metric);
+      }
+    }
+
+    return {
+      type,
+      ticker,
+      metrics: metrics.length > 0 ? metrics : undefined,
+      period,
+      periodType,
+      periodStart,
+      periodEnd,
+      needsNarrative: ['semantic', 'hybrid'].includes(type) ||
+        ['NARRATIVE_SEARCH', 'SEGMENT_ANALYSIS', 'CROSS_TRANSCRIPT', 'HYBRID_ANALYSIS',
+         'RED_FLAG_DETECTION', 'MANAGEMENT_ASSESSMENT', 'UPLOADED_DOC_QUERY',
+         'DEAL_ANALYSIS', 'DEAL_COMPARISON', 'MANAGEMENT_ASSESSMENT'].includes(qul.intent),
+      needsComparison: qul.needsPeerComparison || qul.intent === 'METRIC_COMPARISON' || qul.intent === 'DEAL_COMPARISON',
+      needsComputation: ['METRIC_LOOKUP', 'METRIC_TREND', 'METRIC_COMPARISON'].includes(qul.intent),
+      needsTrend: qul.intent === 'METRIC_TREND',
+      needsPeerComparison: qul.needsPeerComparison,
+      suggestedChart: qul.suggestedChart || null,
+      confidence: qul.confidence,
+      originalQuery: qul.normalizedQuery || rawQuery,
+    };
+  }
+
+  /**
+   * Build a RetrievalPlan from QUL data, using the MetricRegistry for metric resolution.
+   * This replaces queryRouter.route() when QUL data is available.
+   */
+  private async buildPlanFromQUL(
+    qul: QueryUnderstanding,
+    intent: QueryIntent,
+    tenantId?: string,
+  ): Promise<RetrievalPlan> {
+    const tickers = qul.entities
+      .filter(e => e.ticker)
+      .map(e => e.ticker!);
+
+    const paths = qul.suggestedRetrievalPaths || [];
+    const useStructured = paths.includes('structured_db') || paths.includes('formula_engine') || paths.includes('peer_comparison');
+    let useSemantic = paths.includes('semantic_kb') || paths.includes('earnings_transcript') || paths.includes('uploaded_doc_rag') || paths.includes('deal_library');
+
+    // For concept-level queries (e.g. "profitability"), always enable semantic
+    // so uploaded doc vector search fires alongside structured retrieval.
+    // Concept queries have metric hints that resolve via concept registry but
+    // may also have narrative context in uploaded analyst reports.
+    const hasConcept = qul.subQueries?.some(sq => sq.metricType === 'concept') ||
+      qul.intent === 'HYBRID_ANALYSIS' ||
+      qul.intent === 'METRIC_COMPARISON';
+    if (hasConcept && !useSemantic) {
+      this.logger.log(`🧩 Concept/comparison query detected — enabling semantic path for uploaded doc retrieval`);
+      useSemantic = true;
+    }
+
+    // For PE/cross-domain, always enable both paths so uploaded doc sources activate
+    const hasUploadedEntity = qul.entities.some(e => e.entityType === 'uploaded_entity');
+    const isCrossDomain = qul.domain === 'cross_domain';
+    const isPE = qul.domain === 'private_equity';
+
+    // If QUL didn't suggest any paths, or PE/cross-domain, enable both.
+    // Also always enable semantic when comparison is needed (to pull narratives for both tickers).
+    const isComparison = intent.needsComparison || intent.needsPeerComparison || tickers.length > 1;
+    const effectiveUseStructured = paths.length === 0 ? true : useStructured || (isCrossDomain && tickers.length > 0) || isComparison;
+    const effectiveUseSemantic = paths.length === 0 ? true : useSemantic || hasUploadedEntity || isPE || isComparison;
+
+    // Resolve metrics through MetricRegistryService (same as queryRouter does)
+    const metricHints = intent.metrics || [];
+    let resolvedMetrics: any[] = [];
+    // Track which metric hints were expanded via concept resolution so we
+    // can suppress the "I don't have a metric mapped" degradation message.
+    const conceptExpandedHints = new Set<string>();
+
+    if (metricHints.length > 0 && tickers.length > 0) {
+      // Only resolve metrics for public companies (PE metrics come from uploaded docs)
+      try {
+        resolvedMetrics = this.metricRegistry?.resolveMultiple?.(metricHints, tenantId) || [];
+      } catch (e) {
+        this.logger.warn(`QUL metric resolution failed: ${e.message}`);
+      }
+    }
+
+    // Concept resolution: try for high-level queries like "how levered?" or "profitability"
+    // Fires when:
+    //   (a) No metric hints at all (pure concept query), OR
+    //   (b) Metric hints exist but ALL resolved to "unresolved" — the hint IS the concept name
+    const allUnresolved = resolvedMetrics.length > 0 &&
+      resolvedMetrics.every((r: any) => r.confidence === 'unresolved');
+    const noMetricHints = metricHints.length === 0 && resolvedMetrics.length === 0;
+
+    if ((noMetricHints || allUnresolved) && this.conceptRegistry) {
+      // Try matching each unresolved metric hint as a concept, then fall back to normalizedQuery
+      const conceptQueries = allUnresolved
+        ? metricHints
+        : [qul.normalizedQuery || ''];
+
+      for (const cq of conceptQueries) {
+        const conceptMatch = this.conceptRegistry.matchConcept(cq);
+        if (conceptMatch) {
+          this.logger.log(`🧩 QUL concept match: "${cq}" → ${conceptMatch.concept_id} (${conceptMatch.confidence})`);
+          const bundle = this.conceptRegistry.getMetricBundle(conceptMatch.concept_id);
+          if (bundle) {
+            const bundleMetrics = [...bundle.primary_metrics, ...bundle.secondary_metrics];
+            try {
+              const conceptResolved = this.metricRegistry?.resolveMultiple?.(bundleMetrics, tenantId) || [];
+              // Replace the unresolved metrics with the concept-expanded ones
+              resolvedMetrics = conceptResolved;
+              conceptExpandedHints.add(cq.toLowerCase());
+              this.logger.log(`🧩 Concept bundle resolved ${conceptResolved.length} metrics from concept "${conceptMatch.concept_id}"`);
+              // Also update intent.metrics so downstream knows the real metrics
+              intent.metrics = bundleMetrics;
+              break; // First concept match wins
+            } catch (e) {
+              this.logger.warn(`Concept metric resolution failed: ${e.message}`);
+            }
+          }
+        }
+      }
+
+      // If no concept matched from hints, try the full normalized query
+      if (resolvedMetrics.every((r: any) => r.confidence === 'unresolved') && allUnresolved) {
+        const fallbackMatch = this.conceptRegistry.matchConcept(qul.normalizedQuery || '');
+        if (fallbackMatch) {
+          this.logger.log(`🧩 QUL concept fallback match: "${qul.normalizedQuery}" → ${fallbackMatch.concept_id}`);
+          const bundle = this.conceptRegistry.getMetricBundle(fallbackMatch.concept_id);
+          if (bundle) {
+            const bundleMetrics = [...bundle.primary_metrics, ...bundle.secondary_metrics];
+            try {
+              const conceptResolved = this.metricRegistry?.resolveMultiple?.(bundleMetrics, tenantId) || [];
+              resolvedMetrics = conceptResolved;
+              for (const h of metricHints) conceptExpandedHints.add(h.toLowerCase());
+              intent.metrics = bundleMetrics;
+              this.logger.log(`🧩 Concept fallback resolved ${conceptResolved.length} metrics from "${fallbackMatch.concept_id}"`);
+            } catch (e) {
+              this.logger.warn(`Concept fallback resolution failed: ${e.message}`);
+            }
+          }
+        }
+      }
+    }
+
+    // Determine filing types from temporal scope
+    const filingTypes: DocumentType[] = intent.periodType === 'annual' ? ['10-K'] :
+      intent.periodType === 'quarterly' ? ['10-Q'] : ['10-K', '10-Q'];
+
+    // For PE-only queries with no public tickers, skip structured query
+    const shouldBuildStructured = effectiveUseStructured && tickers.length > 0;
+
+    const structuredQuery: StructuredQuery | undefined = shouldBuildStructured ? {
+      tickers,
+      metrics: resolvedMetrics,
+      period: intent.period,
+      periodType: intent.periodType,
+      periodStart: intent.periodStart,
+      periodEnd: intent.periodEnd,
+      filingTypes,
+      includeComputed: intent.needsComputation,
+    } : undefined;
+
+    // For the semantic query, prefer the original natural language phrasing
+    // (rawQuery) over the terse normalizedQuery.  The normalized form is
+    // optimised for structured DB lookups (canonical IDs) but embeds poorly
+    // against narrative text in Bedrock KB and uploaded doc chunks.
+    const semanticQueryText = qul.rawQuery || qul.normalizedQuery || intent.originalQuery;
+
+    const semanticQuery: SemanticQuery | undefined = effectiveUseSemantic ? {
+      query: semanticQueryText,
+      tickers: tickers.length > 0 ? tickers : undefined,
+      documentTypes: filingTypes,
+      sectionTypes: undefined,
+      period: intent.period,
+      maxResults: intent.needsComparison || intent.needsTrend ? 10 : (hasUploadedEntity ? 8 : 5),
+    } : undefined;
+
+    this.logger.log(`📋 QUL Plan: structured=${shouldBuildStructured}, semantic=${effectiveUseSemantic}, ` +
+      `domain=${qul.domain}, uploadedEntity=${hasUploadedEntity}, tickers=[${tickers.join(',')}]`);
+
+    return {
+      useStructured: shouldBuildStructured,
+      useSemantic: effectiveUseSemantic,
+      structuredQuery,
+      semanticQuery,
+    };
+  }
+
+  /**
+   * QUL → Deterministic Engine Integration (Spec §8.2-8.3)
+   *
+   * Routes metric hints from QUL subQueries through the three-layer
+   * metric resolution stack:
+   *   Flow A: atomic → StructuredRetriever (PostgreSQL)
+   *   Flow B: computed → FormulaResolutionService → Python /calculate
+   *   Flow C: extracted → DocumentMetricExtractor (uploaded docs)
+   *
+   * Returns additional metrics to merge into the main retrieval results.
+   */
+  private async executeQULMetricResolution(
+    qul: QueryUnderstanding,
+    intent: QueryIntent,
+    tenantId?: string,
+  ): Promise<any[]> {
+    if (!this.metricRegistry || !qul.subQueries || qul.subQueries.length === 0) {
+      return [];
+    }
+
+    const additionalMetrics: any[] = [];
+
+    for (const sq of qul.subQueries) {
+      if (!sq.metric) continue;
+
+      // Resolve the entity for this sub-query
+      const entity = typeof sq.entity === 'string'
+        ? qul.entities.find(e => e.ticker === sq.entity || e.name === sq.entity) || qul.primaryEntity
+        : sq.entity || qul.primaryEntity;
+
+      if (!entity) continue;
+
+      // Step 1: Resolve metric hint through MetricRegistry
+      const resolution = this.metricRegistry.resolve(sq.metric, tenantId);
+
+      if (!resolution || resolution.confidence === 'unresolved') {
+        this.logger.debug(`QUL metric "${sq.metric}" unresolved — skipping deterministic path`);
+        continue;
+      }
+
+      // Step 2: Route by entity type + metric type
+      const isUploadedEntity = entity.entityType === 'uploaded_entity';
+      const metricType = sq.metricType || resolution.type || 'atomic';
+
+      if (isUploadedEntity && entity.documentId && this.documentMetricExtractor) {
+        // Flow C: PE document-extracted metric (§8.3 Flow C)
+        try {
+          const result = await this.documentMetricExtractor.extractAndCompute(
+            entity.documentId,
+            sq.metric,
+            tenantId || '',
+            sq.temporal || qul.temporalScope,
+          );
+          if (result.value != null) {
+            additionalMetrics.push({
+              ticker: entity.name || entity.ticker || 'TargetCo',
+              normalizedMetric: result.canonical_id,
+              rawLabel: result.display_name,
+              value: result.value,
+              rawValue: String(result.value),
+              fiscalPeriod: Object.values(result.resolved_inputs)[0]?.period || '',
+              periodType: 'actual',
+              filingType: 'uploaded-document',
+              statementType: 'uploaded',
+              confidenceScore: 0.85,
+              source: `Computed from uploaded document (${result.formula || 'direct extraction'})`,
+              _documentComputed: true,
+              _formula: result.formula,
+              _resolvedInputs: result.resolved_inputs,
+              _caveats: result.caveats,
+              _metricType: metricType,
+            });
+            this.logger.log(`📐 §8.3C: ${result.display_name} = ${result.value} (extracted from doc)`);
+          }
+        } catch (e) {
+          this.logger.warn(`§8.3C extraction failed for "${sq.metric}": ${e.message}`);
+        }
+      } else if (entity.ticker && metricType === 'computed' && this.formulaResolution) {
+        // Flow B: Computed metric via FormulaResolutionService (§8.3 Flow B)
+        try {
+          const period = sq.temporal?.periods?.[0] || intent.period || 'latest';
+          const computed = await this.formulaResolution.resolveComputed(
+            resolution,
+            entity.ticker,
+            period,
+          );
+          if (computed && computed.value != null) {
+            additionalMetrics.push({
+              ticker: entity.ticker,
+              normalizedMetric: resolution.canonical_id,
+              rawLabel: resolution.display_name || resolution.canonical_id,
+              value: computed.value,
+              rawValue: String(computed.value),
+              fiscalPeriod: computed.resolved_inputs ? Object.values(computed.resolved_inputs)[0]?.period || period : period,
+              periodType: 'actual',
+              filingType: '10-K',
+              statementType: 'computed',
+              confidenceScore: 0.95,
+              source: `Formula: ${resolution.formula || resolution.canonical_id}`,
+              _formula: resolution.formula,
+              _resolvedInputs: computed.resolved_inputs,
+              _metricType: 'computed',
+            });
+            this.logger.log(`📐 §8.3B: ${resolution.canonical_id} = ${computed.value} (computed for ${entity.ticker})`);
+          }
+        } catch (e) {
+          this.logger.warn(`§8.3B computation failed for "${sq.metric}" on ${entity.ticker}: ${e.message}`);
+        }
+      }
+      // Flow A (atomic) is handled by the normal StructuredRetriever path — no extra work needed
+    }
+
+    return additionalMetrics;
+  }
+
   /**
    * Get computed metrics based on intent
    */
@@ -1434,9 +1961,9 @@ export class RAGService {
             
             // Calculate YoY growth if we have previous period
             let yoyGrowth = '-';
-            if (i < displayValues.length - 1) {
+            if (i < displayValues.length - 1 && metric.value != null && typeof metric.value === 'number') {
               const prevValue = displayValues[i + 1].value;
-              if (prevValue !== 0) {
+              if (prevValue != null && typeof prevValue === 'number' && prevValue !== 0) {
                 const growth = ((metric.value - prevValue) / Math.abs(prevValue)) * 100;
                 const sign = growth > 0 ? '+' : '';
                 yoyGrowth = `${sign}${growth.toFixed(1)}%`;
@@ -1460,8 +1987,10 @@ export class RAGService {
         } else {
           // Single value - just show it
           const metric = metricValues[0];
-          const value = this.formatValue(metric.value, metric.normalizedMetric);
-          lines.push(`${value} (${metric.fiscalPeriod}, ${metric.filingType})`);
+          const value = metric.value != null
+            ? this.formatValue(metric.value, metric.normalizedMetric)
+            : (metric.rawValue || 'N/A');
+          lines.push(`${value} (${metric.fiscalPeriod || ''}, ${metric.filingType})`);
           
           if (metric.formula) {
             lines.push(`_Calculated as: ${metric.formula}_`);
@@ -1812,6 +2341,7 @@ export class RAGService {
    * Format value based on metric type
    */
   private formatValue(value: number, metric: string): string {
+    if (value === null || value === undefined || typeof value !== 'number') return String(value ?? 'N/A');
     // Percentages
     if (metric.includes('margin') || metric.includes('pct')) {
       return `${value.toFixed(2)}%`;
@@ -2286,7 +2816,7 @@ export class RAGService {
         filingType: 'Uploaded Document',
         fiscalPeriod: metric.fiscalPeriod || '',
         section: 'Uploaded Document',
-        excerpt: `${metric.rawLabel || metric.normalizedMetric}: ${this.formatValueForCitation(metric.value)}${metric.fiscalPeriod ? ` (${metric.fiscalPeriod})` : ''} — from ${metric.fileName}`,
+        excerpt: `${metric.rawLabel || metric.normalizedMetric}: ${metric.rawValue || this.formatValueForCitation(metric.value)}${metric.fiscalPeriod ? ` (${metric.fiscalPeriod})` : ''} — from ${metric.fileName}`,
         relevanceScore: metric.confidenceScore || 0.9,
         pageNumber: metric.sourcePage || null,
       });
@@ -2302,10 +2832,162 @@ export class RAGService {
    * Format value for citation display
    */
   private formatValueForCitation(value: number): string {
+    if (value === null || value === undefined || typeof value !== 'number') return String(value ?? 'N/A');
     if (Math.abs(value) >= 1e9) return `${(value / 1e9).toFixed(1)}B`;
     if (Math.abs(value) >= 1e6) return `${(value / 1e6).toFixed(1)}M`;
     if (Math.abs(value) >= 1e3) return `${(value / 1e3).toFixed(1)}K`;
     return `${value.toFixed(2)}`;
+  }
+
+  /**
+   * Search uploaded documents (Sources 1+2 from Spec §7.1).
+   * This is a top-level concern that fires on EVERY query where uploaded
+   * documents exist, regardless of decomposition or routing path.
+   * Returns { metrics, narratives, chunkCount } to merge into any path.
+   */
+  private async searchUploadedDocs(
+    query: string,
+    intent: QueryIntent,
+    options?: {
+      tenantId?: string;
+      ticker?: string;
+      dealId?: string;
+      understanding?: QueryUnderstanding;
+    },
+  ): Promise<{ metrics: any[]; narratives: any[]; chunkCount: number }> {
+    const result = { metrics: [] as any[], narratives: [] as any[], chunkCount: 0 };
+
+    if (!this.documentIndexing || !options?.tenantId) {
+      return result;
+    }
+
+    try {
+      // Extract tickers from intent to scope uploaded doc search
+      const intentTickers: string[] = Array.isArray(intent.ticker)
+        ? intent.ticker
+        : intent.ticker ? [intent.ticker] : [];
+
+      // Source 1: Query uploaded doc extractions
+      const uploadedDocMetricKeys = new Set<string>(intent.metrics || []);
+      const queryLower = query.toLowerCase();
+      const uploadedDocKeyMap: Record<string, string[]> = {
+        price_target: ['price target', 'target price', 'pt', 'analyst'],
+        rating: ['rating', 'recommendation', 'buy', 'sell', 'hold', 'overweight', 'underweight', 'analyst'],
+        revenue: ['revenue', 'sales', 'top line', 'top-line'],
+        ebitda: ['ebitda'],
+        net_profit: ['net profit', 'net income', 'earnings', 'bottom line'],
+        eps: ['eps', 'earnings per share'],
+        gross_margin: ['gross margin', 'profitability', 'margin profile', 'margins'],
+        operating_margin: ['operating margin', 'profitability', 'margin profile'],
+        net_margin: ['net margin', 'profitability', 'profit margin'],
+      };
+      for (const [key, triggers] of Object.entries(uploadedDocKeyMap)) {
+        if (triggers.some(t => queryLower.includes(t))) {
+          uploadedDocMetricKeys.add(key);
+        }
+      }
+
+      if (uploadedDocMetricKeys.size > 0) {
+        const metricKeysArray = [...uploadedDocMetricKeys];
+
+        // Query per-ticker if we know which tickers are requested, otherwise query all
+        const tickersToQuery = intentTickers.length > 0 ? intentTickers : [undefined];
+        for (const ticker of tickersToQuery) {
+          this.logger.log(`📎 Source 1: Querying uploaded doc metrics (tenant-scoped, ticker=${ticker || 'all'}) for keys: [${metricKeysArray.join(', ')}]`);
+          const uploadedMetrics = await this.documentIndexing.queryMetrics(
+            metricKeysArray,
+            options.tenantId,
+            options.dealId || '',
+            { companyTicker: ticker },
+          );
+          if (uploadedMetrics.length > 0) {
+            this.logger.log(`📎 Source 1: Found ${uploadedMetrics.length} uploaded doc metrics for ${ticker || 'all tickers'}`);
+            for (const um of uploadedMetrics) {
+              result.metrics.push({
+                ticker: um.companyTicker || ticker || options.ticker || '',
+                normalizedMetric: um.metricKey,
+                rawLabel: um.metricKey,
+                value: um.numericValue != null ? um.numericValue : null,
+                rawValue: um.rawValue,
+                fiscalPeriod: um.period || '',
+                periodType: um.isEstimate ? 'estimate' : 'actual',
+                filingType: 'uploaded-document',
+                statementType: 'uploaded',
+                statementDate: null,
+                filingDate: null,
+                sourcePage: um.pageNumber,
+                confidenceScore: um.confidence,
+                source: um.source,
+                isEstimate: um.isEstimate,
+                fileName: um.fileName,
+              });
+            }
+          }
+        } // end for ticker
+      } // end if uploadedDocMetricKeys
+
+      // Source 2: Vector search across uploaded doc chunks (tenant-scoped, ticker-filtered)
+      const semanticSearchQuery = options?.understanding?.rawQuery || query;
+      // For multi-ticker queries, search per-ticker to avoid cross-contamination
+      // For no-ticker queries, search all
+      const vectorTickersToQuery = intentTickers.length > 0 ? intentTickers : [undefined];
+      let allVectorResults: any[] = [];
+      for (const vTicker of vectorTickersToQuery) {
+        this.logger.log(`📎 Source 2: Vector search (tenant-scoped, ticker=${vTicker || 'all'}, query="${semanticSearchQuery.substring(0, 80)}")`);
+        const vectorResults = await this.documentIndexing.searchChunks(
+          semanticSearchQuery,
+          options.tenantId,
+          options.dealId || '',
+          { topK: 5, minScore: 0.3, companyTicker: vTicker },
+        );
+        allVectorResults.push(...vectorResults);
+      }
+      if (allVectorResults.length > 0) {
+        const boilerplatePatterns = [
+          /\b(disclaimer|legal notice|forward[- ]looking statements?|safe harbor|not investment advice)\b/i,
+          /\b(past performance .* not .* guarantee|no representation or warranty)\b/i,
+          /\b(securities act|regulation [sd]|form adv|sec filing|prospectus)\b/i,
+          /\b(all rights reserved|confidential.*proprietary|do not distribute)\b/i,
+        ];
+        const filteredResults = allVectorResults.filter(r => {
+          const text = (r.content || '').substring(0, 500);
+          const boilerplateHits = boilerplatePatterns.filter(p => p.test(text)).length;
+          if (boilerplateHits >= 2) {
+            this.logger.debug(`📎 Filtered boilerplate chunk (score=${r.score.toFixed(3)}): "${text.substring(0, 80)}..."`);
+            return false;
+          }
+          return true;
+        });
+
+        this.logger.log(
+          `📎 Source 2: Found ${allVectorResults.length} uploaded doc chunks, ${filteredResults.length} after boilerplate filter (top score: ${allVectorResults[0].score.toFixed(3)})`,
+        );
+        result.chunkCount = filteredResults.length;
+
+        const uploadNarratives = filteredResults.map(r => ({
+          content: r.content,
+          score: r.score,
+          sourceType: 'UPLOADED_DOC',
+          metadata: {
+            ticker: r.companyTicker || options.ticker || '',
+            sectionType: r.sectionType || 'uploaded-document',
+            filingType: 'uploaded-document',
+            pageNumber: r.pageNumber,
+          },
+          source: {
+            location: r.fileName,
+            type: 'uploaded-document',
+            documentId: r.documentId,
+          },
+          filename: r.fileName,
+        }));
+        result.narratives = uploadNarratives;
+      }
+    } catch (error) {
+      this.logger.warn(`⚠️ Uploaded doc search failed: ${error.message}`);
+    }
+
+    return result;
   }
 }
 

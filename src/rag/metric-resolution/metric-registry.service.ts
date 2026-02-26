@@ -320,8 +320,12 @@ export class MetricRegistryService implements OnModuleInit {
               const normSyn = normalizeForLookup(syn);
               if (!normSyn) continue;
               if (newSynonymIndex.has(normSyn) && newSynonymIndex.get(normSyn) !== canonicalId) {
+                const existingOwner = newSynonymIndex.get(normSyn)!;
+                const existingMetric = newMetricsById.get(existingOwner);
                 this.logger.warn(
-                  `Synonym collision: "${syn}" (${normSyn}) → existing "${newSynonymIndex.get(normSyn)}", skipping for "${canonicalId}"`,
+                  `⚠️ SYNONYM COLLISION (merge): "${syn}" (${normSyn}) claimed by both ` +
+                  `${existingOwner} (type=${existingMetric?.type || 'unknown'}) and ${canonicalId}. ` +
+                  `${existingOwner} wins (loaded first).`,
                 );
                 collisions++;
               } else if (!newSynonymIndex.has(normSyn)) {
@@ -411,9 +415,21 @@ export class MetricRegistryService implements OnModuleInit {
           for (const { original, normalized } of termsToIndex) {
             if (!normalized) continue;
             if (newSynonymIndex.has(normalized) && newSynonymIndex.get(normalized) !== canonicalId) {
-              this.logger.warn(
-                `Synonym collision: "${original}" (${normalized}) → existing "${newSynonymIndex.get(normalized)}", skipping for "${canonicalId}"`,
-              );
+              const existingOwner = newSynonymIndex.get(normalized)!;
+              const existingMetric = newMetricsById.get(existingOwner);
+              const existingType = existingMetric?.type || 'unknown';
+              const newType = metric.type;
+              const isCrossTypeCollision = existingType !== newType;
+              const severity = isCrossTypeCollision ? 'error' : 'warn';
+              const msg = `⚠️ SYNONYM COLLISION: "${original}" (${normalized}) claimed by both ` +
+                `${existingOwner} (type=${existingType}) and ${canonicalId} (type=${newType}). ` +
+                `${existingOwner} wins (loaded first).` +
+                (isCrossTypeCollision ? ` CRITICAL: atomic/computed type mismatch — queries for "${original}" will route to ${existingType} path instead of ${newType}.` : '');
+              if (isCrossTypeCollision) {
+                this.logger.error(msg);
+              } else {
+                this.logger.warn(msg);
+              }
               collisions++;
             } else {
               newSynonymIndex.set(normalized, canonicalId);
@@ -447,6 +463,14 @@ export class MetricRegistryService implements OnModuleInit {
     this.collisions = collisions;
     this.lruCache.clear();
     this.clientOverlayCache.clear();
+
+    if (collisions > 0) {
+      this.logger.warn(
+        `🔍 MetricRegistry: ${collisions} synonym collision(s) detected at startup. ` +
+        `Search logs above for "SYNONYM COLLISION" to see each one. ` +
+        `Cross-type collisions (atomic↔computed) are CRITICAL — they cause wrong routing.`,
+      );
+    }
 
     // Validate dependency DAG and compute topological order
     this.topologicalOrder = this.validateAndSortDAG();

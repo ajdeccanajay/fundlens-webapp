@@ -234,51 +234,78 @@ export class FormulaResolutionService {
 
     if (dbColumns.length === 0) return result;
 
+    // Build synonym-expanded lookup: for each metric, get all known synonyms
+    // so we can match against whatever label the XBRL parser stored in the DB.
+    // E.g., "revenue" might be stored as "net_sales" for some tickers.
+    const allSynonyms: string[] = [];
+    const synonymToCanonical = new Map<string, string>();
+    for (const metricId of dbColumns) {
+      const synonyms = this.registry.getSynonymsForDbColumn(metricId);
+      for (const syn of synonyms) {
+        const lower = syn.toLowerCase();
+        allSynonyms.push(lower);
+        synonymToCanonical.set(lower, metricId);
+      }
+      // Always include the canonical_id itself
+      allSynonyms.push(metricId.toLowerCase());
+      synonymToCanonical.set(metricId.toLowerCase(), metricId);
+    }
+
+    // Deduplicate
+    const uniqueSynonyms = [...new Set(allSynonyms)];
+
     try {
       let rows: any[];
 
       if (effectivePeriod === 'latest') {
-        // Fetch the most recent value for each metric
+        // Fetch the most recent value for each metric using synonym expansion
         rows = await this.prisma.$queryRawUnsafe<any[]>(
           `SELECT DISTINCT ON (normalized_metric)
              normalized_metric, value, fiscal_period, period_type, filing_type
            FROM financial_metrics
            WHERE ticker = $1
-             AND normalized_metric = ANY($2::text[])
+             AND LOWER(normalized_metric) = ANY($2::text[])
            ORDER BY normalized_metric, fiscal_period DESC`,
           ticker.toUpperCase(),
-          dbColumns,
+          uniqueSynonyms,
         );
       } else {
-        // Fetch for a specific period
+        // Fetch for a specific period using synonym expansion
         rows = await this.prisma.$queryRawUnsafe<any[]>(
           `SELECT normalized_metric, value, fiscal_period, period_type, filing_type
            FROM financial_metrics
            WHERE ticker = $1
-             AND normalized_metric = ANY($2::text[])
+             AND LOWER(normalized_metric) = ANY($2::text[])
              AND fiscal_period = $3
            ORDER BY normalized_metric`,
           ticker.toUpperCase(),
-          dbColumns,
+          uniqueSynonyms,
           effectivePeriod,
         );
       }
 
       for (const row of rows) {
-        const metricId = row.normalized_metric;
-        const def = this.registry.getMetricById(metricId);
-        result.set(metricId, {
-          metric_id: metricId,
-          display_name: def?.display_name || metricId,
-          value: parseFloat(row.value),
-          source: 'database',
-          period: row.fiscal_period,
-          filing_type: row.filing_type,
-        });
+        // Map the DB label back to the canonical_id
+        const dbLabel = (row.normalized_metric || '').toLowerCase();
+        const canonicalId = synonymToCanonical.get(dbLabel) || row.normalized_metric;
+        const def = this.registry.getMetricById(canonicalId);
 
-        // Also cache this value
-        const cacheKey = `${ticker}:${effectivePeriod}:${metricId}`;
-        this.resolutionCache.set(cacheKey, result.get(metricId)!);
+        // Only set if we haven't already resolved this canonical_id
+        // (first match wins — DISTINCT ON already gives us the latest)
+        if (!result.has(canonicalId)) {
+          result.set(canonicalId, {
+            metric_id: canonicalId,
+            display_name: def?.display_name || canonicalId,
+            value: parseFloat(row.value),
+            source: 'database',
+            period: row.fiscal_period,
+            filing_type: row.filing_type,
+          });
+
+          // Also cache this value
+          const cacheKey = `${ticker}:${effectivePeriod}:${canonicalId}`;
+          this.resolutionCache.set(cacheKey, result.get(canonicalId)!);
+        }
       }
     } catch (err) {
       this.logger.error(`Failed to batch fetch atomic values: ${(err as Error).message}`);
