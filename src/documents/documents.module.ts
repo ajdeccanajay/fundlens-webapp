@@ -22,6 +22,7 @@ import { DocumentChunkingService } from './document-chunking.service';
 import { DocumentIndexingService } from './document-indexing.service';
 import { DealLibraryService } from './deal-library.service';
 import { DealLibraryController } from './deal-library.controller';
+import { MetricPersistenceService } from './metric-persistence.service';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { TenantModule } from '../tenant/tenant.module';
 import { RAGModule } from '../rag/rag.module';
@@ -47,6 +48,7 @@ import { S3Service } from '../services/s3.service';
     DocumentChunkingService,
     DocumentIndexingService,
     DealLibraryService,
+    MetricPersistenceService,
     S3Service,
   ],
   exports: [DocumentsService, DocumentProcessorService, DocumentProcessingService, DocumentIntelligenceService, BackgroundEnrichmentService, DocumentIndexingService, DealLibraryService],

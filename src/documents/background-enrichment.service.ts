@@ -20,6 +20,7 @@ import { VisionExtractionService, VisionPageResult } from './vision-extraction.s
 import { VerificationService } from './verification.service';
 import { DocumentChunkingService } from './document-chunking.service';
 import { DocumentIndexingService } from './document-indexing.service';
+import { MetricPersistenceService } from './metric-persistence.service';
 
 @Injectable()
 export class BackgroundEnrichmentService {
@@ -32,6 +33,7 @@ export class BackgroundEnrichmentService {
     private readonly verification: VerificationService,
     private readonly chunking: DocumentChunkingService,
     private readonly indexing: DocumentIndexingService,
+    private readonly metricPersistence: MetricPersistenceService,
   ) {}
 
   /**
@@ -118,6 +120,24 @@ export class BackgroundEnrichmentService {
         indexedCount,
         documentId,
       );
+
+      // ── Step 9b: Persist extracted metrics to flat table (Spec §15 Rule 1) ──
+      // Resolves JSONB metric labels → canonical IDs → extracted_metrics table
+      try {
+        const persistResult = await this.metricPersistence.persistFromExtractions(
+          documentId,
+          tenantId,
+        );
+        if (persistResult.persisted > 0) {
+          this.logger.log(
+            `[${documentId}] Persisted ${persistResult.persisted} metrics to extracted_metrics`,
+          );
+        }
+      } catch (persistErr) {
+        this.logger.warn(
+          `[${documentId}] Metric persistence failed (non-fatal): ${persistErr.message}`,
+        );
+      }
 
       // ── Step 10: KB Sync Prep — write chunks to S3 kb-ready/ prefix (Spec §6.3) ──
       // Only for Deal Library documents (or chat uploads linked to Deal Library)

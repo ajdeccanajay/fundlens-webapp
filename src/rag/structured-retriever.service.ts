@@ -488,6 +488,16 @@ export class StructuredRetrieverService {
     });
 
     if (!results.length) {
+      // Fallback: check extracted_metrics table (uploaded document metrics)
+      // Spec §4 Phase 4: structured retriever queries both financial_metrics AND extracted_metrics
+      const extractedResult = await this.getFromExtractedMetrics(ticker, resolution);
+      if (extractedResult) {
+        this.logger.log(
+          `📄 Found metric in extracted_metrics (uploaded docs): ${ticker}/${resolution.canonical_id}`,
+        );
+        return extractedResult;
+      }
+
       // Req 22.1: Log metric miss and trigger MetricLearningService
       this.logger.warn(
         `metric_misses: No DB results for ${ticker}/${resolution.canonical_id}/${filingType} — synonyms tried: [${synonyms.join(', ')}]`,
@@ -513,6 +523,55 @@ export class StructuredRetrieverService {
     const result = this.formatMetric(best);
     result.displayName = resolution.display_name;
     return result;
+  }
+
+  /**
+   * Query the extracted_metrics table (uploaded document metrics).
+   * Spec §4 Phase 4: fallback when financial_metrics has no results.
+   * Uses the same synonym lookup as the primary path.
+   * SEC filing data (financial_metrics) is always preferred — this is fallback only.
+   */
+  private async getFromExtractedMetrics(
+    ticker: string,
+    resolution: MetricResolution,
+  ): Promise<MetricResult | null> {
+    try {
+      const synonyms = this.metricRegistry.getSynonymsForDbColumn(resolution.canonical_id);
+
+      const rows = await this.prisma.$queryRawUnsafe<any[]>(
+        `SELECT normalized_metric, value, period, output_format,
+                source_file_name, extraction_confidence, created_at
+         FROM extracted_metrics
+         WHERE UPPER(ticker) = UPPER($1)
+           AND normalized_metric = ANY($2::text[])
+         ORDER BY period_end_date DESC NULLS LAST, created_at DESC
+         LIMIT 1`,
+        ticker,
+        synonyms,
+      );
+
+      if (!rows?.length) return null;
+
+      const row = rows[0];
+      return {
+        ticker: ticker.toUpperCase(),
+        normalizedMetric: resolution.canonical_id,
+        displayName: resolution.display_name,
+        rawLabel: row.normalized_metric,
+        value: parseFloat(row.value),
+        fiscalPeriod: row.period || 'uploaded',
+        periodType: 'as-reported',
+        filingType: 'uploaded-document',
+        statementType: 'uploaded',
+        statementDate: row.created_at ? new Date(row.created_at) : new Date(),
+        filingDate: row.created_at ? new Date(row.created_at) : new Date(),
+        confidenceScore: row.extraction_confidence === 'high' ? 0.95 : 0.75,
+        source: `${row.source_file_name || 'uploaded document'}`,
+      } as MetricResult;
+    } catch (err) {
+      this.logger.warn(`extracted_metrics query failed: ${err.message}`);
+      return null;
+    }
   }
 
   /**
