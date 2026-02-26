@@ -1,11 +1,17 @@
 import { Controller, Get, Post, Query, Param, Body, Logger } from '@nestjs/common';
 import { KBSyncService, KBSyncResult, SyncStatus, FullSyncResult, SectionSyncResult } from './kb-sync.service';
+import { UploadedDocKBSyncService, KBSyncCronResult } from '../documents/uploaded-doc-kb-sync.service';
+import { BulkUploadService, BulkUploadResult, BulkUploadDocument } from '../documents/bulk-upload.service';
 
 @Controller('rag/kb')
 export class KBSyncController {
   private readonly logger = new Logger(KBSyncController.name);
 
-  constructor(private readonly kbSyncService: KBSyncService) {}
+  constructor(
+    private readonly kbSyncService: KBSyncService,
+    private readonly uploadedDocKBSync: UploadedDocKBSyncService,
+    private readonly bulkUpload: BulkUploadService,
+  ) {}
 
   /**
    * Get sync status - compare RDS, S3, and KB document counts
@@ -190,5 +196,55 @@ export class KBSyncController {
       success: result.success,
       data: result,
     };
+  }
+
+  /**
+   * Uploaded Document KB Sync — Spec §11.3
+   * Processes documents with kb_sync_status = 'prepared'.
+   * Designed to be called every 15 minutes by cron or manually.
+   */
+  @Post('uploaded-doc-sync')
+  async uploadedDocSync(): Promise<{
+    success: boolean;
+    data: KBSyncCronResult;
+  }> {
+    this.logger.log('Starting uploaded document KB sync');
+    const result = await this.uploadedDocKBSync.processPending();
+    return { success: true, data: result };
+  }
+
+  /**
+   * Check in-flight KB sync jobs and update document statuses.
+   */
+  @Post('check-in-flight')
+  async checkInFlightJobs(): Promise<{
+    success: boolean;
+    data: { updated: number; completed: number; failed: number };
+  }> {
+    this.logger.log('Checking in-flight KB sync jobs');
+    const result = await this.uploadedDocKBSync.checkInFlightJobs();
+    return { success: true, data: result };
+  }
+
+  /**
+   * Bulk Upload — Spec §10 (Phase 8)
+   * Processes multiple documents with prioritized ordering.
+   */
+  @Post('bulk-upload')
+  async bulkUploadProcess(@Body() body: {
+    documents: BulkUploadDocument[];
+    tenantId: string;
+    dealId: string;
+  }): Promise<{
+    success: boolean;
+    data: BulkUploadResult;
+  }> {
+    this.logger.log(`Bulk upload: ${body.documents?.length || 0} documents`);
+    const result = await this.bulkUpload.processBulk(
+      body.documents,
+      body.tenantId,
+      body.dealId,
+    );
+    return { success: result.succeeded > 0, data: result };
   }
 }

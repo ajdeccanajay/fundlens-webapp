@@ -23,6 +23,10 @@ import { DocumentIndexingService } from './document-indexing.service';
 import { MetricPersistenceService } from './metric-persistence.service';
 import { ExcelExtractorService } from './excel-extractor.service';
 import { EarningsCallExtractorService } from './earnings-call-extractor.service';
+import { CallAnalysisPersistenceService } from './call-analysis-persistence.service';
+import { DocumentFlagsPersistenceService, DocumentFlag } from './document-flags-persistence.service';
+import { ModelFormulasPersistenceService } from './model-formulas-persistence.service';
+import { IntakeSummaryService } from './intake-summary.service';
 
 @Injectable()
 export class BackgroundEnrichmentService {
@@ -38,6 +42,10 @@ export class BackgroundEnrichmentService {
     private readonly metricPersistence: MetricPersistenceService,
     private readonly excelExtractor: ExcelExtractorService,
     private readonly earningsExtractor: EarningsCallExtractorService,
+    private readonly callAnalysisPersistence: CallAnalysisPersistenceService,
+    private readonly documentFlagsPersistence: DocumentFlagsPersistenceService,
+    private readonly modelFormulasPersistence: ModelFormulasPersistenceService,
+    private readonly intakeSummary: IntakeSummaryService,
   ) {}
 
   /**
@@ -141,6 +149,15 @@ export class BackgroundEnrichmentService {
             `[${documentId}] Excel extraction: ${excelResult.metrics.length} metrics, ` +
             `${excelResult.tables.length} tables, ${excelResult.formulaGraph.length} formulas`,
           );
+
+          // Persist formula graph to model_formulas table (Spec §9.4)
+          if (excelResult.formulaGraph.length > 0) {
+            try {
+              await this.modelFormulasPersistence.persist(documentId, tenantId, excelResult.formulaGraph);
+            } catch (fErr) {
+              this.logger.warn(`[${documentId}] Formula persistence failed (non-fatal): ${fErr.message}`);
+            }
+          }
         } catch (excelErr) {
           this.logger.warn(`[${documentId}] Excel extraction failed: ${excelErr.message}`);
         }
@@ -228,6 +245,28 @@ export class BackgroundEnrichmentService {
             `[${documentId}] Earnings call extraction: ${earningsResult.qaExchanges.length} Q&A, ` +
             `${earningsResult.allMetrics.length} metrics, ${earningsResult.redFlags.length} red flags`,
           );
+
+          // Persist structured call analysis to call_analysis table (Spec §9.4)
+          try {
+            await this.callAnalysisPersistence.persist(documentId, tenantId, earningsResult);
+          } catch (caErr) {
+            this.logger.warn(`[${documentId}] Call analysis persistence failed (non-fatal): ${caErr.message}`);
+          }
+
+          // Persist red flags to document_flags table (Spec §9.4)
+          if (earningsResult.redFlags.length > 0) {
+            const flags: DocumentFlag[] = earningsResult.redFlags.map(rf => ({
+              flagType: 'earnings_red_flag',
+              severity: rf.severity as any || 'medium',
+              description: rf.flag || '',
+              evidence: rf.evidence || undefined,
+            }));
+            try {
+              await this.documentFlagsPersistence.persist(documentId, tenantId, doc.company_ticker, flags);
+            } catch (dfErr) {
+              this.logger.warn(`[${documentId}] Document flags persistence failed (non-fatal): ${dfErr.message}`);
+            }
+          }
         } catch (earningsErr) {
           this.logger.warn(`[${documentId}] Earnings call extraction failed: ${earningsErr.message}`);
         }
@@ -283,6 +322,28 @@ export class BackgroundEnrichmentService {
             this.logger.log(
               `[${documentId}] Vision extraction: ${metricCount} metrics, ${tableCount} tables`,
             );
+
+            // Persist notable items from vision as document flags (Spec §9.4)
+            // Vision results don't have explicit notableItems — derive from entities
+            const visionFlags: DocumentFlag[] = [];
+            for (const page of visionResults) {
+              // Flag pages with many tables (potential restatement or complex financials)
+              if (page.tables.length > 3) {
+                visionFlags.push({
+                  flagType: 'complex_financials',
+                  severity: 'info',
+                  description: `Page ${page.pageNumber} contains ${page.tables.length} tables — may warrant detailed review`,
+                  sourcePageNumber: page.pageNumber,
+                });
+              }
+            }
+            if (visionFlags.length > 0) {
+              try {
+                await this.documentFlagsPersistence.persist(documentId, tenantId, doc.company_ticker, visionFlags);
+              } catch (vfErr) {
+                this.logger.warn(`[${documentId}] Vision flags persistence failed (non-fatal): ${vfErr.message}`);
+              }
+            }
           }
         } catch (visionErr) {
           this.logger.warn(
@@ -374,6 +435,53 @@ export class BackgroundEnrichmentService {
       }
 
       const elapsed = Date.now() - startTime;
+
+      // ── Step 11: Generate intake summary (Spec §12) ──
+      try {
+        // Gather top metrics from extractions for the summary
+        const topMetricsRows = await this.prisma.$queryRawUnsafe<any[]>(
+          `SELECT data FROM intel_document_extractions
+           WHERE document_id = $1::uuid AND extraction_type = 'metric'
+           ORDER BY created_at DESC LIMIT 5`,
+          documentId,
+        );
+        const topMetrics = topMetricsRows?.map(r => {
+          const d = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+          return {
+            name: d.metric_key || d.metricName || 'unknown',
+            value: d.numeric_value ?? d.value ?? 0,
+            unit: d.unit,
+            period: d.period,
+          };
+        }) || [];
+
+        // Gather notable items (flags)
+        const flagRows = await this.prisma.$queryRawUnsafe<any[]>(
+          `SELECT severity, description FROM document_flags
+           WHERE document_id = $1::uuid ORDER BY created_at DESC LIMIT 5`,
+          documentId,
+        ).catch(() => []);
+        const notableItems = (flagRows || []).map(f => ({
+          severity: f.severity,
+          description: f.description,
+        }));
+
+        await this.intakeSummary.generate({
+          documentId,
+          tenantId,
+          fileName: doc.file_name || 'document',
+          documentType: doc.document_type || 'generic',
+          reportingEntity: doc.company_name,
+          ticker: doc.company_ticker,
+          metricCount,
+          chunkCount: indexedCount,
+          topMetrics,
+          notableItems,
+        });
+      } catch (summaryErr) {
+        this.logger.warn(`[${documentId}] Intake summary failed (non-fatal): ${summaryErr.message}`);
+      }
+
       this.logger.log(
         `[${documentId}] Background enrichment complete: ` +
         `${metricCount} metrics, ${tableCount} tables, ${indexedCount} chunks indexed ` +

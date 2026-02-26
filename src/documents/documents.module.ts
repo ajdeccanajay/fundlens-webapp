@@ -25,6 +25,12 @@ import { DealLibraryController } from './deal-library.controller';
 import { MetricPersistenceService } from './metric-persistence.service';
 import { ExcelExtractorService } from './excel-extractor.service';
 import { EarningsCallExtractorService } from './earnings-call-extractor.service';
+import { CallAnalysisPersistenceService } from './call-analysis-persistence.service';
+import { DocumentFlagsPersistenceService } from './document-flags-persistence.service';
+import { ModelFormulasPersistenceService } from './model-formulas-persistence.service';
+import { IntakeSummaryService } from './intake-summary.service';
+import { UploadedDocKBSyncService } from './uploaded-doc-kb-sync.service';
+import { BulkUploadService } from './bulk-upload.service';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { TenantModule } from '../tenant/tenant.module';
 import { RAGModule } from '../rag/rag.module';
@@ -53,8 +59,14 @@ import { S3Service } from '../services/s3.service';
     MetricPersistenceService,
     ExcelExtractorService,
     EarningsCallExtractorService,
+    CallAnalysisPersistenceService,
+    DocumentFlagsPersistenceService,
+    ModelFormulasPersistenceService,
+    IntakeSummaryService,
+    UploadedDocKBSyncService,
+    BulkUploadService,
     S3Service,
   ],
-  exports: [DocumentsService, DocumentProcessorService, DocumentProcessingService, DocumentIntelligenceService, BackgroundEnrichmentService, DocumentIndexingService, DealLibraryService, ExcelExtractorService, EarningsCallExtractorService],
+  exports: [DocumentsService, DocumentProcessorService, DocumentProcessingService, DocumentIntelligenceService, BackgroundEnrichmentService, DocumentIndexingService, DealLibraryService, ExcelExtractorService, EarningsCallExtractorService, BulkUploadService, UploadedDocKBSyncService],
 })
 export class DocumentsModule {}
