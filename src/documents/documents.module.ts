@@ -23,6 +23,8 @@ import { DocumentIndexingService } from './document-indexing.service';
 import { DealLibraryService } from './deal-library.service';
 import { DealLibraryController } from './deal-library.controller';
 import { MetricPersistenceService } from './metric-persistence.service';
+import { ExcelExtractorService } from './excel-extractor.service';
+import { EarningsCallExtractorService } from './earnings-call-extractor.service';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { TenantModule } from '../tenant/tenant.module';
 import { RAGModule } from '../rag/rag.module';
@@ -49,8 +51,10 @@ import { S3Service } from '../services/s3.service';
     DocumentIndexingService,
     DealLibraryService,
     MetricPersistenceService,
+    ExcelExtractorService,
+    EarningsCallExtractorService,
     S3Service,
   ],
-  exports: [DocumentsService, DocumentProcessorService, DocumentProcessingService, DocumentIntelligenceService, BackgroundEnrichmentService, DocumentIndexingService, DealLibraryService],
+  exports: [DocumentsService, DocumentProcessorService, DocumentProcessingService, DocumentIntelligenceService, BackgroundEnrichmentService, DocumentIndexingService, DealLibraryService, ExcelExtractorService, EarningsCallExtractorService],
 })
 export class DocumentsModule {}

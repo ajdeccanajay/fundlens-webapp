@@ -162,7 +162,8 @@ export class VisionExtractionService {
 
   /**
    * Render PDF pages to images and extract structured data via Vision LLM.
-   * Parallelized with concurrency limit of 4.
+   * Batched: processes pages in groups of 10 to avoid OOM.
+   * Each batch renders pages → extracts → releases memory before next batch.
    */
   async extractFromPages(
     s3Key: string,
@@ -175,22 +176,43 @@ export class VisionExtractionService {
     // Get PDF buffer from S3
     const pdfBuffer = await this.s3.getFileBuffer(s3Key);
 
-    // Render pages to images
-    const pageImages = await this.renderPagesToImages(pdfBuffer, keyPages);
-    this.logger.log(`Rendered ${pageImages.length} page images (${Date.now() - startTime}ms)`);
-
-    // Process pages in parallel (max 4 concurrent)
-    const concurrency = 4;
+    // Process in batches of 10 pages (Spec §4.1) to avoid OOM
+    const batchSize = 10;
     const results: VisionPageResult[] = [];
 
-    for (let i = 0; i < pageImages.length; i += concurrency) {
-      const batch = pageImages.slice(i, i + concurrency);
-      const batchResults = await Promise.all(
-        batch.map(({ pageNumber, imageBase64 }) =>
-          this.extractSinglePage(imageBase64, pageNumber, documentType),
-        ),
+    for (let i = 0; i < keyPages.length; i += batchSize) {
+      const batchPages = keyPages.slice(i, i + batchSize);
+      const batchNum = Math.floor(i / batchSize) + 1;
+      const totalBatches = Math.ceil(keyPages.length / batchSize);
+
+      this.logger.log(
+        `Vision batch ${batchNum}/${totalBatches}: rendering pages [${batchPages.join(', ')}]`,
       );
-      results.push(...batchResults);
+
+      try {
+        // Render only this batch's pages to images
+        const pageImages = await this.renderPagesToImages(pdfBuffer, batchPages);
+
+        // Extract from rendered images (4 concurrent per batch)
+        const concurrency = 4;
+        for (let j = 0; j < pageImages.length; j += concurrency) {
+          const concurrentBatch = pageImages.slice(j, j + concurrency);
+          const batchResults = await Promise.all(
+            concurrentBatch.map(({ pageNumber, imageBase64 }) =>
+              this.extractSinglePage(imageBase64, pageNumber, documentType),
+            ),
+          );
+          results.push(...batchResults);
+        }
+
+        // Explicitly release image buffers to help GC
+        pageImages.length = 0;
+      } catch (err) {
+        this.logger.warn(
+          `Vision batch ${batchNum} failed (non-fatal): ${err.message}`,
+        );
+        // Continue with remaining batches
+      }
     }
 
     this.logger.log(
