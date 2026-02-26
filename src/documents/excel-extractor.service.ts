@@ -195,12 +195,12 @@ export class ExcelExtractorService {
    * Classify a sheet by its name and content.
    */
   private classifySheet(name: string, sheet: XLSX.WorkSheet): string {
-    const lower = name.toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (/income|p&l|pnl|profitloss|incomestatement/.test(lower)) return 'income_statement';
+    const lower = name.toLowerCase().replace(/[^a-z0-9&]/g, '');
+    if (/income|p&l|pnl|^pl$|profitloss|incomestatement/.test(lower)) return 'income_statement';
     if (/balance|bs|balancesheet/.test(lower)) return 'balance_sheet';
+    if (/dcf|discountedcash|dcfmodel/.test(lower)) return 'dcf';
     if (/cashflow|cf|cash/.test(lower)) return 'cash_flow';
     if (/assumption|inputs|drivers/.test(lower)) return 'assumptions';
-    if (/dcf|discountedcash/.test(lower)) return 'dcf';
     if (/lbo|leveragedbuyout|returns/.test(lower)) return 'lbo_returns';
     if (/comp|comparable|peer|trading/.test(lower)) return 'comps';
     if (/sensitiv|scenario|tornado/.test(lower)) return 'sensitivity';
