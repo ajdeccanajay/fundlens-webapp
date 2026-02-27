@@ -54,9 +54,9 @@ window.FundLensModuleConfig = {
             const resp = await fetch('/api/deals/info?ticker=' + entityValue, { headers: authHeaders });
             if (resp.ok) {
                 const data = await resp.json();
-                return { displayName: data.name || entityValue, sector: data.sector || '' };
+                return { displayName: data.name || entityValue, sector: data.sector || '', dealId: data.id || null };
             }
         } catch (e) { /* fallback below */ }
-        return { displayName: entityValue + ' Inc.', sector: '' };
+        return { displayName: entityValue + ' Inc.', sector: '', dealId: null };
     }
 };

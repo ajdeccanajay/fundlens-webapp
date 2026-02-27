@@ -717,10 +717,14 @@ Now generate your investment-grade analysis.`;
       
       uniqueNarratives.forEach((narrative, idx) => {
         const meta = narrative.metadata;
+        // Cap individual narrative content to prevent OOM on large documents
+        const content = narrative.content.length > 3000
+          ? narrative.content.substring(0, 3000) + '...[truncated]'
+          : narrative.content;
         parts.push(
           `[${idx + 1}] ${meta.ticker || 'Unknown'} ${meta.filingType || ''} ${meta.fiscalPeriod || ''}${meta.sectionType ? ' - ' + meta.sectionType : ''}:`,
         );
-        parts.push(`"${narrative.content}"\n`);
+        parts.push(`"${content}"\n`);
       });
     }
 

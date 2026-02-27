@@ -641,11 +641,11 @@ export class RAGService {
           
           if (validDocs.length > 0) {
             // Convert SessionDocument[] to UserDocumentChunk[] format
-            // Use 8000 chars per doc to capture enough context for segment-level queries
-            const sessionChunks = validDocs.map(doc => ({
+            // Cap at 4000 chars per doc to prevent OOM (was 8000)
+            const sessionChunks = validDocs.slice(0, 3).map(doc => ({
               id: doc.id,
               documentId: doc.id,
-              content: doc.extractedText!.substring(0, 8000),
+              content: doc.extractedText!.substring(0, 4000),
               pageNumber: null,
               ticker: null,
               filename: doc.fileName,
@@ -678,7 +678,7 @@ export class RAGService {
         // If we already have metrics/narratives from other sources, merge the
         // long-context text as an additional narrative chunk so the LLM sees it.
         const longContextChunk = {
-          content: options.longContextText.substring(0, 180000), // Stay within 200K token budget
+          content: options.longContextText.substring(0, 50000), // Cap at 50K chars (~12K tokens) to prevent OOM
           score: 0.95, // High relevance — user explicitly uploaded this
           metadata: {
             ticker: options.ticker || '',
@@ -891,6 +891,13 @@ export class RAGService {
         }
         
         narratives = budgetedNarratives;
+
+        // Hard cap: truncate individual narrative content to prevent OOM during prompt building
+        for (const n of narratives) {
+          if (n.content && n.content.length > 4000) {
+            n.content = n.content.substring(0, 4000) + '…[truncated]';
+          }
+        }
       }
       
       // Decide if LLM should be used
@@ -1057,6 +1064,8 @@ export class RAGService {
           'management_sentiment', 'sentiment', 'risk_factors', 'risk',
           'outlook', 'guidance', 'management_commentary', 'management_tone',
           'competitive_position', 'market_share', 'growth_drivers',
+          'advertising_profitability', 'advertising_revenue', 'advertising_business',
+          'profitability_outlook', 'segment_profitability', 'business_outlook',
         ]);
         const trulyUnresolved = unresolved.filter(u => {
           // Already resolved by another source?
@@ -1066,8 +1075,15 @@ export class RAGService {
           }
           // Qualitative concept with narratives available? LLM handles it.
           const queryLower = (u.original_query || '').toLowerCase().replace(/[^a-z]/g, '_');
-          if (narratives.length > 0 && qualitativeConcepts.has(queryLower)) {
+          const canonicalLower = (u.canonical_id || '').toLowerCase();
+          if (narratives.length > 0 && (qualitativeConcepts.has(queryLower) || qualitativeConcepts.has(canonicalLower))) {
             this.logger.log(`🔍 Suppressing degradation for qualitative concept "${u.original_query}" — narratives available`);
+            return false;
+          }
+          // Also suppress compound qualitative concepts (e.g. "advertising_profitability")
+          const qualitativeKeywords = ['outlook', 'profitability', 'sentiment', 'risk', 'guidance', 'commentary', 'business', 'advertising', 'segment'];
+          if (narratives.length > 0 && qualitativeKeywords.some(kw => canonicalLower.includes(kw) || queryLower.includes(kw))) {
+            this.logger.log(`🔍 Suppressing degradation for qualitative keyword match "${u.original_query}" — narratives available`);
             return false;
           }
           return true;
@@ -2982,6 +2998,40 @@ export class RAGService {
           filename: r.fileName,
         }));
         result.narratives = uploadNarratives;
+      }
+
+      // Source 3: Long-context-fallback — when vector search returns nothing,
+      // fetch raw text from S3 for docs that have no chunks/embeddings.
+      // This ensures uploaded analyst reports (like DBS) are always referenced.
+      if (result.narratives.length === 0 && this.documentIndexing) {
+        const tickerForFallback = intentTickers[0] || options?.ticker;
+        this.logger.log(`📄 Source 3: Vector search empty — checking long-context-fallback docs (ticker=${tickerForFallback || 'all'})`);
+        const fallbackDocs = await this.documentIndexing.getLongContextFallbackText(
+          options.tenantId,
+          { companyTicker: tickerForFallback, maxDocs: 2, maxCharsPerDoc: 6000 },
+        );
+        if (fallbackDocs.length > 0) {
+          this.logger.log(`📄 Source 3: Retrieved ${fallbackDocs.length} long-context-fallback docs`);
+          for (const doc of fallbackDocs) {
+            result.narratives.push({
+              content: doc.content,
+              score: 0.90, // High relevance — user explicitly uploaded this
+              sourceType: 'UPLOADED_DOC',
+              metadata: {
+                ticker: doc.companyTicker || options.ticker || '',
+                sectionType: 'uploaded-document',
+                filingType: 'uploaded-document',
+              },
+              source: {
+                location: doc.fileName,
+                type: 'uploaded-document',
+                documentId: doc.documentId,
+              },
+              filename: doc.fileName,
+            });
+          }
+          result.chunkCount = fallbackDocs.length;
+        }
       }
     } catch (error) {
       this.logger.warn(`⚠️ Uploaded doc search failed: ${error.message}`);

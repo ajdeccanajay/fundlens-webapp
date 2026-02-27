@@ -193,6 +193,7 @@
                 if (status === 'uploading') return 'status-queued';
                 if (status === 'processing') return 'status-processing';
                 if (doc && doc.processing_mode === 'fully-indexed' && doc.chunk_count > 0) return 'status-ready';
+                if (doc && doc.processing_mode === 'long-context-fallback' && status === 'queryable') return 'status-ready';
                 if (status === 'queryable') return 'status-processing';
                 return 'status-queued';
             },
@@ -201,9 +202,13 @@
                 if (doc.status === 'error') return '❌ Failed — ' + (doc.error || 'processing error');
                 if (doc.status === 'uploading') return '⏳ Waiting for upload';
                 if (doc.status === 'processing') return '🔄 Processing...';
-                // Queryable but not fully indexed yet
+                // Queryable and fully indexed with chunks
                 if (doc.status === 'queryable' && doc.processing_mode === 'fully-indexed' && doc.chunk_count > 0) {
                     return '✅ Indexed — ready for research';
+                }
+                // Queryable via long-context fallback (no chunking, but still searchable)
+                if (doc.status === 'queryable' && doc.processing_mode === 'long-context-fallback') {
+                    return '✅ Ready — full-text mode';
                 }
                 if (doc.status === 'queryable') return '🔄 Indexing...';
                 return doc.status;

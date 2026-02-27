@@ -762,7 +762,7 @@
                 var headers = this.getAuthHeaders();
                 if (!headers) { window.location.href = '/login.html'; return; }
                 var formData = new FormData();
-                formData.append('dealId', this.entityContext.value);
+                formData.append('dealId', this.entityContext.extra.dealId || this.entityContext.value);
                 pendingFiles.forEach(function(fileObj) { formData.append('files', fileObj.file); fileObj.status = 'processing'; fileObj.phase = 'Uploading'; fileObj.progress = 0; });
                 progressInterval = setInterval(function() { pendingFiles.forEach(function(fileObj) { if (fileObj.status === 'processing' && fileObj.progress < 50) fileObj.progress = Math.min(fileObj.progress + 5, 50); }); }, 200);
                 var response = await fetch('/api/instant-rag/upload', { method: 'POST', headers: { 'Authorization': headers['Authorization'] }, body: formData });
@@ -890,7 +890,7 @@
                     headers: Object.assign({}, headers, { 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
                         fileName: file.name, fileType: file.type, fileSize: file.size,
-                        dealId: this.entityContext.value,
+                        dealId: this.entityContext.extra.dealId || this.entityContext.value,
                         uploadSource: 'chat',
                     }),
                 });

@@ -7,9 +7,10 @@
  * Uses the same embedding model (amazon.titan-embed-text-v2:0, 1024 dims)
  * as Bedrock KB to ensure consistent relevance rankings (Spec §6.1).
  */
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BedrockService } from '../rag/bedrock.service';
+import { S3Service } from '../services/s3.service';
 import { DocumentChunk } from './document-chunking.service';
 
 export interface IndexedChunk {
@@ -40,6 +41,7 @@ export class DocumentIndexingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly bedrock: BedrockService,
+    @Optional() private readonly s3?: S3Service,
   ) {}
 
   /**
@@ -288,5 +290,86 @@ export class DocumentIndexingService {
       DELETE FROM intel_document_chunks
       WHERE document_id = ${documentId}::uuid
     `;
+  }
+
+  /**
+   * Fetch raw text snippets from long-context-fallback documents.
+   * When docs have no chunks/embeddings (long-context-fallback mode),
+   * this retrieves the raw text from S3 so it can be used as narrative context.
+   * Returns up to maxDocs documents, each capped at maxCharsPerDoc.
+   */
+  async getLongContextFallbackText(
+    tenantId: string,
+    options: { companyTicker?: string; maxDocs?: number; maxCharsPerDoc?: number } = {},
+  ): Promise<{ documentId: string; fileName: string; companyTicker: string; content: string }[]> {
+    const maxDocs = options.maxDocs || 2;
+    const maxCharsPerDoc = options.maxCharsPerDoc || 6000;
+
+    if (!this.s3) {
+      this.logger.warn('S3 service not available for long-context-fallback retrieval');
+      return [];
+    }
+
+    try {
+      // Find long-context-fallback docs with no chunks
+      let sql: string;
+      let params: any[];
+
+      if (options.companyTicker) {
+        sql = `
+          SELECT d.document_id, d.file_name, d.company_ticker, d.raw_text_s3_key
+          FROM intel_documents d
+          WHERE d.tenant_id = $1::uuid
+            AND d.processing_mode = 'long-context-fallback'
+            AND d.status IN ('queryable', 'fully-indexed')
+            AND d.raw_text_s3_key IS NOT NULL
+            AND UPPER(d.company_ticker) = UPPER($2)
+          ORDER BY d.created_at DESC
+          LIMIT $3
+        `;
+        params = [tenantId, options.companyTicker, maxDocs];
+      } else {
+        sql = `
+          SELECT d.document_id, d.file_name, d.company_ticker, d.raw_text_s3_key
+          FROM intel_documents d
+          WHERE d.tenant_id = $1::uuid
+            AND d.processing_mode = 'long-context-fallback'
+            AND d.status IN ('queryable', 'fully-indexed')
+            AND d.raw_text_s3_key IS NOT NULL
+          ORDER BY d.created_at DESC
+          LIMIT $2
+        `;
+        params = [tenantId, maxDocs];
+      }
+
+      const docs = await this.prisma.$queryRawUnsafe<any[]>(sql, ...params);
+      if (docs.length === 0) return [];
+
+      this.logger.log(`📄 Found ${docs.length} long-context-fallback docs for retrieval`);
+
+      const results: { documentId: string; fileName: string; companyTicker: string; content: string }[] = [];
+
+      for (const doc of docs) {
+        try {
+          const buf = await this.s3.getFileBuffer(doc.raw_text_s3_key);
+          const fullText = buf.toString('utf-8');
+          const content = fullText.substring(0, maxCharsPerDoc);
+          results.push({
+            documentId: doc.document_id,
+            fileName: doc.file_name,
+            companyTicker: doc.company_ticker || '',
+            content,
+          });
+          this.logger.log(`📄 Fetched ${content.length} chars from ${doc.file_name} (${fullText.length} total)`);
+        } catch (e) {
+          this.logger.warn(`📄 Failed to fetch raw text for ${doc.file_name}: ${e.message}`);
+        }
+      }
+
+      return results;
+    } catch (error) {
+      this.logger.error(`Long-context-fallback retrieval failed: ${error.message}`);
+      return [];
+    }
   }
 }
