@@ -1,15 +1,17 @@
 /**
  * Vision Extraction Service — Spec §3.4, §5.1, §5.2
  *
- * Phase B primary extractor: renders PDF pages to images,
- * sends to Claude Sonnet Vision for structured extraction.
- * Parallelized: 4 concurrent pages, ~3-5s each.
+ * Phase B primary extractor: splits PDF into page-range batches via pdf-lib,
+ * sends raw PDF bytes directly to Bedrock Claude as document content blocks.
+ * No image conversion, no canvas, no OOM risk.
  *
- * Cost: ~$0.005/page. Speed: ~15s for 10 key pages (4 parallel).
+ * Replaces the old pdf-to-img approach which caused uncatchable V8 OOM aborts.
+ * pdf-lib is pure JS (~50MB for 100-page PDF) vs pdf-to-img (2-8GB canvas).
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { BedrockService } from '../rag/bedrock.service';
 import { S3Service } from '../services/s3.service';
+import { PDFDocument } from 'pdf-lib';
 
 /** Spec §5.2 — Vision extraction output per page */
 export interface VisionPageResult {
@@ -56,60 +58,6 @@ export interface VisionFootnote {
   text: string;
 }
 
-/** Spec §5.2 — Vision extraction prompt template */
-const VISION_EXTRACTION_PROMPT = `You are a financial document extraction engine. Extract ALL structured data
-from this page image with 100% fidelity to what is printed.
-
-RULES:
-1. Extract EVERY number exactly as displayed. No rounding, no inference.
-2. Parentheses (123) = negative. Note the sign.
-3. Capture UNITS: "$M", "$B", "$K", "%", "x" (multiple), "bps".
-4. Mark estimates: look for "E", "est.", italics, shading, consensus.
-5. Capture footnote references (superscript markers).
-6. Identify the TIME PERIOD per column: FY2023, Q3 2024, LTM, NTM, FY2025E.
-7. For comp tables: capture company name/ticker AND metric in each cell.
-8. For charts: extract title, axis labels, and approximate data point values.
-
-Document type: {{DOCUMENT_TYPE}}
-Page number: {{PAGE_NUMBER}}
-
-Return ONLY valid JSON:
-{
-  "tables": [{
-    "tableType": "<income-statement|balance-sheet|comp-table|valuation-summary|segment-breakdown|other>",
-    "title": "<visible title>",
-    "currency": "<USD|EUR|...>",
-    "units": "<millions|billions|thousands|percentage>",
-    "headers": [{"cells": ["col1","col2",...], "rowIndex": 0}],
-    "rows": [{
-      "label": "<row label>",
-      "cells": [{
-        "value": "<raw display>",
-        "numericValue": null,
-        "isNegative": false,
-        "isEstimate": false,
-        "period": "<FY2024|Q3 2024E|LTM|NTM>"
-      }],
-      "footnoteRefs": []
-    }]
-  }],
-  "charts": [{
-    "chartType": "<bar|line|pie|waterfall|scatter|other>",
-    "title": "<title>",
-    "dataPoints": [{"label": "<x>", "value": 0, "series": "<name>"}]
-  }],
-  "narratives": [{
-    "type": "<heading|paragraph|bullet|callout>",
-    "text": "<exact text>"
-  }],
-  "footnotes": [{"marker": "<1|a|*>", "text": "<footnote text>"}],
-  "entities": {
-    "companies": [],
-    "dates": [],
-    "metrics": []
-  }
-}`;
-
 @Injectable()
 export class VisionExtractionService {
   private readonly logger = new Logger(VisionExtractionService.name);
@@ -122,7 +70,7 @@ export class VisionExtractionService {
   /**
    * Identify which pages are "key pages" worth sending to Vision LLM.
    * Key pages contain tables, charts, or dense financial data.
-   * Spec §3.4 — identifyKeyPages
+   * Spec §3.4 — identifyKeyPages (text-based, no memory issues)
    */
   identifyKeyPages(rawText: string, documentType: string): number[] {
     const pages = rawText.split(/\f|\n{4,}/); // Form feeds or large gaps = page breaks
@@ -161,9 +109,9 @@ export class VisionExtractionService {
   }
 
   /**
-   * Render PDF pages to images and extract structured data via Vision LLM.
-   * Batched: processes pages in groups of 10 to avoid OOM.
-   * Each batch renders pages → extracts → releases memory before next batch.
+   * Extract structured data from PDF pages using Bedrock Claude's native PDF support.
+   * Splits PDF into batches of 5 pages via pdf-lib, sends raw PDF bytes to Claude.
+   * Falls back to text-only extraction if Bedrock PDF call fails.
    */
   async extractFromPages(
     s3Key: string,
@@ -173,43 +121,77 @@ export class VisionExtractionService {
     const startTime = Date.now();
     this.logger.log(`Starting vision extraction on ${keyPages.length} pages for ${s3Key}`);
 
-    // Get PDF buffer from S3
     const pdfBuffer = await this.s3.getFileBuffer(s3Key);
 
-    // Process in batches of 10 pages (Spec §4.1) to avoid OOM
-    const batchSize = 10;
+    try {
+      return await this.extractWithBedrockPdf(pdfBuffer, keyPages, documentType, startTime);
+    } catch (error) {
+      this.logger.warn(
+        `PDF-native extraction failed, falling back to text-only: ${error.message}`,
+      );
+      // Return empty — text-only fallback is handled by background-enrichment
+      return [];
+    }
+  }
+
+  /**
+   * Primary path: split PDF into page-range batches, send raw PDF bytes to Bedrock Claude.
+   * Uses pdf-lib (pure JS, no native deps) for PDF splitting.
+   */
+  private async extractWithBedrockPdf(
+    pdfBuffer: Buffer,
+    keyPages: number[],
+    documentType: string,
+    startTime: number,
+  ): Promise<VisionPageResult[]> {
+    const sourcePdf = await PDFDocument.load(pdfBuffer);
+    const totalPages = sourcePdf.getPageCount();
+
     const results: VisionPageResult[] = [];
+    const batchSize = 5; // 5 pages per Bedrock call
 
     for (let i = 0; i < keyPages.length; i += batchSize) {
-      const batchPages = keyPages.slice(i, i + batchSize);
+      const batch = keyPages.slice(i, i + batchSize);
       const batchNum = Math.floor(i / batchSize) + 1;
       const totalBatches = Math.ceil(keyPages.length / batchSize);
 
       this.logger.log(
-        `Vision batch ${batchNum}/${totalBatches}: rendering pages [${batchPages.join(', ')}]`,
+        `Vision batch ${batchNum}/${totalBatches}: pages [${batch.join(', ')}]`,
       );
 
       try {
-        // Render only this batch's pages to images
-        const pageImages = await this.renderPagesToImages(pdfBuffer, batchPages);
+        // Create a mini-PDF with just these pages
+        const batchPdf = await PDFDocument.create();
+        const validPages: number[] = [];
 
-        // Extract from rendered images (4 concurrent per batch)
-        const concurrency = 4;
-        for (let j = 0; j < pageImages.length; j += concurrency) {
-          const concurrentBatch = pageImages.slice(j, j + concurrency);
-          const batchResults = await Promise.all(
-            concurrentBatch.map(({ pageNumber, imageBase64 }) =>
-              this.extractSinglePage(imageBase64, pageNumber, documentType),
-            ),
-          );
-          results.push(...batchResults);
+        for (const pageNum of batch) {
+          const zeroIndexed = pageNum - 1; // keyPages are 1-indexed
+          if (zeroIndexed >= 0 && zeroIndexed < totalPages) {
+            const [copiedPage] = await batchPdf.copyPages(sourcePdf, [zeroIndexed]);
+            batchPdf.addPage(copiedPage);
+            validPages.push(pageNum);
+          }
         }
 
-        // Explicitly release image buffers to help GC
-        pageImages.length = 0;
-      } catch (err) {
+        if (validPages.length === 0) continue;
+
+        const batchBytes = await batchPdf.save();
+        const batchBase64 = Buffer.from(batchBytes).toString('base64');
+
+        // Send to Bedrock Claude with native PDF document support
+        const response = await this.bedrock.invokeClaudeWithDocument({
+          prompt: this.buildExtractionPrompt(validPages, totalPages, documentType),
+          documentBase64: batchBase64,
+          documentName: `pages_${validPages[0]}_to_${validPages[validPages.length - 1]}`,
+          modelId: 'anthropic.claude-sonnet-4-5-20250929-v1:0',
+          max_tokens: 8000,
+        });
+
+        const parsed = this.parseBatchResponse(response, validPages);
+        results.push(...parsed);
+      } catch (batchErr) {
         this.logger.warn(
-          `Vision batch ${batchNum} failed (non-fatal): ${err.message}`,
+          `Vision batch ${batchNum} failed (non-fatal): ${batchErr.message}`,
         );
         // Continue with remaining batches
       }
@@ -226,101 +208,118 @@ export class VisionExtractionService {
   }
 
   /**
-   * Render specific PDF pages to PNG images using pdf-to-img.
+   * Build the extraction prompt for a batch of pages.
    */
-  private async renderPagesToImages(
-    pdfBuffer: Buffer,
+  private buildExtractionPrompt(
     pageNumbers: number[],
-  ): Promise<{ pageNumber: number; imageBase64: string }[]> {
-    try {
-      // pdf-to-img v5 is ESM-only, use dynamic import
-      const { pdf } = await (Function('return import("pdf-to-img")')() as Promise<any>);
-
-      const pages: { pageNumber: number; imageBase64: string }[] = [];
-      let currentPage = 0;
-
-      for await (const image of await pdf(pdfBuffer, { scale: 1.0 })) {
-        currentPage++;
-        if (pageNumbers.includes(currentPage)) {
-          // image is a Buffer (PNG)
-          const base64 = Buffer.from(image).toString('base64');
-          pages.push({ pageNumber: currentPage, imageBase64: base64 });
-        }
-        // Stop early if we've got all requested pages
-        if (pages.length === pageNumbers.length) break;
-      }
-
-      return pages;
-    } catch (error) {
-      this.logger.warn(`PDF rendering failed, falling back to text-only: ${error.message}`);
-      return [];
-    }
-  }
-
-  /**
-   * Extract structured data from a single page image via Vision LLM.
-   */
-  private async extractSinglePage(
-    imageBase64: string,
-    pageNumber: number,
+    totalPages: number,
     documentType: string,
-  ): Promise<VisionPageResult> {
-    const prompt = VISION_EXTRACTION_PROMPT
-      .replace('{{DOCUMENT_TYPE}}', documentType)
-      .replace('{{PAGE_NUMBER}}', String(pageNumber));
+  ): string {
+    return `You are a financial document extraction engine. You are viewing pages ${pageNumbers.join(', ')} of a ${totalPages}-page ${documentType} document.
 
-    try {
-      const response = await this.bedrock.invokeClaudeWithVision({
-        prompt,
-        images: [{ base64: imageBase64, mediaType: 'image/png' }],
-        modelId: 'us.anthropic.claude-sonnet-4-20250514-v1:0',
-        max_tokens: 4000,
-      });
+For EACH page in this PDF, extract ALL structured data with 100% fidelity.
 
-      const parsed = this.parseVisionResponse(response);
-      return { pageNumber, ...parsed };
-    } catch (error) {
-      this.logger.warn(`Vision extraction failed for page ${pageNumber}: ${error.message}`);
-      return {
-        pageNumber,
-        tables: [],
-        charts: [],
-        narratives: [],
-        footnotes: [],
-        entities: { companies: [], dates: [], metrics: [] },
-      };
+RULES:
+1. Extract EVERY number exactly as displayed. No rounding, no inference.
+2. Parentheses (123) = negative. Note the sign.
+3. Capture UNITS: "$M", "$B", "$K", "%", "x" (multiple), "bps".
+4. Mark estimates: look for "E", "est.", italics, shading, consensus.
+5. Capture footnote references (superscript markers).
+6. Identify the TIME PERIOD per column: FY2023, Q3 2024, LTM, NTM, FY2025E.
+7. For comp tables: capture company name/ticker AND metric in each cell.
+8. For charts: extract title, axis labels, and approximate data point values.
+
+Return ONLY valid JSON (no markdown fencing):
+{
+  "pages": [
+    {
+      "original_page_number": <1-indexed page number from the list: ${pageNumbers.join(', ')}>,
+      "tables": [{
+        "tableType": "<income-statement|balance-sheet|comp-table|valuation-summary|segment-breakdown|other>",
+        "title": "<visible title>",
+        "currency": "<USD|EUR|...>",
+        "units": "<millions|billions|thousands|percentage>",
+        "headers": [{"cells": ["col1","col2"], "rowIndex": 0}],
+        "rows": [{
+          "label": "<row label>",
+          "cells": [{
+            "value": "<raw display>",
+            "numericValue": null,
+            "isNegative": false,
+            "isEstimate": false,
+            "period": "<FY2024|Q3 2024E|LTM|NTM>"
+          }],
+          "footnoteRefs": []
+        }]
+      }],
+      "charts": [{
+        "chartType": "<bar|line|pie|waterfall|scatter|other>",
+        "title": "<title>",
+        "dataPoints": [{"label": "<x>", "value": 0, "series": "<name>"}]
+      }],
+      "narratives": [{
+        "type": "<heading|paragraph|bullet|callout>",
+        "text": "<exact text>"
+      }],
+      "footnotes": [{"marker": "<1|a|*>", "text": "<footnote text>"}],
+      "entities": {
+        "companies": [],
+        "dates": [],
+        "metrics": []
+      }
     }
+  ]
+}`;
   }
 
   /**
-   * Parse Vision LLM JSON response, handling markdown fencing.
+   * Parse the batch response from Bedrock Claude.
+   * Maps the response pages back to their original page numbers.
    */
-  private parseVisionResponse(response: string): Omit<VisionPageResult, 'pageNumber'> {
-    const empty = {
-      tables: [] as VisionTable[],
-      charts: [] as VisionChart[],
-      narratives: [] as VisionNarrative[],
-      footnotes: [] as VisionFootnote[],
-      entities: { companies: [] as string[], dates: [] as string[], metrics: [] as string[] },
+  private parseBatchResponse(
+    response: string,
+    expectedPages: number[],
+  ): VisionPageResult[] {
+    const empty: VisionPageResult = {
+      pageNumber: 0,
+      tables: [],
+      charts: [],
+      narratives: [],
+      footnotes: [],
+      entities: { companies: [], dates: [], metrics: [] },
     };
 
     try {
       let json = response.trim();
-      // Strip markdown fencing
+      // Strip markdown fencing if present
       if (json.startsWith('```')) {
         json = json.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
       }
       const parsed = JSON.parse(json);
-      return {
-        tables: parsed.tables || [],
-        charts: parsed.charts || [],
-        narratives: parsed.narratives || [],
-        footnotes: parsed.footnotes || [],
-        entities: parsed.entities || empty.entities,
-      };
+
+      if (!parsed.pages || !Array.isArray(parsed.pages)) {
+        // Single-page response — wrap it
+        return [{
+          pageNumber: expectedPages[0] || 1,
+          tables: parsed.tables || [],
+          charts: parsed.charts || [],
+          narratives: parsed.narratives || [],
+          footnotes: parsed.footnotes || [],
+          entities: parsed.entities || empty.entities,
+        }];
+      }
+
+      return parsed.pages.map((page: any, idx: number) => ({
+        pageNumber: page.original_page_number || expectedPages[idx] || idx + 1,
+        tables: page.tables || [],
+        charts: page.charts || [],
+        narratives: page.narratives || [],
+        footnotes: page.footnotes || [],
+        entities: page.entities || empty.entities,
+      }));
     } catch {
-      this.logger.warn('Failed to parse vision response as JSON');
-      return empty;
+      this.logger.warn('Failed to parse vision batch response as JSON');
+      return [];
     }
   }
 

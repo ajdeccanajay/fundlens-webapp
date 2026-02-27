@@ -124,7 +124,7 @@ export class BackgroundEnrichmentService {
                   confidence, page_number, created_at
                 ) VALUES (
                   gen_random_uuid(), $1::uuid, $2::uuid, 'metric',
-                  $3::jsonb, 'high', NULL, NOW()
+                  $3::jsonb, 0.90, NULL, NOW()
                 )`,
                 documentId, tenantId,
                 JSON.stringify({
@@ -186,7 +186,7 @@ export class BackgroundEnrichmentService {
                   confidence, page_number, created_at
                 ) VALUES (
                   gen_random_uuid(), $1::uuid, $2::uuid, 'metric',
-                  $3::jsonb, 'medium', NULL, NOW()
+                  $3::jsonb, 0.70, NULL, NOW()
                 )`,
                 documentId, tenantId,
                 JSON.stringify({
@@ -219,7 +219,7 @@ export class BackgroundEnrichmentService {
                 confidence, created_at
               ) VALUES (
                 gen_random_uuid(), $1::uuid, $2::uuid, 'tone_analysis',
-                $3::jsonb, 'high', NOW()
+                $3::jsonb, 0.90, NOW()
               )`,
               documentId, tenantId,
               JSON.stringify(earningsResult.toneAnalysis),
@@ -237,7 +237,7 @@ export class BackgroundEnrichmentService {
               )`,
               documentId, tenantId,
               JSON.stringify(flag),
-              flag.severity === 'high' ? 'high' : 'medium',
+              flag.severity === 'high' ? 0.90 : 0.70,
             );
           }
 
@@ -275,8 +275,9 @@ export class BackgroundEnrichmentService {
       // Only attempt vision extraction for PDFs
       const isPdf = doc.file_type?.includes('pdf');
 
-      // Steps 1-6: Vision extraction — RE-ENABLED with batched processing
-      // Pages are processed in batches of 10 to avoid V8 OOM.
+      // Steps 1-6: Vision extraction via Bedrock Claude native PDF support.
+      // Uses pdf-lib (pure JS, ~50MB) instead of pdf-to-img (2-8GB canvas OOM).
+      // Safe to run concurrently with RAG queries.
       let visionResults: VisionPageResult[] = [];
       let metricCount = 0;
       let tableCount = 0;
@@ -311,7 +312,7 @@ export class BackgroundEnrichmentService {
                   )`,
                   documentId, tenantId,
                   JSON.stringify(metric),
-                  metric.confidence || 'medium',
+                  typeof metric.confidence === 'number' ? metric.confidence : (metric.confidence === 'high' ? 0.90 : 0.70),
                   metric.page_number || null,
                 );
               } catch (insertErr) {
@@ -352,7 +353,8 @@ export class BackgroundEnrichmentService {
           // Non-fatal — chunking + indexing still proceeds
         }
       } else {
-        this.logger.log(`[${documentId}] Skipping vision extraction (not PDF or text too short)`);
+        const reason = !isPdf ? 'not PDF' : 'text too short';
+        this.logger.log(`[${documentId}] Skipping vision extraction (${reason})`);
       }
 
       // ── Step 7: Chunk raw text (Spec §3.4 Step 4) ──

@@ -519,6 +519,59 @@ export class BedrockService {
     }
   }
 
+  /**
+   * Invoke Claude with a PDF document content block (native PDF support).
+   * Sends raw PDF bytes directly — no image conversion needed.
+   * Used by VisionExtractionService for OOM-safe PDF extraction.
+   */
+  async invokeClaudeWithDocument(params: {
+    prompt: string;
+    documentBase64: string;
+    documentName?: string;
+    systemPrompt?: string;
+    modelId?: string;
+    max_tokens?: number;
+  }): Promise<string> {
+    try {
+      const modelId = params.modelId || 'anthropic.claude-sonnet-4-5-20250929-v1:0';
+
+      const contentBlocks: any[] = [
+        {
+          document: {
+            format: 'pdf',
+            name: params.documentName || 'document',
+            source: { bytes: Buffer.from(params.documentBase64, 'base64') },
+          },
+        },
+        { text: params.prompt },
+      ];
+
+      const commandInput: any = {
+        modelId,
+        messages: [
+          {
+            role: 'user',
+            content: contentBlocks,
+          },
+        ],
+        inferenceConfig: {
+          maxTokens: params.max_tokens || 8000,
+          temperature: 0.1,
+        },
+      };
+
+      if (params.systemPrompt) {
+        commandInput.system = [{ text: params.systemPrompt }];
+      }
+
+      const command = new ConverseCommand(commandInput);
+      const response = await this.bedrockRuntimeClient.send(command);
+      return response.output?.message?.content?.[0]?.text || '';
+    } catch (error) {
+      this.logger.error(`Claude document invocation failed: ${error.message}`);
+      throw new Error(`Failed to invoke Claude with document: ${error.message}`);
+    }
+  }
 
   /**
    * Extract metadata from content context (fallback method)

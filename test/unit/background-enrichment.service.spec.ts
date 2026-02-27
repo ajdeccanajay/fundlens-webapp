@@ -19,6 +19,13 @@ import { VisionExtractionService } from '../../src/documents/vision-extraction.s
 import { VerificationService } from '../../src/documents/verification.service';
 import { DocumentChunkingService } from '../../src/documents/document-chunking.service';
 import { DocumentIndexingService } from '../../src/documents/document-indexing.service';
+import { MetricPersistenceService } from '../../src/documents/metric-persistence.service';
+import { ExcelExtractorService } from '../../src/documents/excel-extractor.service';
+import { EarningsCallExtractorService } from '../../src/documents/earnings-call-extractor.service';
+import { CallAnalysisPersistenceService } from '../../src/documents/call-analysis-persistence.service';
+import { DocumentFlagsPersistenceService } from '../../src/documents/document-flags-persistence.service';
+import { ModelFormulasPersistenceService } from '../../src/documents/model-formulas-persistence.service';
+import { IntakeSummaryService } from '../../src/documents/intake-summary.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { S3Service } from '../../src/services/s3.service';
 
@@ -95,6 +102,49 @@ describe('BackgroundEnrichmentService', () => {
           useValue: {
             indexChunks: mockIndexChunks,
             deleteChunks: mockDeleteChunks,
+          },
+        },
+        {
+          provide: MetricPersistenceService,
+          useValue: {
+            persistFromExtractions: jest.fn().mockResolvedValue({ persisted: 0 }),
+          },
+        },
+        {
+          provide: ExcelExtractorService,
+          useValue: {
+            extract: jest.fn().mockResolvedValue({ metrics: [], tables: [], formulaGraph: [], textChunks: [] }),
+          },
+        },
+        {
+          provide: EarningsCallExtractorService,
+          useValue: {
+            extract: jest.fn().mockResolvedValue({ qaExchanges: [], allMetrics: [], redFlags: [], toneAnalysis: { overallConfidence: 0 } }),
+            toChunks: jest.fn().mockReturnValue([]),
+          },
+        },
+        {
+          provide: CallAnalysisPersistenceService,
+          useValue: {
+            persist: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        {
+          provide: DocumentFlagsPersistenceService,
+          useValue: {
+            persist: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        {
+          provide: ModelFormulasPersistenceService,
+          useValue: {
+            persist: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        {
+          provide: IntakeSummaryService,
+          useValue: {
+            generate: jest.fn().mockResolvedValue(undefined),
           },
         },
       ],
