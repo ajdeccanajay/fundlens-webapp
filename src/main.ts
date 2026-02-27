@@ -2,6 +2,19 @@ import { NestFactory } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 
+// Process-level crash protection — prevent unhandled rejections from killing the server
+process.on('unhandledRejection', (reason: any) => {
+  console.error('⚠️ Unhandled Promise Rejection (caught at process level):', reason?.message || reason);
+  // Don't exit — log and continue. Background tasks (vision extraction, enrichment)
+  // should never crash the main server process.
+});
+
+process.on('uncaughtException', (error: Error) => {
+  console.error('🚨 Uncaught Exception:', error.message, error.stack);
+  // For truly fatal errors, log but don't exit immediately — let NestJS handle graceful shutdown
+  // Only OOM and similar V8 errors will bypass this handler entirely
+});
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   

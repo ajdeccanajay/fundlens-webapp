@@ -13,12 +13,18 @@
 
 import { Test, TestingModule } from '@nestjs/testing';
 import { HttpException, HttpStatus } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { ConfigService } from '@nestjs/config';
 import { DocumentIntelligenceController } from '../../src/documents/document-intelligence.controller';
 import { DocumentIntelligenceService } from '../../src/documents/document-intelligence.service';
+import { S3Service } from '../../src/services/s3.service';
+import { PrismaService } from '../../prisma/prisma.service';
+import { TenantGuard } from '../../src/tenant/tenant.guard';
 
 describe('DocumentIntelligenceController', () => {
   let controller: DocumentIntelligenceController;
   let service: jest.Mocked<DocumentIntelligenceService>;
+  let s3: jest.Mocked<S3Service>;
 
   const mockTenantId = '11111111-1111-1111-1111-111111111111';
   const mockDealId = '22222222-2222-2222-2222-222222222222';
@@ -39,15 +45,27 @@ describe('DocumentIntelligenceController', () => {
       },
     };
 
+    const mockS3 = {
+      fileExists: jest.fn().mockResolvedValue(true),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [DocumentIntelligenceController],
       providers: [
         { provide: DocumentIntelligenceService, useValue: mockService },
+        { provide: S3Service, useValue: mockS3 },
+        { provide: Reflector, useValue: new Reflector() },
+        { provide: ConfigService, useValue: { get: jest.fn() } },
+        { provide: PrismaService, useValue: { $queryRaw: jest.fn() } },
       ],
-    }).compile();
+    })
+      .overrideGuard(TenantGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     controller = module.get(DocumentIntelligenceController);
     service = module.get(DocumentIntelligenceService);
+    s3 = module.get(S3Service);
   });
 
   // ─── POST /api/documents/upload-url ────────────────────────────

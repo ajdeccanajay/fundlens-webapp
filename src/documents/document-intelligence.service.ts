@@ -157,11 +157,16 @@ export class DocumentIntelligenceService {
     // Phase B: Fire background enrichment asynchronously (non-blocking)
     // User is already querying via long-context fallback while this runs
     setImmediate(() => {
-      this.backgroundEnrichment
-        .enrichDocument(documentId, tenantId, dealId)
-        .catch(err =>
-          this.logger.error(`[${documentId}] Background enrichment failed: ${err.message}`),
-        );
+      try {
+        this.backgroundEnrichment
+          .enrichDocument(documentId, tenantId, dealId)
+          .catch(err =>
+            this.logger.error(`[${documentId}] Background enrichment failed: ${err.message}`),
+          );
+      } catch (syncErr) {
+        // Catch any synchronous errors that escape the async chain
+        this.logger.error(`[${documentId}] Background enrichment sync error: ${(syncErr as any).message}`);
+      }
     });
 
     return {
@@ -226,10 +231,10 @@ export class DocumentIntelligenceService {
       `INSERT INTO intel_documents (
         document_id, tenant_id, deal_id, chat_session_id,
         file_name, file_type, file_size, s3_key,
-        status, upload_source, created_at, updated_at
+        status, upload_source, upload_method, created_at, updated_at
       ) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid,
         $5, $6, $7, $8,
-        'uploading', $9, NOW(), NOW())`,
+        'uploading', $9, 'presigned', NOW(), NOW())`,
       documentId,
       params.tenantId,
       params.dealId,
@@ -253,50 +258,70 @@ export class DocumentIntelligenceService {
    * Extract text from uploaded file (spec §3.1 step 1)
    * Uses pdf-parse for PDFs, mammoth for DOCX, xlsx for spreadsheets.
    * NO external API calls — all local processing.
+   *
+   * Memory-conscious: checks file size before loading, caps buffer,
+   * and nulls references promptly so GC can reclaim.
    */
   private async extractText(s3Key: string, fileType: string): Promise<string> {
-    const buffer = await this.s3.getFileBuffer(s3Key);
-
-    if (fileType.includes('pdf')) {
-      const parser = new PDFParse({ data: buffer });
-      const result = await parser.getText();
-      return result.text || '';
+    // Check file size first to avoid loading huge files into memory
+    let fileSize = 0;
+    try {
+      const meta = await this.s3.getFileMetadata(s3Key);
+      fileSize = meta.size;
+    } catch {
+      // If metadata check fails, proceed with load (will fail there if missing)
     }
 
-    if (
-      fileType.includes('wordprocessingml') ||
-      fileType.includes('docx') ||
-      fileType.includes('msword')
-    ) {
-      const result = await mammoth.extractRawText({ buffer });
-      return result.value || '';
-    }
-
-    if (
-      fileType.includes('spreadsheetml') ||
-      fileType.includes('xlsx') ||
-      fileType.includes('csv')
-    ) {
-      const workbook = XLSX.read(buffer, { type: 'buffer' });
-      const texts: string[] = [];
-      for (const sheetName of workbook.SheetNames) {
-        const sheet = workbook.Sheets[sheetName];
-        texts.push(`Sheet: ${sheetName}\n${XLSX.utils.sheet_to_csv(sheet)}`);
-      }
-      return texts.join('\n\n');
-    }
-
-    if (fileType.includes('text') || fileType.includes('csv')) {
-      return buffer.toString('utf-8');
-    }
-
-    // Images — no text extraction, will rely on vision in Phase B
-    if (fileType.includes('image')) {
+    // Cap at 100MB — anything larger is likely not a document we can process
+    const MAX_FILE_SIZE = 100 * 1024 * 1024;
+    if (fileSize > MAX_FILE_SIZE) {
+      this.logger.warn(`File ${s3Key} is ${(fileSize / 1024 / 1024).toFixed(1)}MB — exceeds 100MB limit, skipping text extraction`);
       return '';
     }
 
-    // Fallback: try as text
-    return buffer.toString('utf-8');
+    let buffer = await this.s3.getFileBuffer(s3Key);
+    let text = '';
+
+    try {
+      if (fileType.includes('pdf')) {
+        const parser = new PDFParse({ data: buffer });
+        const result = await parser.getText();
+        text = result.text || '';
+      } else if (
+        fileType.includes('wordprocessingml') ||
+        fileType.includes('docx') ||
+        fileType.includes('msword')
+      ) {
+        const result = await mammoth.extractRawText({ buffer });
+        text = result.value || '';
+      } else if (
+        fileType.includes('spreadsheetml') ||
+        fileType.includes('xlsx') ||
+        fileType.includes('csv')
+      ) {
+        const workbook = XLSX.read(buffer, { type: 'buffer' });
+        const texts: string[] = [];
+        for (const sheetName of workbook.SheetNames) {
+          const sheet = workbook.Sheets[sheetName];
+          texts.push(`Sheet: ${sheetName}\n${XLSX.utils.sheet_to_csv(sheet)}`);
+        }
+        text = texts.join('\n\n');
+      } else if (fileType.includes('text') || fileType.includes('csv')) {
+        text = buffer.toString('utf-8');
+      } else if (fileType.includes('image')) {
+        // Images — no text extraction, will rely on vision in Phase B
+        text = '';
+      } else {
+        // Fallback: try as text
+        text = buffer.toString('utf-8');
+      }
+    } finally {
+      // Release buffer reference immediately so GC can reclaim
+      // @ts-ignore — intentional null to free memory
+      buffer = null;
+    }
+
+    return text;
   }
 
   /**
@@ -376,9 +401,9 @@ export class DocumentIntelligenceService {
       await this.prisma.$executeRawUnsafe(
         `INSERT INTO intel_document_extractions (
           document_id, tenant_id, deal_id,
-          extraction_type, data, confidence, verified, source_layer, created_at
+          extraction_type, data, confidence, verified, source_layer, extraction_mode, created_at
         ) VALUES ($1::uuid, $2::uuid, $3::uuid,
-          'headline', $4::jsonb, 0.90, false, 'headline', NOW())`,
+          'headline', $4::jsonb, 0.90, false, 'headline', 'headline', NOW())`,
         documentId,
         tenantId,
         dealId,

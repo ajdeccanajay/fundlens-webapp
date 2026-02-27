@@ -15,6 +15,7 @@ import { DocumentIntelligenceService } from './document-intelligence.service';
 import type { InstantIntelligenceResult } from './document-intelligence.service';
 import { TenantGuard } from '../tenant/tenant.guard';
 import { TENANT_CONTEXT_KEY, TenantContext } from '../tenant/tenant-context';
+import { S3Service } from '../services/s3.service';
 
 /**
  * Document Intelligence Controller
@@ -31,6 +32,7 @@ export class DocumentIntelligenceController {
 
   constructor(
     private readonly intelligenceService: DocumentIntelligenceService,
+    private readonly s3: S3Service,
   ) {}
 
   /**
@@ -108,6 +110,16 @@ export class DocumentIntelligenceController {
     }
 
     const record = rows[0];
+
+    // Verify file exists in S3 before triggering pipeline (spec Part 1)
+    // This catches cases where presigned upload failed silently
+    const exists = await this.s3.fileExists(record.s3_key);
+    if (!exists) {
+      throw new HttpException(
+        'File not found in S3. Upload may have failed — please retry.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
 
     return this.intelligenceService.processInstantIntelligence(
       documentId,

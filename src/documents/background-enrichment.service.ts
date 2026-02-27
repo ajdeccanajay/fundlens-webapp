@@ -305,10 +305,10 @@ export class BackgroundEnrichmentService {
                 await this.prisma.$executeRawUnsafe(
                   `INSERT INTO intel_document_extractions (
                     id, document_id, tenant_id, extraction_type, data,
-                    confidence, page_number, created_at
+                    confidence, page_number, extraction_mode, created_at
                   ) VALUES (
                     gen_random_uuid(), $1::uuid, $2::uuid, 'metric',
-                    $3::jsonb, $4, $5, NOW()
+                    $3::jsonb, $4, $5, 'pdf-native', NOW()
                   )`,
                   documentId, tenantId,
                   JSON.stringify(metric),

@@ -533,14 +533,29 @@ export class BedrockService {
     max_tokens?: number;
   }): Promise<string> {
     try {
-      const modelId = params.modelId || 'anthropic.claude-sonnet-4-5-20250929-v1:0';
+      // Use Sonnet 4 inference profile (us. prefix required for cross-region inference)
+      const modelId = params.modelId || 'us.anthropic.claude-sonnet-4-20250514-v1:0';
+
+      // Sanitize document name: must match ^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$
+      const safeName = (params.documentName || 'document')
+        .replace(/[^a-zA-Z0-9._-]/g, '_')
+        .replace(/^[^a-zA-Z0-9]/, 'doc_')
+        .substring(0, 64) || 'document';
+
+      // Decode base64 to bytes for the document block
+      const docBytes = Buffer.from(params.documentBase64, 'base64');
+
+      // Memory guard: skip if document is > 25MB (Bedrock limit is ~25MB for document blocks)
+      if (docBytes.length > 25 * 1024 * 1024) {
+        throw new Error(`Document too large for Bedrock: ${(docBytes.length / 1024 / 1024).toFixed(1)}MB (limit 25MB)`);
+      }
 
       const contentBlocks: any[] = [
         {
           document: {
             format: 'pdf',
-            name: params.documentName || 'document',
-            source: { bytes: Buffer.from(params.documentBase64, 'base64') },
+            name: safeName,
+            source: { bytes: docBytes },
           },
         },
         { text: params.prompt },
@@ -565,7 +580,16 @@ export class BedrockService {
       }
 
       const command = new ConverseCommand(commandInput);
-      const response = await this.bedrockRuntimeClient.send(command);
+
+      // Timeout: 120 seconds per batch to prevent hung calls
+      const timeoutMs = 120_000;
+      const response = await Promise.race([
+        this.bedrockRuntimeClient.send(command),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`Bedrock document call timed out after ${timeoutMs / 1000}s`)), timeoutMs),
+        ),
+      ]);
+
       return response.output?.message?.content?.[0]?.text || '';
     } catch (error) {
       this.logger.error(`Claude document invocation failed: ${error.message}`);

@@ -121,7 +121,31 @@ export class VisionExtractionService {
     const startTime = Date.now();
     this.logger.log(`Starting vision extraction on ${keyPages.length} pages for ${s3Key}`);
 
-    const pdfBuffer = await this.s3.getFileBuffer(s3Key);
+    // Memory guard: check heap usage before starting vision extraction
+    const heapUsed = process.memoryUsage().heapUsed;
+    const heapLimit = 3 * 1024 * 1024 * 1024; // 3GB
+    if (heapUsed > heapLimit) {
+      this.logger.warn(
+        `Skipping vision extraction — heap usage ${(heapUsed / 1024 / 1024).toFixed(0)}MB exceeds 3GB limit`,
+      );
+      return [];
+    }
+
+    let pdfBuffer: Buffer;
+    try {
+      pdfBuffer = await this.s3.getFileBuffer(s3Key);
+    } catch (err) {
+      this.logger.warn(`Failed to fetch PDF from S3: ${err.message}`);
+      return [];
+    }
+
+    // Size guard: skip vision for very large PDFs (> 50MB raw)
+    if (pdfBuffer.length > 50 * 1024 * 1024) {
+      this.logger.warn(
+        `Skipping vision extraction — PDF too large: ${(pdfBuffer.length / 1024 / 1024).toFixed(1)}MB`,
+      );
+      return [];
+    }
 
     try {
       return await this.extractWithBedrockPdf(pdfBuffer, keyPages, documentType, startTime);
@@ -129,7 +153,6 @@ export class VisionExtractionService {
       this.logger.warn(
         `PDF-native extraction failed, falling back to text-only: ${error.message}`,
       );
-      // Return empty — text-only fallback is handled by background-enrichment
       return [];
     }
   }
@@ -176,6 +199,15 @@ export class VisionExtractionService {
         if (validPages.length === 0) continue;
 
         const batchBytes = await batchPdf.save();
+
+        // Check batch size — Bedrock document limit is ~25MB
+        if (batchBytes.length > 20 * 1024 * 1024) {
+          this.logger.warn(
+            `Vision batch ${batchNum} too large (${(batchBytes.length / 1024 / 1024).toFixed(1)}MB), skipping`,
+          );
+          continue;
+        }
+
         const batchBase64 = Buffer.from(batchBytes).toString('base64');
 
         // Send to Bedrock Claude with native PDF document support
@@ -183,7 +215,7 @@ export class VisionExtractionService {
           prompt: this.buildExtractionPrompt(validPages, totalPages, documentType),
           documentBase64: batchBase64,
           documentName: `pages_${validPages[0]}_to_${validPages[validPages.length - 1]}`,
-          modelId: 'anthropic.claude-sonnet-4-5-20250929-v1:0',
+          modelId: 'us.anthropic.claude-sonnet-4-20250514-v1:0',
           max_tokens: 8000,
         });
 
