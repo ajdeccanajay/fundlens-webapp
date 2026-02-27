@@ -275,6 +275,14 @@ export class BackgroundEnrichmentService {
       // Only attempt vision extraction for PDFs
       const isPdf = doc.file_type?.includes('pdf');
 
+      // Env var gate: disable vision extraction on memory-constrained environments (local Mac = 4GB).
+      // On ECS (16GB+), set ENABLE_VISION_EXTRACTION=true.
+      const visionEnabled = process.env.ENABLE_VISION_EXTRACTION === 'true';
+
+      // Heap guard: skip vision if heap is already above 1.5GB (leaves room for chunking + embedding)
+      const heapUsedMB = process.memoryUsage().heapUsed / (1024 * 1024);
+      const heapSafe = heapUsedMB < 1500;
+
       // Steps 1-6: Vision extraction via Bedrock Claude native PDF support.
       // Uses pdf-lib (pure JS, ~50MB) instead of pdf-to-img (2-8GB canvas OOM).
       // Safe to run concurrently with RAG queries.
@@ -282,7 +290,7 @@ export class BackgroundEnrichmentService {
       let metricCount = 0;
       let tableCount = 0;
 
-      if (isPdf && rawText.length > 500) {
+      if (isPdf && rawText.length > 500 && visionEnabled && heapSafe) {
         try {
           const keyPages = this.visionExtraction.identifyKeyPages(rawText, doc.document_type || 'generic');
           this.logger.log(`[${documentId}] Identified ${keyPages.length} key pages for vision extraction`);
@@ -353,8 +361,13 @@ export class BackgroundEnrichmentService {
           // Non-fatal — chunking + indexing still proceeds
         }
       } else {
-        const reason = !isPdf ? 'not PDF' : 'text too short';
+        const reason = !isPdf ? 'not PDF' : !visionEnabled ? 'ENABLE_VISION_EXTRACTION not set' : !heapSafe ? `heap too high (${heapUsedMB.toFixed(0)}MB)` : 'text too short';
         this.logger.log(`[${documentId}] Skipping vision extraction (${reason})`);
+      }
+
+      // Memory cleanup: null out visionResults if empty to help GC before chunking
+      if (visionResults.length === 0) {
+        visionResults = [];
       }
 
       // ── Step 7: Chunk raw text (Spec §3.4 Step 4) ──

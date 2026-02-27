@@ -123,10 +123,10 @@ export class VisionExtractionService {
 
     // Memory guard: check heap usage before starting vision extraction
     const heapUsed = process.memoryUsage().heapUsed;
-    const heapLimit = 3 * 1024 * 1024 * 1024; // 3GB
+    const heapLimit = 1.5 * 1024 * 1024 * 1024; // 1.5GB (lowered from 3GB — leaves room for chunking + embedding)
     if (heapUsed > heapLimit) {
       this.logger.warn(
-        `Skipping vision extraction — heap usage ${(heapUsed / 1024 / 1024).toFixed(0)}MB exceeds 3GB limit`,
+        `Skipping vision extraction — heap usage ${(heapUsed / 1024 / 1024).toFixed(0)}MB exceeds 1.5GB limit`,
       );
       return [];
     }
@@ -148,11 +148,15 @@ export class VisionExtractionService {
     }
 
     try {
-      return await this.extractWithBedrockPdf(pdfBuffer, keyPages, documentType, startTime);
+      const results = await this.extractWithBedrockPdf(pdfBuffer, keyPages, documentType, startTime);
+      // Memory cleanup: null out pdfBuffer so GC can reclaim before downstream work
+      pdfBuffer = null as any;
+      return results;
     } catch (error) {
       this.logger.warn(
         `PDF-native extraction failed, falling back to text-only: ${error.message}`,
       );
+      pdfBuffer = null as any;
       return [];
     }
   }
@@ -167,7 +171,7 @@ export class VisionExtractionService {
     documentType: string,
     startTime: number,
   ): Promise<VisionPageResult[]> {
-    const sourcePdf = await PDFDocument.load(pdfBuffer);
+    let sourcePdf = await PDFDocument.load(pdfBuffer);
     const totalPages = sourcePdf.getPageCount();
 
     const results: VisionPageResult[] = [];
@@ -228,6 +232,10 @@ export class VisionExtractionService {
         // Continue with remaining batches
       }
     }
+
+    // Memory cleanup: release the source PDF document so GC can reclaim it
+    // before downstream chunking + embedding allocates more memory
+    sourcePdf = null as any;
 
     this.logger.log(
       `Vision extraction complete: ${results.length} pages, ` +
