@@ -37,7 +37,7 @@ export class QueryUnderstandingService implements OnModuleInit {
   private readonly logger = new Logger(QueryUnderstandingService.name);
   private readonly cache = new Map<string, CacheEntry>();
   private readonly CACHE_MAX_SIZE = 200;
-  private readonly CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+  private readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes (matches performance optimizer cache TTL)
 
   // Circuit breaker state
   private failureCount = 0;
@@ -101,16 +101,24 @@ export class QueryUnderstandingService implements OnModuleInit {
       return result;
     }
 
-    // Circuit breaker: if Haiku has been failing, go straight to fallback
+    // Circuit breaker: if Haiku has been failing, skip to Sonnet fallback
     if (this.isCircuitOpen()) {
-      this.logger.warn('⚠️ QUL circuit breaker OPEN — using fallback');
+      this.logger.warn('⚠️ QUL circuit breaker OPEN — skipping Haiku, trying Sonnet fallback');
       this.observability?.recordCircuitBreakerTrip();
+      const sonnetResult = await this.callSonnetFallback(query, workspace, uploadedDocs, conversationHistory);
+      if (sonnetResult) {
+        this.setCache(cacheKey, sonnetResult);
+        const latency = Date.now() - startTime;
+        this.observability?.recordResolution(sonnetResult, latency, { wasFallback: true });
+        return sonnetResult;
+      }
+      // Sonnet also failed — tier 3 regex fallback
       const fallback = this.buildFallbackUnderstanding(query, workspace, uploadedDocs);
       this.observability?.recordResolution(fallback, Date.now() - startTime, { wasFallback: true });
       return fallback;
     }
 
-    // Tier 2: Haiku LLM disambiguation
+    // Tier 2: Haiku LLM disambiguation (primary)
     try {
       const understanding = await this.callHaiku(
         query, workspace, uploadedDocs, conversationHistory,
@@ -131,6 +139,28 @@ export class QueryUnderstandingService implements OnModuleInit {
       const isTimeout = error.message?.includes('timeout');
       const isParseFailure = error.message?.includes('parse') || error.message?.includes('JSON');
       this.logger.error(`❌ QUL Haiku call failed (${this.failureCount}x): ${error.message}`);
+
+      // Tier 2b: Sonnet 3.5 fallback — same prompt, bigger model
+      this.logger.log('🔄 Attempting Sonnet 3.5 fallback for QUL...');
+      const sonnetResult = await this.callSonnetFallback(query, workspace, uploadedDocs, conversationHistory);
+      if (sonnetResult) {
+        this.setCache(cacheKey, sonnetResult);
+        const latency = Date.now() - startTime;
+        this.logger.log(
+          `🧠 QUL Sonnet fallback resolved: intent=${sonnetResult.intent}, ` +
+          `entity=${sonnetResult.primaryEntity?.ticker || sonnetResult.primaryEntity?.name || 'none'}, ` +
+          `confidence=${sonnetResult.confidence.toFixed(2)} (${latency}ms)`,
+        );
+        this.observability?.recordResolution(sonnetResult, latency, {
+          wasFallback: true,
+          wasTimeout: isTimeout,
+          wasParseFailure: isParseFailure,
+        });
+        return sonnetResult;
+      }
+
+      // Tier 3: Conservative regex pass-through (last resort)
+      this.logger.warn('❌ Both Haiku and Sonnet failed — using tier 3 regex fallback');
       const fallback = this.buildFallbackUnderstanding(query, workspace, uploadedDocs);
       this.observability?.recordResolution(fallback, Date.now() - startTime, {
         wasFallback: true,
@@ -189,6 +219,62 @@ export class QueryUnderstandingService implements OnModuleInit {
   }
 
   /**
+   * Tier 2b: Sonnet 3.5 fallback when Haiku fails.
+   * Same prompt, bigger model — handles edge cases Haiku can't parse.
+   * Returns null if Sonnet also fails (caller falls through to tier 3).
+   */
+  private async callSonnetFallback(
+    query: string,
+    workspace: WorkspaceContext,
+    uploadedDocs: UploadedDocumentMeta[],
+    conversationHistory: ConversationMessage[],
+  ): Promise<QueryUnderstanding | null> {
+    try {
+      const userMessage = this.buildUserMessage(query, workspace, uploadedDocs, conversationHistory);
+
+      let fewShotSection = '';
+      if (this.fewShotExamples.length > 0) {
+        const selected = this.selectRelevantExamples(query, workspace, conversationHistory);
+        fewShotSection = '\n\nHere are examples of correct outputs:\n\n' +
+          selected.map((ex, i) =>
+            `Example ${i + 1} (${ex.description}):\nInput: ${JSON.stringify(ex.input)}\nOutput: ${JSON.stringify(ex.output)}`
+          ).join('\n\n');
+      }
+
+      const fullPrompt = userMessage + fewShotSection;
+
+      const response = await Promise.race([
+        this.bedrock.invokeClaude({
+          prompt: fullPrompt,
+          systemPrompt: this.systemPrompt,
+          modelId: 'us.anthropic.claude-3-5-sonnet-20241022-v2:0',
+          max_tokens: 1024,
+          temperature: 0,
+        }),
+        this.timeout(20000), // 20-second timeout (Sonnet is slower)
+      ]);
+
+      if (typeof response !== 'string' || response.length === 0) {
+        this.logger.warn('❌ Sonnet fallback returned empty response');
+        return null;
+      }
+
+      const parsed = parseHaikuJSON(response);
+      if (!parsed) {
+        this.logger.warn('❌ Sonnet fallback JSON parse failed');
+        return null;
+      }
+
+      const result = validateAndEnrich(parsed, query, workspace);
+      result.resolvedBy = 'tier2b_sonnet_fallback' as any;
+      return result;
+    } catch (error) {
+      this.logger.error(`❌ Sonnet fallback failed: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
    * Build the user message with full workspace context.
    * Spec Section 4.2.
    */
@@ -226,18 +312,14 @@ export class QueryUnderstandingService implements OnModuleInit {
       message.context_hint = 'This is a private equity workspace. Uploaded documents contain the primary deal entity. Use uploaded_entity entityType for references to the target company.';
     }
 
-    // DEFAULT ENTITY HINT: When the query doesn't name a company and there's
-    // no conversation history, remind Haiku that workspace_ticker is the default.
-    // This prevents Haiku from picking a ticker from uploaded_documents when
-    // the analyst is asking about their current deal (workspace).
+    // DEFAULT ENTITY HINT: When there's no conversation history, remind Haiku
+    // that workspace_ticker is the default for unscoped queries.
+    // We do NOT try to detect explicit companies via regex — that's Haiku's job.
+    // The hint simply tells Haiku: "if the query doesn't name anyone, use workspace."
+    // Haiku's system prompt already has the entity resolution rules to override this
+    // when the query explicitly names a different company.
     if (workspace.ticker && conversationHistory.length === 0) {
-      const queryLower = query.toLowerCase();
-      // Check if query explicitly names a company or ticker
-      const hasExplicitCompany = /\b(AAPL|ABNB|MSFT|GOOG|GOOGL|AMZN|TSLA|META|NVDA|NFLX|JPM|AVGO|COST|UNH|LLY)\b/.test(query) ||
-        /\b(Apple|Microsoft|Tesla|Google|Alphabet|Amazon|NVIDIA|Netflix|Meta|Salesforce|JPMorgan|Broadcom|Costco|UnitedHealth|Eli Lilly|Airbnb)\b/i.test(query);
-      if (!hasExplicitCompany) {
-        message.default_entity_hint = `The query does not name a specific company. The analyst is working in the ${workspace.ticker} workspace. Default to workspace_ticker=${workspace.ticker} as the entity. Do NOT pick a ticker from uploaded_documents unless the query explicitly references "the uploaded document", "the report", or "the analyst report".`;
-      }
+      message.default_entity_hint = `If the query does not name a specific company or ticker, the analyst is working in the ${workspace.ticker} workspace — default to workspace_ticker=${workspace.ticker}. If the query DOES name a specific company or ticker, use that instead. Do NOT pick a ticker from uploaded_documents unless the query explicitly references "the uploaded document", "the report", or "the analyst report".`;
     }
 
     // COREFERENCE HINT: When conversation_history is non-empty and the query

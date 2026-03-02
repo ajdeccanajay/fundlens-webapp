@@ -61,8 +61,12 @@ export class DocumentRAGService {
       // Generate query embedding
       const queryEmbedding = await this.bedrock.generateEmbedding(query);
 
-      // Build SQL query with tenant filtering
-      const tickerFilter = ticker ? `AND c.ticker = $3` : '';
+      // Build SQL query with tenant filtering.
+      // When a ticker is specified: return chunks matching that ticker
+      // OR chunks with NULL ticker (tenant-level docs, not company-specific).
+      // This ensures company-specific docs for OTHER tickers are excluded
+      // while general docs (e.g., fund guidelines) are still searchable.
+      const tickerFilter = ticker ? `AND (c.ticker = $3 OR c.ticker IS NULL)` : '';
       const params = ticker
         ? [queryEmbedding, tenantId, ticker, topK]
         : [queryEmbedding, tenantId, topK];

@@ -70,7 +70,7 @@ export interface TenantOverlay {
 }
 
 // ── Constants ───────────────────────────────────────────────────────────
-const MAX_NARRATIVE_CHARS = 12_000;
+const MAX_NARRATIVE_CHARS = 20_000;
 const MAX_PROMPT_CHARS = 28_000;
 
 /**
@@ -216,8 +216,13 @@ export class HybridSynthesisService {
         '- Present key figures in a comparison table when multiple tickers are involved.',
         '- Follow with analytical commentary: what the numbers mean, key differences, and implications.',
         '- End with a sharp, thought-provoking question under ## Investment Committee Challenge.',
-        '- Keep the total response under 500 words.',
+        `- Keep the total response under ${this.getWordLimit(ctx)} words.`,
+        '- Include year-over-year growth rates when historical data is available.',
+        '- Always cite the specific fiscal period for each number you quote.',
         '- Do NOT describe or narrate any charts — if a chart is generated, it will be rendered separately.',
+        '- When analyzing revenue, discuss segment breakdowns (e.g., AWS, advertising, subscriptions) if narrative context mentions them.',
+        '- When multiple fiscal periods are available, highlight trends and growth trajectories.',
+        '- For multi-ticker queries, provide a meaningful comparative analysis — don\'t just list numbers side by side.',
         '',
         `QUERY: ${ctx.originalQuery}`,
         '',
@@ -343,6 +348,20 @@ export class HybridSynthesisService {
 
       return this.truncatePrompt(sections.join('\n'));
     }
+  /**
+   * Dynamic word limit based on query complexity.
+   * Multi-ticker and comparison queries need more room for meaningful analysis.
+   */
+  private getWordLimit(ctx: FinancialAnalysisContext): number {
+    const tickers = Array.isArray(ctx.intent.ticker) ? ctx.intent.ticker : ctx.intent.ticker ? [ctx.intent.ticker] : [];
+    const hasNarratives = (ctx.narratives?.length || 0) > 0;
+    const isComparison = ctx.intent.needsComparison || ctx.intent.needsPeerComparison || tickers.length > 1;
+
+    if (isComparison && hasNarratives) return 1200;
+    if (isComparison) return 1000;
+    if (hasNarratives) return 900;
+    return 700;
+  }
 
   /**
    * Build a unifying prompt for decomposed sub-query results (Req 14.3).
@@ -375,7 +394,9 @@ export class HybridSynthesisService {
         '- Present key figures in a comparison table when multiple tickers are involved.',
         '- Follow with analytical commentary synthesizing all sub-query findings.',
         '- End with a sharp, thought-provoking question under ## Investment Committee Challenge.',
-        '- Keep the total response under 500 words.',
+        '- Keep the total response under 700 words.',
+        '- Include year-over-year growth rates when historical data is available.',
+        '- Always cite the specific fiscal period for each number you quote.',
         '- Do NOT describe or narrate any charts — if a chart is generated, it will be rendered separately.',
         '',
         `ORIGINAL QUERY: ${ctx.originalQuery}`,

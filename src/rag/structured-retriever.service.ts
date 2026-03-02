@@ -404,7 +404,7 @@ export class StructuredRetrieverService {
   }> {
     this.logger.log('Retrieving latest metrics (both 10-K and 10-Q)');
 
-    const results: MetricResult[] = [];
+    let results: MetricResult[] = [];
     
     // Filter out unresolved metrics to avoid unnecessary DB queries
     const resolvedMetrics = query.metrics.filter(m => m.confidence !== 'unresolved');
@@ -435,6 +435,94 @@ export class StructuredRetrieverService {
           '10-Q',
         );
         if (quarterly) results.push(quarterly);
+      }
+    }
+
+    // Supplement with historical annual data for core metrics.
+    // When periodType=latest, the primary loop returns only the most recent
+    // annual and quarterly values. For core metrics (revenue, net_income, etc.),
+    // we fetch up to 5 prior annual periods so computeFinancials can calculate
+    // YoY growth rates and the chart shows a meaningful trend.
+    const TREND_WORTHY_METRICS = new Set([
+      'revenue', 'net_income', 'gross_profit', 'operating_income',
+      'ebitda', 'free_cash_flow', 'operating_cash_flow',
+      'total_assets', 'total_liabilities', 'total_equity',
+      'cost_of_revenue', 'net_sales',
+    ]);
+
+    // Build dedup keys using CANONICAL metric ID so synonyms like
+    // "revenue" and "net_sales" collapse into the same key.
+    // Without this, getLatestByFilingType returns normalizedMetric=canonical_id
+    // but historical rows have the raw DB value (e.g. "net_sales"), causing duplicates.
+    const existingKeys = new Set(
+      results.map(r => {
+        let canonicalMetric = r.normalizedMetric;
+        try {
+          const res = this.metricRegistry.resolve(r.normalizedMetric);
+          if (res && res.confidence !== 'unresolved' && res.canonical_id) {
+            canonicalMetric = res.canonical_id;
+          }
+        } catch { /* use raw */ }
+        return `${r.ticker.toUpperCase()}-${canonicalMetric.toLowerCase()}-${r.fiscalPeriod}`;
+      })
+    );
+
+    for (const ticker of query.tickers) {
+      for (const resolution of resolvedMetrics) {
+        if (!TREND_WORTHY_METRICS.has(resolution.canonical_id)) continue;
+
+        try {
+          const synonyms = this.metricRegistry.getSynonymsForDbColumn(resolution.canonical_id);
+          const historicalAnnuals = await this.prisma.financialMetric.findMany({
+            where: {
+              ticker: { equals: ticker, mode: 'insensitive' },
+              filingType: '10-K',
+              normalizedMetric: { in: synonyms, mode: 'insensitive' },
+            },
+            orderBy: { statementDate: 'desc' },
+            take: 5,
+          });
+
+          for (const h of historicalAnnuals) {
+            // Use canonical_id for dedup key, not raw normalizedMetric
+            const key = `${h.ticker.toUpperCase()}-${resolution.canonical_id.toLowerCase()}-${h.fiscalPeriod}`;
+            if (!existingKeys.has(key)) {
+              const formatted = this.formatMetric(h);
+              // Normalize to canonical_id so downstream dedup in rag.service.ts also works
+              formatted.normalizedMetric = resolution.canonical_id;
+              results.push(formatted);
+              existingKeys.add(key);
+            }
+          }
+        } catch (e) {
+          this.logger.warn(`Historical fetch failed for ${ticker}/${resolution.canonical_id}: ${e.message}`);
+        }
+      }
+    }
+
+    // Deduplicate metrics by (ticker, canonical_metric, fiscalPeriod, filingType).
+    // Different synonym variants (e.g., 'revenue' vs 'net_sales') from the same filing
+    // can produce duplicate rows. Keep the one with the highest confidence score.
+    {
+      const deduped = new Map<string, MetricResult>();
+      for (const r of results) {
+        let canonicalMetric = r.normalizedMetric?.toLowerCase() || '';
+        try {
+          const res = this.metricRegistry.resolve(r.normalizedMetric);
+          if (res && res.confidence !== 'unresolved' && res.canonical_id) {
+            canonicalMetric = res.canonical_id.toLowerCase();
+          }
+        } catch { /* use raw */ }
+        const key = `${(r.ticker || '').toUpperCase()}|${canonicalMetric}|${r.fiscalPeriod}|${r.filingType}`;
+        const existing = deduped.get(key);
+        if (!existing || (r.confidenceScore || 0) > (existing.confidenceScore || 0)) {
+          deduped.set(key, r);
+        }
+      }
+      const before = results.length;
+      results = Array.from(deduped.values());
+      if (results.length < before) {
+        this.logger.log(`🧹 retrieveLatest dedup: ${before} → ${results.length} metrics`);
       }
     }
 
@@ -540,7 +628,8 @@ export class StructuredRetrieverService {
 
       const rows = await this.prisma.$queryRawUnsafe<any[]>(
         `SELECT normalized_metric, value, period, output_format,
-                source_file_name, extraction_confidence, created_at
+                source_file_name, extraction_confidence, created_at,
+                document_id
          FROM extracted_metrics
          WHERE UPPER(ticker) = UPPER($1)
            AND normalized_metric = ANY($2::text[])
@@ -567,6 +656,8 @@ export class StructuredRetrieverService {
         filingDate: row.created_at ? new Date(row.created_at) : new Date(),
         confidenceScore: row.extraction_confidence === 'high' ? 0.95 : 0.75,
         source: `${row.source_file_name || 'uploaded document'}`,
+        fileName: row.source_file_name || undefined,
+        documentId: row.document_id || undefined,
       } as MetricResult;
     } catch (err) {
       this.logger.warn(`extracted_metrics query failed: ${err.message}`);

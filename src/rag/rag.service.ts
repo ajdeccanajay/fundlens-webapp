@@ -20,6 +20,7 @@ import { DocumentMetricExtractorService, DocumentComputedResult } from './docume
 import { MetricRegistryService } from './metric-resolution/metric-registry.service';
 import { FormulaResolutionService } from './metric-resolution/formula-resolution.service';
 import { ConceptRegistryService } from './metric-resolution/concept-registry.service';
+import { BackgroundEnrichmentService } from '../documents/background-enrichment.service';
 
 /**
  * RAG Service
@@ -62,6 +63,8 @@ export class RAGService {
     private readonly formulaResolution?: FormulaResolutionService,
     @Optional()
     private readonly conceptRegistry?: ConceptRegistryService,
+    @Optional()
+    private readonly backgroundEnrichment?: BackgroundEnrichmentService,
   ) {}
 
   /**
@@ -85,6 +88,9 @@ export class RAGService {
   ): Promise<RAGResponse> {
     const startTime = Date.now();
     this.logger.log(`🔍 Processing hybrid query: "${query}"`);
+
+    // Signal to background enrichment: hold off on Bedrock calls
+    this.backgroundEnrichment?.markQueryStart();
 
     try {
       // Step 1: Route query — use QUL data when available, fall back to legacy queryRouter
@@ -118,12 +124,26 @@ export class RAGService {
       
       // Override intent ticker with explicit tickers array for peer comparison
       if (options?.tickers && options.tickers.length > 0) {
-        this.logger.log(`🔄 Overriding intent ticker with peer comparison tickers: ${options.tickers.join(', ')}`);
+        this.logger.log(`🔄 Overriding intent ticker with tickers: ${options.tickers.join(', ')}`);
         intent.ticker = options.tickers;
         
         // CRITICAL: Also patch the retrieval plan — it was built before this override
         if (plan.structuredQuery) {
           plan.structuredQuery.tickers = options.tickers;
+        } else if (plan.useStructured) {
+          // Plan says structured=true but no structuredQuery was built (tickers were empty at plan time)
+          // Build a minimal structured query now that we have tickers
+          const filingTypes: any[] = intent.periodType === 'annual' ? ['10-K'] :
+            intent.periodType === 'quarterly' ? ['10-Q'] : ['10-K', '10-Q'];
+          plan.structuredQuery = {
+            tickers: options.tickers,
+            metrics: intent.metrics ? (this['metricRegistry']?.resolveMultiple?.(intent.metrics, options?.tenantId) || []) : [],
+            period: intent.period,
+            periodType: intent.periodType,
+            filingTypes,
+            includeComputed: intent.needsComputation,
+          };
+          this.logger.log(`📋 Built structuredQuery from tickers override: ${options.tickers.join(', ')}`);
         }
         if (plan.semanticQuery) {
           plan.semanticQuery.tickers = options.tickers;
@@ -420,10 +440,11 @@ export class RAGService {
         if (plan.semanticQuery && results[1]) {
           narratives = results[1].narratives || [];
           
-          // Add contextual metrics from RDS
+          // Add contextual metrics from RDS (tagged so chart generator can filter them out)
           if (results[1].contextualMetrics?.length > 0) {
             this.logger.log(`📊 Adding ${results[1].contextualMetrics.length} contextual metrics from RDS`);
-            metrics = [...metrics, ...results[1].contextualMetrics];
+            const taggedContextual = results[1].contextualMetrics.map((m: any) => ({ ...m, _contextual: true }));
+            metrics = [...metrics, ...taggedContextual];
           }
           
           this.logger.log(
@@ -491,10 +512,11 @@ export class RAGService {
           );
           narratives = result.narratives;
           
-          // Add contextual metrics from RDS to enrich the response
+          // Add contextual metrics from RDS to enrich the response (tagged for chart filtering)
           if (result.contextualMetrics.length > 0) {
             this.logger.log(`📊 Adding ${result.contextualMetrics.length} contextual metrics from RDS`);
-            metrics = [...metrics, ...result.contextualMetrics];
+            const taggedContextual = result.contextualMetrics.map((m: any) => ({ ...m, _contextual: true }));
+            metrics = [...metrics, ...taggedContextual];
           }
           
           this.logger.log(
@@ -514,19 +536,26 @@ export class RAGService {
         }
         if (uploadedDocResults.narratives.length > 0) {
           uploadedDocChunks = uploadedDocResults.narratives; // for chunkCount tracking
-          narratives = [...uploadedDocResults.narratives, ...narratives];
+          narratives = [...narratives, ...uploadedDocResults.narratives];
           this.logger.log(
-            `📎 Merged uploaded doc chunks into narratives (total: ${narratives.length})`,
+            `📎 Merged uploaded doc chunks AFTER SEC narratives (total: ${narratives.length})`,
           );
         }
       }
 
       // USER DOCUMENTS PATH: Search user-uploaded documents if tenant provided
       if (options?.tenantId && options?.includeCitations) {
-        this.logger.log(`📄 Searching user documents for tenant ${options.tenantId}`);
+        // Use the PRIMARY ticker from intent detection (query-derived),
+        // not options.ticker (which is workspace context and may be wrong).
+        const intentPrimaryTicker = Array.isArray(intent.ticker)
+          ? intent.ticker[0]
+          : intent.ticker;
+        const docSearchTicker = intentPrimaryTicker || options.ticker || null;
+
+        this.logger.log(`📄 Searching user documents for tenant ${options.tenantId} (intent ticker: ${intentPrimaryTicker}, workspace ticker: ${options.ticker}, using: ${docSearchTicker})`);
         const userDocResult = await this.documentRAG.searchUserDocuments(query, {
           tenantId: options.tenantId,
-          ticker: options.ticker || null,
+          ticker: docSearchTicker,
           topK: 5,
           minScore: 0.7,
         });
@@ -935,12 +964,39 @@ export class RAGService {
           answer = synthesisResult.answer;
           usage = synthesisResult.usage;
           citations = synthesisResult.citations || [];
+
+          // FALLBACK: If LLM produced no narrative citations but we have
+          // structured metrics, generate SEC filing citations from them.
+          if (citations.length === 0 && metrics.length > 0) {
+            const metricCitations = this.buildMetricCitations(metrics);
+            citations = [...metricCitations];
+            this.logger.log(`📊 Built ${metricCitations.length} metric-based SEC citations (no [N] markers in LLM response)`);
+          }
           
-          // Also extract citations from user document chunks if present
+          // Also extract citations from user document chunks if present.
+          // Renumber to follow existing citations.
+          // Deduplicate by documentId to avoid double-counting the same uploaded file
           if (userDocChunks.length > 0 && options?.includeCitations) {
-            const userDocCitations = this.documentRAG.extractCitationsFromChunks(userDocChunks);
-            citations = [...citations, ...userDocCitations];
-            this.logger.log(`📎 Extracted ${userDocCitations.length} citations from user documents`);
+            const existingDocIds = new Set(
+              citations
+                .filter((c: any) => c.documentId)
+                .map((c: any) => c.documentId),
+            );
+            const userDocCitations = this.documentRAG
+              .extractCitationsFromChunks(userDocChunks)
+              .filter((c: any) => !existingDocIds.has(c.documentId));
+            if (userDocCitations.length > 0) {
+              // Re-number to continue from existing citations
+              const nextNum = citations.length > 0
+                ? Math.max(...citations.map((c: any) => c.number || c.citationNumber || 0)) + 1
+                : 1;
+              userDocCitations.forEach((c: any, i: number) => {
+                c.citationNumber = nextNum + i;
+                c.number = nextNum + i;
+              });
+              citations = [...citations, ...userDocCitations];
+            }
+            this.logger.log(`📎 Extracted ${userDocCitations.length} unique user doc citations (deduped by documentId)`);
           }
           
           this.logger.log(
@@ -976,9 +1032,25 @@ export class RAGService {
           citations = generated.citations || [];
           
           if (userDocChunks.length > 0 && options?.includeCitations) {
-            const userDocCitations = this.documentRAG.extractCitationsFromChunks(userDocChunks);
-            citations = [...citations, ...userDocCitations];
-            this.logger.log(`📎 Extracted ${userDocCitations.length} citations from user documents`);
+            const existingDocIds = new Set(
+              citations
+                .filter((c: any) => c.documentId)
+                .map((c: any) => c.documentId),
+            );
+            const userDocCitations = this.documentRAG
+              .extractCitationsFromChunks(userDocChunks)
+              .filter((c: any) => !existingDocIds.has(c.documentId));
+            if (userDocCitations.length > 0) {
+              const nextNum = citations.length > 0
+                ? Math.max(...citations.map((c: any) => c.number || c.citationNumber || 0)) + 1
+                : 1;
+              userDocCitations.forEach((c: any, i: number) => {
+                c.citationNumber = nextNum + i;
+                c.number = nextNum + i;
+              });
+              citations = [...citations, ...userDocCitations];
+            }
+            this.logger.log(`📎 Extracted ${userDocCitations.length} unique user doc citations (deduped by documentId)`);
           }
           
           this.logger.log(
@@ -1117,9 +1189,16 @@ export class RAGService {
         }
       } else if (citations && citations.length > 0 && metrics.length > 0) {
         // Ensure uploaded doc metrics are represented in citations
-        const hasUploadedDocCitation = citations.some((c: any) => c.sourceType === 'UPLOADED_DOC' || c.type === 'uploaded_document');
-        const uploadedDocMetrics = metrics.filter((m: any) => m.filingType === 'uploaded-document' && m.fileName);
-        if (!hasUploadedDocCitation && uploadedDocMetrics.length > 0) {
+        // Check by both sourceType AND filename to avoid duplicates
+        const existingUploadedFiles = new Set(
+          citations
+            .filter((c: any) => c.sourceType === 'UPLOADED_DOC' || c.type === 'uploaded_document')
+            .map((c: any) => c.filename || c.fileName || ''),
+        );
+        const uploadedDocMetrics = metrics.filter(
+          (m: any) => m.filingType === 'uploaded-document' && m.fileName && !existingUploadedFiles.has(m.fileName),
+        );
+        if (uploadedDocMetrics.length > 0) {
           const nextNum = Math.max(...citations.map((c: any) => c.number || c.citationNumber || 0)) + 1;
           const uploadCitations = this.buildUploadedDocCitations(uploadedDocMetrics, nextNum);
           citations = [...citations, ...uploadCitations];
@@ -1169,6 +1248,30 @@ export class RAGService {
         narrativesCount: narratives.length,
       });
 
+      // ── Deduplicate metrics before visualization ─────────────────────
+      // Multiple sources (structured retrieval, uploaded docs, QUL engine,
+      // computed metrics) can produce the same (ticker, fiscalPeriod,
+      // normalizedMetric) tuple. Keep the one with the highest confidence.
+      {
+        const metricMap = new Map<string, any>();
+        for (const m of metrics) {
+          const key = `${(m.ticker || '').toUpperCase()}|${m.fiscalPeriod || ''}|${(m.normalizedMetric || '').toLowerCase()}`;
+          const existing = metricMap.get(key);
+          if (!existing || (m.confidenceScore ?? 0) > (existing.confidenceScore ?? 0)) {
+            metricMap.set(key, m);
+          }
+        }
+        const before = metrics.length;
+        metrics = [...metricMap.values()];
+        if (metrics.length < before) {
+          this.logger.log(`🧹 Deduplicated metrics: ${before} → ${metrics.length}`);
+        }
+        // Also update the response object so downstream consumers see deduped metrics
+        if (response.metrics) {
+          response.metrics = metrics.length > 0 ? metrics : undefined;
+        }
+      }
+
       // Phase 2 (Post-LLM): Enrich response with visualization
       const enrichedResponse = this.responseEnrichment.enrichResponse(response, intent, metrics, computedSummary);
 
@@ -1189,6 +1292,9 @@ export class RAGService {
     } catch (error) {
       this.logger.error(`❌ Error processing hybrid query: ${error.message}`);
       throw error;
+    } finally {
+      // Always release the lock, even on error
+      this.backgroundEnrichment?.markQueryEnd();
     }
   }
 
@@ -1508,13 +1614,28 @@ export class RAGService {
          'RED_FLAG_DETECTION', 'MANAGEMENT_ASSESSMENT', 'UPLOADED_DOC_QUERY',
          'DEAL_ANALYSIS', 'DEAL_COMPARISON', 'MANAGEMENT_ASSESSMENT'].includes(qul.intent),
       needsComparison: qul.needsPeerComparison || qul.intent === 'METRIC_COMPARISON' || qul.intent === 'DEAL_COMPARISON',
-      needsComputation: ['METRIC_LOOKUP', 'METRIC_TREND', 'METRIC_COMPARISON'].includes(qul.intent),
-      needsTrend: qul.intent === 'METRIC_TREND',
+      needsComputation: ['METRIC_LOOKUP', 'METRIC_TREND', 'METRIC_COMPARISON'].includes(qul.intent) ||
+        this.isRevenueClassMetric(metrics),
+      needsTrend: qul.intent === 'METRIC_TREND' ||
+        (qul.intent === 'METRIC_LOOKUP' && this.isRevenueClassMetric(metrics)),
       needsPeerComparison: qul.needsPeerComparison,
       suggestedChart: qul.suggestedChart || null,
       confidence: qul.confidence,
       originalQuery: qul.normalizedQuery || rawQuery,
     };
+  }
+
+  /**
+   * Check if any of the resolved metrics are revenue-class (revenue, net_sales, etc.)
+   * Used to auto-trigger trend/growth computation for common financial queries.
+   */
+  private isRevenueClassMetric(metrics: string[]): boolean {
+    const REVENUE_CLASS = new Set([
+      'revenue', 'net_sales', 'total_revenue', 'net_revenue',
+      'net_income', 'gross_profit', 'operating_income', 'ebitda',
+      'free_cash_flow', 'operating_cash_flow',
+    ]);
+    return metrics.some(m => REVENUE_CLASS.has(m.toLowerCase()));
   }
 
   /**
@@ -1543,6 +1664,15 @@ export class RAGService {
       qul.intent === 'METRIC_COMPARISON';
     if (hasConcept && !useSemantic) {
       this.logger.log(`🧩 Concept/comparison query detected — enabling semantic path for uploaded doc retrieval`);
+      useSemantic = true;
+    }
+
+    // Always enable semantic for METRIC_LOOKUP queries too.
+    // "What is the revenue for AMZN?" benefits from MD&A context about
+    // revenue drivers, segment breakdown, and management commentary.
+    // 3 lightweight narrative chunks transform a bare number into analysis.
+    if (qul.intent === 'METRIC_LOOKUP' && !useSemantic) {
+      this.logger.log(`📊 Metric lookup query — enabling lightweight semantic for MD&A context`);
       useSemantic = true;
     }
 
@@ -1637,7 +1767,11 @@ export class RAGService {
       intent.periodType === 'quarterly' ? ['10-Q'] : ['10-K', '10-Q'];
 
     // For PE-only queries with no public tickers, skip structured query
-    const shouldBuildStructured = effectiveUseStructured && tickers.length > 0;
+    // NOTE: Even when tickers=[] here, the caller (query()) may override
+    // with options.tickers AFTER this method returns. So we build the
+    // structured query skeleton with empty tickers and let the caller patch it.
+    // This ensures structured retrieval fires when tickers arrive via override.
+    const shouldBuildStructured = effectiveUseStructured;
 
     const structuredQuery: StructuredQuery | undefined = shouldBuildStructured ? {
       tickers,
@@ -1666,7 +1800,7 @@ export class RAGService {
     } : undefined;
 
     this.logger.log(`📋 QUL Plan: structured=${shouldBuildStructured}, semantic=${effectiveUseSemantic}, ` +
-      `domain=${qul.domain}, uploadedEntity=${hasUploadedEntity}, tickers=[${tickers.join(',')}]`);
+      `domain=${qul.domain}, uploadedEntity=${hasUploadedEntity}, tickers=[${tickers.join(',')}] (tickers may be patched by caller)`);
 
     return {
       useStructured: shouldBuildStructured,
@@ -2780,6 +2914,7 @@ export class RAGService {
             excerpt: `${metric.rawLabel || metric.normalizedMetric}: ${this.formatValueForCitation(metric.value)}${metric.fiscalPeriod ? ` (${metric.fiscalPeriod})` : ''} — from ${(metric as any).fileName}`,
             relevanceScore: (metric as any).confidenceScore || 0.9,
             pageNumber: (metric as any).sourcePage || null,
+            documentId: (metric as any).documentId || null,
           });
           num++;
           continue;
@@ -2835,6 +2970,7 @@ export class RAGService {
         excerpt: `${metric.rawLabel || metric.normalizedMetric}: ${metric.rawValue || this.formatValueForCitation(metric.value)}${metric.fiscalPeriod ? ` (${metric.fiscalPeriod})` : ''} — from ${metric.fileName}`,
         relevanceScore: metric.confidenceScore || 0.9,
         pageNumber: metric.sourcePage || null,
+        documentId: metric.documentId || null,
       });
       num++;
     }

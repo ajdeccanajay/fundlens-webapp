@@ -572,10 +572,11 @@
             var citation = this.currentCitations?.find(function(c) { return c.number === citationNum || c.citationNumber === citationNum; });
             if (!citation) return;
             var sourceType = citation.sourceType || 'SEC_FILING';
-            if (sourceType === 'USER_UPLOAD' || sourceType === 'UPLOADED_DOC') {
-                this.sourceModal = { sourceType: 'USER_UPLOAD', filename: citation.filename || '', ticker: citation.ticker || '', filingType: '', fiscalPeriod: '', section: '', pageNumber: citation.pageNumber || null, excerpt: citation.excerpt || '', relevanceScore: citation.relevanceScore || citation.score || null };
+            var isUpload = sourceType === 'USER_UPLOAD' || sourceType === 'UPLOADED_DOC' || (citation.filingType && citation.filingType.toLowerCase().includes('uploaded'));
+            if (isUpload) {
+                this.sourceModal = { sourceType: 'USER_UPLOAD', filename: citation.filename || citation.title || '', ticker: citation.ticker || '', filingType: '', fiscalPeriod: '', section: '', pageNumber: citation.pageNumber || null, excerpt: citation.excerpt || '', relevanceScore: citation.relevanceScore || citation.score || null, documentId: citation.documentId || null };
             } else {
-                this.sourceModal = { sourceType: 'SEC_FILING', filename: '', ticker: citation.ticker || '', filingType: citation.filingType || '', fiscalPeriod: citation.fiscalPeriod || '', section: citation.section || '', pageNumber: citation.pageNumber || null, excerpt: citation.excerpt || '', relevanceScore: citation.relevanceScore || citation.score || null };
+                this.sourceModal = { sourceType: 'SEC_FILING', filename: '', ticker: citation.ticker || '', filingType: citation.filingType || '', fiscalPeriod: citation.fiscalPeriod || '', section: citation.section || '', pageNumber: citation.pageNumber || null, excerpt: citation.excerpt || '', relevanceScore: citation.relevanceScore || citation.score || null, documentId: null };
             }
             this.showSourceModal = true;
             var self = this;
@@ -583,6 +584,18 @@
         },
 
         async copySourceCitation() { try { await navigator.clipboard.writeText(this.sourceModal.excerpt || ''); } catch (e) { console.error('Copy failed:', e); } },
+
+        async viewUploadedDocument(documentId) {
+            if (!documentId) return;
+            try {
+                var headers = this.authHeaders ? this.authHeaders() : { 'Content-Type': 'application/json' };
+                var resp = await fetch('/api/documents/' + documentId + '/download-url', { headers: headers });
+                if (resp.ok) {
+                    var data = await resp.json();
+                    if (data.url) window.open(data.url, '_blank');
+                }
+            } catch (e) { console.error('Failed to open document:', e); }
+        },
 
         isMarkdownBreakpoint(text) {
             if (!text) return false;
@@ -1213,11 +1226,8 @@
                         <div class="flex items-end space-x-3">
                             <div class="flex-1 flex items-end border-2 border-gray-200 rounded-xl focus-within:border-blue-500 transition-colors" :class="{ 'border-green-400': instantRagSession && instantRagSession.status === 'active' }">
                                 <div class="relative flex-shrink-0 pl-2 pb-2.5">
-                                    <input type="file" x-ref="instantRagFileInput" @change="handleInstantRagFiles($event)" multiple accept=".pdf,.docx,.xlsx,.csv,.pptx,.txt,.png,.jpg,.jpeg" class="hidden">
                                     <input type="file" x-ref="docIntelFileInput" @change="handleDocIntelFileInput($event)" accept=".pdf,.docx,.xlsx,.csv,.txt,.png,.jpg,.jpeg" class="hidden">
-                                    <button @click="$refs.instantRagFileInput.click()" :disabled="instantRagUploading || (instantRagFiles.length >= 5)" class="p-1.5 rounded-lg hover:bg-gray-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed" :class="{ 'bg-green-50 hover:bg-green-100': instantRagSession && instantRagSession.status === 'active' }" title="Upload documents for instant Q&amp;A"><i class="fas fa-paperclip text-gray-400 text-lg" :class="{ 'text-green-600': instantRagSession && instantRagSession.status === 'active' }"></i></button>
-                                    <button @click="$refs.docIntelFileInput.click()" :disabled="docIntel.file && docIntel.file.status === 'processing'" class="p-1.5 rounded-lg hover:bg-gray-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed ml-0.5" title="Upload document for deep analysis (5s to queryable)"><i class="fas fa-file-medical text-gray-400 text-base" :class="{ 'text-emerald-600': docIntel.file && docIntel.file.status === 'ready' }"></i></button>
-                                    <span x-show="instantRagFiles.length > 0" class="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 text-white text-[10px] rounded-full flex items-center justify-center" x-text="instantRagFiles.length"></span>
+                                    <button @click="$refs.docIntelFileInput.click()" :disabled="docIntel.file && docIntel.file.status === 'processing'" class="p-1.5 rounded-lg hover:bg-gray-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed" title="Upload document for deep analysis (5s to queryable)"><i class="fas fa-file-medical text-gray-400 text-base" :class="{ 'text-emerald-600': docIntel.file && docIntel.file.status === 'ready' }"></i></button>
                                 </div>
                                 <textarea x-model="researchInput" @keydown.enter.prevent="sendResearchMessage()" :disabled="researchTyping || instantRagUploading" :placeholder="instantRagSession && instantRagSession.status === 'active' ? 'Ask about your uploaded documents...' : 'Ask about any company...'" rows="2" class="flex-1 px-3 py-3 focus:outline-none resize-none disabled:opacity-50 bg-transparent border-0 rounded-r-xl"></textarea>
                             </div>
@@ -1264,11 +1274,11 @@
         <div x-show="showSourceModal" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="transition ease-in duration-150" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="source-modal-backdrop" @click.self="showSourceModal = false" @keydown.escape.window="showSourceModal = false" role="dialog" aria-modal="true" aria-labelledby="source-modal-title">
             <div class="source-modal">
                 <div class="source-modal-header">
-                    <h3 id="source-modal-title"><template x-if="sourceModal.sourceType === 'USER_UPLOAD'"><span><i class="fas fa-file-alt mr-2"></i>Uploaded Document Source</span></template><template x-if="sourceModal.sourceType !== 'USER_UPLOAD'"><span><i class="fas fa-landmark mr-2"></i>SEC Filing Source</span></template></h3>
+                    <h3 id="source-modal-title"><template x-if="sourceModal.sourceType === 'USER_UPLOAD'"><span><i class="fas fa-file-alt mr-2"></i>Document Source</span></template><template x-if="sourceModal.sourceType !== 'USER_UPLOAD'"><span><i class="fas fa-landmark mr-2"></i>Document Source</span></template></h3>
                     <button @click="showSourceModal = false" class="source-modal-close" x-ref="sourceModalClose"><i class="fas fa-times"></i></button>
                 </div>
                 <div class="source-modal-meta">
-                    <template x-if="sourceModal.sourceType === 'USER_UPLOAD'"><div class="flex items-center gap-3"><span class="source-badge upload"><i class="fas fa-upload mr-1"></i>Uploaded</span><span class="text-sm font-medium" x-text="sourceModal.filename"></span></div></template>
+                    <template x-if="sourceModal.sourceType === 'USER_UPLOAD'"><div class="flex items-center gap-3"><span class="source-badge upload" x-text="sourceModal.ticker || 'Uploaded'"></span><a x-show="sourceModal.documentId" :href="'/api/documents/' + sourceModal.documentId + '/download-url'" @click.prevent="viewUploadedDocument(sourceModal.documentId)" class="text-sm font-medium text-blue-600 hover:text-blue-800 cursor-pointer underline" x-text="sourceModal.filename"></a><span x-show="!sourceModal.documentId" class="text-sm font-medium" x-text="sourceModal.filename"></span><span x-show="sourceModal.pageNumber" class="text-sm text-gray-400" x-text="'p. ' + sourceModal.pageNumber"></span></div></template>
                     <template x-if="sourceModal.sourceType !== 'USER_UPLOAD'"><div class="flex flex-wrap items-center gap-3"><span class="source-badge sec" x-text="sourceModal.ticker"></span><span class="text-sm" x-text="sourceModal.filingType"></span><span class="text-sm text-gray-500" x-text="sourceModal.fiscalPeriod"></span><span x-show="sourceModal.section" class="text-sm text-gray-500" x-text="sourceModal.section"></span><span x-show="sourceModal.pageNumber" class="text-sm text-gray-400" x-text="'p. ' + sourceModal.pageNumber"></span></div></template>
                     <div x-show="sourceModal.relevanceScore" class="mt-2"><span class="text-xs text-gray-500">Relevance: </span><span class="text-xs font-medium" :class="sourceModal.relevanceScore > 0.8 ? 'text-green-600' : sourceModal.relevanceScore > 0.5 ? 'text-yellow-600' : 'text-red-600'" x-text="(sourceModal.relevanceScore * 100).toFixed(0) + '%'"></span></div>
                 </div>

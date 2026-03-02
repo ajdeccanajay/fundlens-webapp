@@ -399,25 +399,34 @@ export class IntentDetectorService implements OnModuleInit {
    * @param contextTicker Optional ticker from workspace context for disambiguation
    */
   private extractTicker(query: string, contextTicker?: string): string | string[] | undefined {
-    const queryTickers = this.extractTickersFromQuery(query);
+      const queryTickers = this.extractTickersFromQuery(query);
 
-    if (contextTicker) {
-      const ctUpper = contextTicker.toUpperCase();
-      const allTickers = new Set<string>([ctUpper, ...queryTickers]);
-      const arr = Array.from(allTickers);
-      this.logger.log(`🎯 Context ticker: ${ctUpper}, query tickers: [${queryTickers.join(', ')}], merged: [${arr.join(', ')}]`);
-      return arr.length === 1 ? arr[0] : arr;
-    }
+      if (contextTicker) {
+        const ctUpper = contextTicker.toUpperCase();
 
-    if (queryTickers.length === 0) {
-      return undefined;
+        // PRIORITY: Query tickers first, context ticker second.
+        // "AMZN revenue" in AAPL workspace → ["AMZN", "AAPL"], not ["AAPL", "AMZN"]
+        if (queryTickers.length > 0) {
+          const allTickers = new Set<string>([...queryTickers, ctUpper]);
+          const arr = Array.from(allTickers);
+          this.logger.log(`🎯 Query tickers: [${queryTickers.join(', ')}], context: ${ctUpper}, merged: [${arr.join(', ')}]`);
+          return arr.length === 1 ? arr[0] : arr;
+        }
+
+        // No tickers in query → use context ticker as sole source
+        this.logger.log(`🎯 No query tickers, using context: ${ctUpper}`);
+        return ctUpper;
+      }
+
+      if (queryTickers.length === 0) {
+        return undefined;
+      }
+      if (queryTickers.length === 1) {
+        return queryTickers[0];
+      }
+      this.logger.log(`🔍 Multiple tickers detected: ${queryTickers.join(', ')}`);
+      return queryTickers;
     }
-    if (queryTickers.length === 1) {
-      return queryTickers[0];
-    }
-    this.logger.log(`🔍 Multiple tickers detected: ${queryTickers.join(', ')}`);
-    return queryTickers;
-  }
 
   /**
    * Extract ticker symbols from query text using universal regex + companies table validation.
@@ -757,11 +766,12 @@ export class IntentDetectorService implements OnModuleInit {
     query: string,
     contextTicker?: string,
   ): Promise<QueryIntent> {
-    // 1. Resolve tickers (merge with contextTicker if present)
+    // 1. Resolve tickers — query-extracted tickers take priority over context ticker.
     let tickers = llmResult.tickers;
     if (contextTicker) {
       const ctUpper = contextTicker.toUpperCase();
-      tickers = [...new Set([ctUpper, ...tickers])];
+      // LLM tickers first (from query), context ticker appended as secondary
+      tickers = [...new Set([...tickers, ctUpper])];
     }
 
     // 2. Resolve metrics through MetricRegistryService

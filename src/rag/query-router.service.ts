@@ -8,6 +8,7 @@ import {
   RetrievalPlan,
   StructuredQuery,
   SemanticQuery,
+  DocumentType,
 } from './types/query-intent';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -163,26 +164,41 @@ export class QueryRouterService implements OnModuleInit {
    * Build structured retrieval plan (PostgreSQL only)
    */
   private async buildStructuredPlan(intent: QueryIntent, tenantId?: string): Promise<RetrievalPlan> {
-    const tickers = this.normalizeTickers(intent.ticker);
-    const normalizedMetrics = this.resolveMetrics(intent.metrics || [], tenantId);
+      const tickers = this.normalizeTickers(intent.ticker);
+      const normalizedMetrics = this.resolveMetrics(intent.metrics || [], tenantId);
 
-    const structuredQuery: StructuredQuery = {
-      tickers,
-      metrics: normalizedMetrics,
-      period: intent.period,
-      periodType: intent.periodType,
-      periodStart: intent.periodStart,
-      periodEnd: intent.periodEnd,
-      filingTypes: intent.periodType === 'range' ? ['10-K'] : this.determineFilingTypes(intent),
-      includeComputed: intent.needsComputation,
-    };
+      const structuredQuery: StructuredQuery = {
+        tickers,
+        metrics: normalizedMetrics,
+        period: intent.period,
+        periodType: intent.periodType,
+        periodStart: intent.periodStart,
+        periodEnd: intent.periodEnd,
+        filingTypes: intent.periodType === 'range' ? ['10-K'] : this.determineFilingTypes(intent),
+        includeComputed: intent.needsComputation,
+      };
 
-    return {
-      useStructured: true,
-      useSemantic: false,
-      structuredQuery,
-    };
-  }
+      // Always include lightweight semantic retrieval for richer context.
+      // "What is the revenue?" is technically structured, but the analyst
+      // benefits from MD&A context about revenue drivers, segment breakdown,
+      // and management commentary. 3 chunks adds ~200ms but transforms
+      // a bare data lookup into an analytical response.
+      const semanticQuery = {
+        query: intent.originalQuery,
+        tickers: tickers.length > 0 ? tickers : undefined,
+        documentTypes: ['10-K', '10-Q'] as DocumentType[],
+        sectionTypes: undefined,
+        period: intent.period,
+        maxResults: 3,
+      };
+
+      return {
+        useStructured: true,
+        useSemantic: true,
+        structuredQuery,
+        semanticQuery,
+      };
+    }
 
   /**
    * Build semantic retrieval plan (Bedrock KB only)

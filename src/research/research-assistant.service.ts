@@ -573,6 +573,16 @@ export class ResearchAssistantService {
         tickers = [workspaceTicker];
       }
 
+      // CROSS-TICKER SAFETY NET: If QUL resolved a ticker that differs from
+      // workspace ticker, ensure BOTH are in the tickers array. Example:
+      // "What is the revenue for AMZN?" in AAPL workspace → tickers=[AMZN, AAPL]
+      // This ensures structured retrieval fires for the query ticker even if
+      // QUL only returned the workspace ticker, and vice versa.
+      if (workspaceTicker && !tickers.includes(workspaceTicker)) {
+        tickers.push(workspaceTicker);
+        this.logger.log(`📊 Added workspace ticker ${workspaceTicker} as secondary`);
+      }
+
       this.logger.log(`🔍 Query: "${dto.content}"`);
       this.logger.log(`📊 Primary Ticker (QUL): ${primaryTicker || 'none'}`);
       this.logger.log(`📊 All Tickers (QUL): ${tickers.join(', ') || 'none'}`);
@@ -632,7 +642,7 @@ export class ResearchAssistantService {
         systemPrompt: dto.systemPrompt, // Pass custom system prompt from user
         tenantId, // Enable user document search
         ticker: primaryTicker, // Primary ticker for scoping
-        tickers: tickers.length > 1 ? tickers : undefined, // Pass peer tickers for multi-ticker retrieval
+        tickers: tickers.length > 0 ? tickers : undefined, // Always pass tickers for structured retrieval
         instantRagSessionId: dto.context?.instantRagSessionId, // Cross-source retrieval from Instant RAG session
         dealId, // Spec §7.1: enables Sources 1+2 (uploaded doc extractions + vector chunks)
         understanding, // QUL Phase 2: pass pre-computed understanding to bypass legacy intent detection
@@ -886,49 +896,63 @@ export class ResearchAssistantService {
    * Extract ticker symbols from query
    */
   extractTickers(query: string, providedTickers?: string[]): string[] {
-    // Extract explicit ticker symbols from query text
-    const queryTickers: string[] = [];
-    const tickerPattern = /\b[A-Z]{1,5}\b/g;
-    const matches = query.match(tickerPattern) || [];
+      // Stop words: common uppercase words that are NOT ticker symbols.
+      const STOP_WORDS = new Set([
+        'I', 'A', 'US', 'CEO', 'CFO', 'SEC', 'GAAP', 'Q', 'FY',
+        'VS', 'THE', 'FOR', 'AND', 'OR', 'IS', 'IN', 'OF', 'TO',
+        'BY', 'AT', 'ON', 'IT', 'DO', 'IF', 'SO', 'NO', 'UP',
+        'PE', 'EV', 'YOY', 'QOQ', 'LTM', 'TTM', 'ROE', 'ROA',
+        'ROIC', 'EBITDA', 'CAGR', 'DCF', 'IPO', 'M', 'B', 'K',
+        'DD', 'IC', 'MD', 'AI', 'ML', 'RE', 'AM', 'PM', 'NOT',
+        'ALL', 'ANY', 'CAN', 'HAS', 'HOW', 'ITS', 'MAY', 'NEW',
+        'NOW', 'OLD', 'OUR', 'OUT', 'OWN', 'SAY', 'SHE', 'TOO',
+        'TWO', 'WAY', 'WHO', 'DID', 'GET', 'HIM', 'HIS', 'LET',
+        'MY', 'NOR', 'WAS', 'RUN', 'USE', 'HER', 'BUT', 'WHAT',
+      ]);
 
-    for (const match of matches) {
-      // Filter out common words that look like tickers
-      if (!['I', 'A', 'US', 'CEO', 'CFO', 'SEC', 'GAAP', 'Q', 'FY'].includes(match)) {
-        queryTickers.push(match);
+      // Step 1: Extract tickers mentioned explicitly in the query text.
+      const queryTickers: string[] = [];
+      const tickerPattern = /\b[A-Z]{1,5}\b/g;
+      const matches = query.match(tickerPattern) || [];
+      for (const match of matches) {
+        if (!STOP_WORDS.has(match)) {
+          queryTickers.push(match);
+        }
       }
-    }
 
-    // Also resolve company names to tickers (e.g. "Apple" → "AAPL")
-    const companyNameMap: Record<string, string> = {
-      'apple': 'AAPL', 'microsoft': 'MSFT', 'google': 'GOOGL', 'alphabet': 'GOOGL',
-      'amazon': 'AMZN', 'tesla': 'TSLA', 'meta': 'META', 'facebook': 'META',
-      'nvidia': 'NVDA', 'netflix': 'NFLX', 'airbnb': 'ABNB', 'uber': 'UBER',
-      'disney': 'DIS', 'intel': 'INTC', 'amd': 'AMD', 'oracle': 'ORCL',
-      'salesforce': 'CRM', 'adobe': 'ADBE', 'paypal': 'PYPL', 'cisco': 'CSCO',
-      'pfizer': 'PFE', 'merck': 'MRK', 'walmart': 'WMT', 'target': 'TGT',
-      'nike': 'NKE', 'starbucks': 'SBUX', 'coca-cola': 'KO', 'pepsi': 'PEP',
-      'jpmorgan': 'JPM', 'goldman': 'GS', 'morgan stanley': 'MS',
-      'booking': 'BKNG', 'spotify': 'SPOT', 'snap': 'SNAP', 'pinterest': 'PINS',
-    };
-    const queryLower = query.toLowerCase();
-    for (const [name, ticker] of Object.entries(companyNameMap)) {
-      if (queryLower.includes(name) && !queryTickers.includes(ticker)) {
-        queryTickers.push(ticker);
+      // Step 1b: Also resolve company names to tickers (e.g. "Apple" → "AAPL")
+      const companyNameMap: Record<string, string> = {
+        'apple': 'AAPL', 'microsoft': 'MSFT', 'google': 'GOOGL', 'alphabet': 'GOOGL',
+        'amazon': 'AMZN', 'tesla': 'TSLA', 'meta': 'META', 'facebook': 'META',
+        'nvidia': 'NVDA', 'netflix': 'NFLX', 'airbnb': 'ABNB', 'uber': 'UBER',
+        'disney': 'DIS', 'intel': 'INTC', 'amd': 'AMD', 'oracle': 'ORCL',
+        'salesforce': 'CRM', 'adobe': 'ADBE', 'paypal': 'PYPL', 'cisco': 'CSCO',
+        'pfizer': 'PFE', 'merck': 'MRK', 'walmart': 'WMT', 'target': 'TGT',
+        'nike': 'NKE', 'starbucks': 'SBUX', 'coca-cola': 'KO', 'pepsi': 'PEP',
+        'jpmorgan': 'JPM', 'goldman': 'GS', 'morgan stanley': 'MS',
+        'booking': 'BKNG', 'spotify': 'SPOT', 'snap': 'SNAP', 'pinterest': 'PINS',
+      };
+      const queryLower = query.toLowerCase();
+      for (const [name, ticker] of Object.entries(companyNameMap)) {
+        if (queryLower.includes(name) && !queryTickers.includes(ticker)) {
+          queryTickers.push(ticker);
+        }
       }
-    }
 
-    // If the user explicitly mentioned a company/ticker in the query,
-    // those take priority. Only fall back to workspace context tickers
-    // if the query doesn't mention any specific company.
-    if (queryTickers.length > 0) {
-      // User asked about specific companies — use those, add workspace ticker at end
-      const tickers = new Set<string>([...queryTickers, ...(providedTickers || [])]);
-      return Array.from(tickers);
-    }
+      // Step 2: PRIORITY RULE — Query tickers come FIRST.
+      // If the user types "AMZN revenue" in an AAPL workspace,
+      // AMZN must be primaryTicker (index 0), AAPL is secondary context.
+      if (queryTickers.length > 0) {
+        const result = new Set<string>(queryTickers);
+        for (const t of (providedTickers || [])) {
+          result.add(t);
+        }
+        return Array.from(result);
+      }
 
-    // No company mentioned in query — use workspace context tickers
-    return [...(providedTickers || [])];
-  }
+      // Step 3: No tickers in query text → workspace tickers are the only source.
+      return [...(providedTickers || [])];
+    }
 
   /**
    * Build fallback response when Claude is unavailable

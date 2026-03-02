@@ -154,20 +154,25 @@ export class DocumentIntelligenceService {
       `[${documentId}] Instant intelligence complete in ${Date.now() - startTime}ms`,
     );
 
-    // Phase B: Fire background enrichment asynchronously (non-blocking)
-    // User is already querying via long-context fallback while this runs
-    setImmediate(() => {
-      try {
+    // Phase B: Background enrichment (chunking, embedding, vision, KB sync)
+    // Disabled by default on local dev (4GB heap = OOM when running concurrently with chat).
+    // Document is already queryable via long-context fallback after Phase A.
+    // On ECS (16GB+), set ENABLE_BACKGROUND_ENRICHMENT=true.
+    if (process.env.ENABLE_BACKGROUND_ENRICHMENT === 'true') {
+      // Delay Phase B by 30s — give the user's first query time to complete
+      // and free its memory before background enrichment starts Bedrock calls.
+      const delayMs = parseInt(process.env.ENRICHMENT_DELAY_MS || '30000', 10);
+      setTimeout(() => {
         this.backgroundEnrichment
           .enrichDocument(documentId, tenantId, dealId)
           .catch(err =>
             this.logger.error(`[${documentId}] Background enrichment failed: ${err.message}`),
           );
-      } catch (syncErr) {
-        // Catch any synchronous errors that escape the async chain
-        this.logger.error(`[${documentId}] Background enrichment sync error: ${(syncErr as any).message}`);
-      }
-    });
+      }, delayMs);
+      this.logger.log(`[${documentId}] Background enrichment scheduled in ${delayMs}ms`);
+    } else {
+      this.logger.log(`[${documentId}] Background enrichment skipped (ENABLE_BACKGROUND_ENRICHMENT!=true). Document queryable via long-context fallback.`);
+    }
 
     return {
       documentId,

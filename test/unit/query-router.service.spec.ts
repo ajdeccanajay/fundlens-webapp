@@ -98,7 +98,7 @@ describe('QueryRouterService', () => {
       const plan = await service.route('What is AAPL revenue and EBITDA for FY2024?');
 
       expect(plan.useStructured).toBe(true);
-      expect(plan.useSemantic).toBe(false);
+      expect(plan.useSemantic).toBe(true); // Always-on semantic for MD&A context
       expect(plan.structuredQuery?.metrics).toEqual([revenueResolution, ebitdaResolution]);
       expect(metricRegistry.resolveMultiple).toHaveBeenCalledWith(['revenue', 'EBITDA'], undefined);
     });
@@ -435,7 +435,7 @@ describe('QueryRouterService', () => {
       const plan = await service.route('AAPL revenue FY2024');
       expect(conceptRegistry.matchConcept).toHaveBeenCalledWith('AAPL revenue FY2024');
       expect(plan.useStructured).toBe(true);
-      expect(plan.useSemantic).toBe(false);
+      expect(plan.useSemantic).toBe(true); // Always-on semantic for MD&A context
     });
   });
 

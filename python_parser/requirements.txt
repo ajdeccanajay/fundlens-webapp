@@ -30,6 +30,7 @@ xxhash==3.5.0
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 pydantic==2.5.0
+python-multipart==0.0.6
 
 # Database dependencies (for comprehensive financial calculator)
 psycopg2-binary==2.9.9
@@ -40,6 +41,9 @@ python-dotenv==1.0.0
 sentence-transformers==3.3.1
 scikit-learn==1.6.1
 torch==2.6.0
+
+# Safe formula evaluation
+simpleeval==0.9.13
 
 # Vision pipeline dependencies (Instant RAG)
 pdf2image==1.17.0

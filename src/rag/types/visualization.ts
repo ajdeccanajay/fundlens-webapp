@@ -18,7 +18,7 @@ export type ChartType =
 
 export interface ChartDataset {
   label: string;          // e.g., "Revenue", "YoY Growth %"
-  data: number[];         // Numeric values aligned with labels
+  data: (number | null)[]; // Numeric values aligned with labels; null = no data for that period
   type?: 'line' | 'bar'; // Override for mixed charts
   yAxisID?: string;       // For dual-axis charts (e.g., value + growth %)
 }

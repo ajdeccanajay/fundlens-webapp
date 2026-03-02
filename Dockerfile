@@ -69,6 +69,12 @@ COPY --from=builder /app/dist ./dist
 # Copy public assets for static serving
 COPY --from=builder /app/public ./public
 
+# Copy yaml-registries for peer universe + tenant overlay resolution
+COPY --from=builder /app/yaml-registries ./yaml-registries
+
+# Copy prompt files needed by QUL (query understanding layer)
+COPY --from=builder /app/src/prompts ./src/prompts
+
 # Copy Python parser config files needed by backend
 COPY --from=builder /app/python_parser/xbrl_parsing/metric_mapping_enhanced.yaml ./python_parser/xbrl_parsing/
 

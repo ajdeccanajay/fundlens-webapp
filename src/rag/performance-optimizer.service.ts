@@ -72,9 +72,9 @@ export class PerformanceOptimizerService {
   // Default cache configuration
   private config: CacheConfig = {
     enabled: true,
-    ttlLatest: 3600,      // 1 hour for latest queries
-    ttlHistorical: 86400, // 24 hours for historical queries
-    ttlSemantic: 21600,   // 6 hours for semantic queries
+    ttlLatest: 300,       // 5 minutes for latest queries (reduced from 1hr to prevent stale chart data)
+    ttlHistorical: 3600,  // 1 hour for historical queries
+    ttlSemantic: 1800,    // 30 minutes for semantic queries
     maxSize: 1000,        // Max 1000 entries in memory
   };
   
