@@ -371,26 +371,10 @@ export class RAGService {
         }
       }
 
-      // Quick response path — skip LLM for simple structured lookups
-      if (this.responseEnrichment.isQuickResponseEligible(intent)) {
-        if (plan.useStructured && plan.structuredQuery) {
-          const result = await this.structuredRetriever.retrieve(plan.structuredQuery);
-          const quickMetrics = result.metrics;
-          if (quickMetrics.length > 0) {
-            this.logger.log('⚡ Quick response path — skipping LLM');
-            const quickResponse = await this.responseEnrichment.buildQuickResponse(intent, quickMetrics);
-            // Append degradation messaging for any unresolved metrics
-            const { unresolved } = this.responseEnrichment.partitionResolutions(
-              plan.structuredQuery.metrics,
-            );
-            const degradationMsg = this.responseEnrichment.buildUnresolvedMessage(unresolved);
-            if (degradationMsg) {
-              quickResponse.answer = `${quickResponse.answer}\n\n${degradationMsg}`;
-            }
-            return quickResponse;
-          }
-        }
-      }
+      // Quick response path DISABLED — always run full LLM synthesis
+      // Skipping LLM produced raw tables with no analysis or citations.
+      // All queries now go through hybrid retrieval + synthesis.
+      this.logger.debug('⚡ Quick response path bypassed — using full synthesis');
 
       // Step 2: HYBRID RETRIEVAL - Combine structured + semantic + user documents
       let metrics: any[] = [];
@@ -965,12 +949,33 @@ export class RAGService {
           usage = synthesisResult.usage;
           citations = synthesisResult.citations || [];
 
-          // FALLBACK: If LLM produced no narrative citations but we have
-          // structured metrics, generate SEC filing citations from them.
-          if (citations.length === 0 && metrics.length > 0) {
-            const metricCitations = this.buildMetricCitations(metrics);
-            citations = [...metricCitations];
-            this.logger.log(`📊 Built ${metricCitations.length} metric-based SEC citations (no [N] markers in LLM response)`);
+          // ALWAYS build SEC metric citations from structured data.
+          // These prove the numbers independently of which narrative chunks the LLM cited.
+          if (metrics.length > 0) {
+            const secMetrics = metrics.filter((m: any) =>
+              m.filingType !== 'uploaded-document'
+            );
+            if (secMetrics.length > 0) {
+              const metricCitations = this.buildMetricCitations(secMetrics);
+              // Deduplicate against existing citations
+              const existingKeys = new Set(
+                citations.map((c: any) => `${c.ticker}-${c.filingType}-${c.fiscalPeriod}`)
+              );
+              const newCitations = metricCitations.filter((c: any) =>
+                !existingKeys.has(`${c.ticker}-${c.filingType}-${c.fiscalPeriod}`)
+              );
+              if (newCitations.length > 0) {
+                const nextNum = citations.length > 0
+                  ? Math.max(...citations.map((c: any) => c.number || c.citationNumber || 0)) + 1
+                  : 1;
+                newCitations.forEach((c: any, i: number) => {
+                  c.number = nextNum + i;
+                  c.citationNumber = nextNum + i;
+                });
+                citations = [...citations, ...newCitations];
+                this.logger.log(`📊 Added ${newCitations.length} SEC metric citations (total: ${citations.length})`);
+              }
+            }
           }
           
           // Also extract citations from user document chunks if present.
@@ -1182,12 +1187,32 @@ export class RAGService {
       // The frontend's renderMarkdownWithCitations has a fallback that renders a styled "Sources"
       // section from the citations array when no inline [N] markers are found. Appending [N] to
       // the answer causes `marked` to interpret them as link references, breaking clickable links.
-      if ((!citations || citations.length === 0) && metrics.length > 0) {
-        const metricCitations = this.buildMetricCitations(metrics);
-        if (metricCitations.length > 0) {
-          citations = metricCitations;
+      // ALWAYS ensure SEC metric citations exist alongside any narrative citations.
+      if (metrics.length > 0) {
+        const secMetrics = metrics.filter(
+          (m: any) => m.filingType !== 'uploaded-document'
+        );
+        if (secMetrics.length > 0) {
+          const metricCitations = this.buildMetricCitations(secMetrics);
+          const existingKeys = new Set(
+            (citations || []).map((c: any) => `${c.ticker}-${c.filingType}-${c.fiscalPeriod}`)
+          );
+          const newCitations = metricCitations.filter((c: any) =>
+            !existingKeys.has(`${c.ticker}-${c.filingType}-${c.fiscalPeriod}`)
+          );
+          if (newCitations.length > 0) {
+            const nextNum = (citations || []).length > 0
+              ? Math.max(...citations.map((c: any) => c.number || c.citationNumber || 0)) + 1
+              : 1;
+            newCitations.forEach((c: any, i: number) => {
+              c.number = nextNum + i;
+              c.citationNumber = nextNum + i;
+            });
+            citations = [...(citations || []), ...newCitations];
+          }
         }
-      } else if (citations && citations.length > 0 && metrics.length > 0) {
+      }
+      if (citations && citations.length > 0 && metrics.length > 0) {
         // Ensure uploaded doc metrics are represented in citations
         // Check by both sourceType AND filename to avoid duplicates
         const existingUploadedFiles = new Set(

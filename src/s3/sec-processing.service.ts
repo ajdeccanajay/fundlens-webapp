@@ -224,16 +224,9 @@ export class SECProcessingService {
     accessionNumber: string,
   ): Promise<ExtractedMetric[]> {
     try {
-      // For now, use a simple mock parser until Python service is ready
-      // TODO: Replace with actual Python parser call
-      const mockMetrics = this.extractMetricsMock(ticker, filingType, content, accessionNumber);
-      
-      if (mockMetrics.length > 0) {
-        this.logger.log(`Mock extracted ${mockMetrics.length} metrics for ${ticker} ${filingType}`);
-        return mockMetrics;
-      }
-
-      // Try Python parser service if available
+      // Mock parser disabled — always use Python parser for accurate extraction
+      // Try Python parser service
+      this.logger.log(`Extracting metrics via Python parser for ${ticker} ${filingType}`);
       const pythonParserUrl = process.env.PYTHON_PARSER_URL || 'http://localhost:8000';
       
       const response = await firstValueFrom(

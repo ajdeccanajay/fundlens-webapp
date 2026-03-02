@@ -375,19 +375,14 @@ export class PerformanceOptimizerService {
    * Select appropriate model tier
    */
   selectModelTier(complexity: QueryComplexity): ModelTier {
-    // Opus for complex analysis
-    if (complexity.level === 'complex') {
-      return 'opus';
-    }
-    
-    // Sonnet for medium complexity
-    if (complexity.level === 'medium') {
+      // Opus for complex analysis
+      if (complexity.level === 'complex') {
+        return 'opus';
+      }
+
+      // Sonnet minimum for all synthesis — Haiku produces thin responses
       return 'sonnet';
     }
-    
-    // Haiku for simple queries
-    return 'haiku';
-  }
   
   /**
    * Get model ID for tier

@@ -71,7 +71,7 @@ export interface TenantOverlay {
 
 // ── Constants ───────────────────────────────────────────────────────────
 const MAX_NARRATIVE_CHARS = 20_000;
-const MAX_PROMPT_CHARS = 28_000;
+const MAX_PROMPT_CHARS = 40_000;
 
 /**
  * HybridSynthesisService — Structured 5-step financial reasoning synthesis.
@@ -275,10 +275,18 @@ export class HybridSynthesisService {
       const allNarrativeBlock = this.formatNarratives(ctx.narratives);
 
       if (uploadedDocNarratives.length > 0 && secNarratives.length > 0) {
-        // Both sources present — add guidance about uploaded docs being primary
+        // Both sources present — instruct LLM to cross-reference
         sections.push(
-          '=== UPLOADED DOCUMENT DATA (analyst reports, user-provided) ===',
-          'IMPORTANT: Some of the narrative sources below come from documents uploaded by the analyst. These are PRIMARY, authoritative evidence. If they contain metric values (margins, revenue, etc.), use them directly and cite them.',
+          '=== MULTI-SOURCE DATA ===',
+          'The narrative sources below include BOTH:',
+          '  • SEC FILINGS (10-K, 10-Q) — official regulatory filings, ground truth for reported figures',
+          '  • UPLOADED DOCUMENTS — analyst reports, research notes with estimates and interpretations',
+          '',
+          'CROSS-SOURCE RULES:',
+          '1. For reported financial figures, ALWAYS cite SEC filings as the authoritative source.',
+          '2. Use uploaded documents for forward estimates, peer comparisons, and qualitative analysis.',
+          '3. When both sources discuss the same metric, cite BOTH and note any discrepancies.',
+          '4. You MUST include at least one SEC filing citation if SEC narrative sources are available.',
           '',
         );
         sections.push('=== ALL NARRATIVE SOURCES ===', allNarrativeBlock!, '');
@@ -522,36 +530,77 @@ export class HybridSynthesisService {
    * Each chunk shows ticker, section type, and fiscal period.
    */
   private formatNarratives(narratives: ChunkResult[]): string | null {
-    if (!narratives || narratives.length === 0) return null;
+      if (!narratives || narratives.length === 0) return null;
 
-    const blocks: string[] = [];
-    let totalChars = 0;
+      // Partition narratives by source type
+      const secNarratives: { idx: number; chunk: ChunkResult }[] = [];
+      const uploadedNarratives: { idx: number; chunk: ChunkResult }[] = [];
 
-    for (const n of narratives) {
-      const meta = n.metadata;
-      const attribution = [
-        meta.ticker?.toUpperCase(),
-        meta.sectionType,
-        meta.fiscalPeriod,
-      ]
-        .filter(Boolean)
-        .join(' | ');
+      narratives.forEach((n, idx) => {
+        const isUploaded =
+          (n as any).source === 'user_document' ||
+          (n as any).sourceType === 'USER_UPLOAD' ||
+          n.metadata?.filingType === 'uploaded-document' ||
+          n.metadata?.sectionType === 'uploaded-document';
+        if (isUploaded) {
+          uploadedNarratives.push({ idx, chunk: n });
+        } else {
+          secNarratives.push({ idx, chunk: n });
+        }
+      });
 
-      let content = n.content;
+      // Budget: SEC gets 60%, uploaded gets 40%
+      const secBudget = Math.floor(MAX_NARRATIVE_CHARS * 0.6);
+      const uploadedBudget = MAX_NARRATIVE_CHARS - secBudget;
 
-      // Truncate individual narratives if total exceeds budget
-      if (totalChars + content.length > MAX_NARRATIVE_CHARS) {
-        const remaining = MAX_NARRATIVE_CHARS - totalChars;
-        if (remaining <= 100) break; // Not enough room for meaningful content
-        content = content.substring(0, remaining) + '… [truncated]';
+      // Build blocks in original order to preserve [N] numbering
+      // extractCitations maps [1] → narratives[0], so order must match ctx.narratives
+      const blocks: string[] = [];
+      let secChars = 0;
+      let uploadedChars = 0;
+
+      for (let i = 0; i < narratives.length; i++) {
+        const n = narratives[i];
+        const isUploaded =
+          (n as any).source === 'user_document' ||
+          (n as any).sourceType === 'USER_UPLOAD' ||
+          n.metadata?.filingType === 'uploaded-document' ||
+          n.metadata?.sectionType === 'uploaded-document';
+
+        const budget = isUploaded ? uploadedBudget : secBudget;
+        const usedChars = isUploaded ? uploadedChars : secChars;
+
+        const meta = n.metadata;
+        const attribution = [
+          meta.ticker?.toUpperCase(),
+          meta.sectionType,
+          meta.fiscalPeriod,
+        ]
+          .filter(Boolean)
+          .join(' | ');
+
+        let content = n.content;
+
+        // Truncate if this source type's budget is exhausted
+        if (usedChars + content.length > budget) {
+          const remaining = budget - usedChars;
+          if (remaining <= 100) continue; // Skip — no room for meaningful content
+          content = content.substring(0, remaining) + '… [truncated]';
+        }
+
+        blocks.push(`[${blocks.length + 1}] ${attribution}\n${content}`);
+
+        if (isUploaded) {
+          uploadedChars += content.length;
+        } else {
+          secChars += content.length;
+        }
       }
 
-      blocks.push(`[${blocks.length + 1}] ${attribution}\n${content}`);
-      totalChars += content.length;
-    }
+      this.logger.log(`📝 Narrative budget: SEC ${secChars}/${secBudget} chars, Uploaded ${uploadedChars}/${uploadedBudget} chars`);
 
-    return blocks.length > 0 ? blocks.join('\n\n') : null;
-  }
+      return blocks.length > 0 ? blocks.join('\n\n') : null;
+    }
 
   /**
    * Format peer comparison data into a markdown table (Req 8.5).
@@ -654,12 +703,21 @@ export class HybridSynthesisService {
       const idx = num - 1; // [1] → narratives[0]
       if (idx >= 0 && idx < narratives.length) {
         const chunk = narratives[idx];
+        // Detect actual source type from chunk metadata
+        const isUploadedDoc =
+          (chunk as any).source === 'user_document' ||
+          (chunk as any).sourceType === 'USER_UPLOAD' ||
+          chunk.metadata?.filingType === 'uploaded-document' ||
+          chunk.metadata?.sectionType === 'uploaded-document';
+        const citationType = isUploadedDoc ? 'user_document' : 'sec_filing';
+        const citationSourceType = isUploadedDoc ? 'USER_UPLOAD' : 'SEC_FILING';
+
         citations.push({
           id: `citation-${num}`,
-          number: num, // Add the citation number for frontend rendering
-          citationNumber: num, // Also add citationNumber for compatibility
-          type: 'sec_filing',
-          sourceType: 'SEC_FILING', // Add sourceType for frontend styling
+          number: num,
+          citationNumber: num,
+          type: citationType as Citation['type'],
+          sourceType: citationSourceType as Citation['sourceType'],
           title: `${chunk.metadata.ticker?.toUpperCase() ?? ''} ${chunk.metadata.sectionType ?? ''} ${chunk.metadata.fiscalPeriod ?? ''}`.trim(),
           content: chunk.content.substring(0, 500),
           excerpt: chunk.content.substring(0, 500), // Add excerpt for modal display

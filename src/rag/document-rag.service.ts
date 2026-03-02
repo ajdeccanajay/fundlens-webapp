@@ -129,30 +129,34 @@ export class DocumentRAGService {
    * @returns Merged and reranked chunks
    */
   mergeAndRerankResults(
-    userDocChunks: UserDocumentChunk[],
-    secChunks: any[],
-    topK: number = 5,
-  ): any[] {
-    // Combine all chunks
-    const allChunks = [
-      ...userDocChunks.map((chunk) => ({
-        ...chunk,
-        source: 'user_document',
-        sourceType: 'USER_UPLOAD',
-      })),
-      ...secChunks.map((chunk) => ({
-        ...chunk,
-        source: 'sec_filing',
-        sourceType: 'SEC_FILING',
-      })),
-    ];
+      userDocChunks: UserDocumentChunk[],
+      secChunks: any[],
+      topK: number = 5,
+    ): any[] {
+      // SEC filing boost: add 0.10 to SEC scores so they aren't always outranked
+      // by uploaded docs (which typically score 0.85+ vs SEC 0.5-0.75)
+      const SEC_SCORE_BOOST = 0.10;
 
-    // Sort by score (descending)
-    allChunks.sort((a, b) => b.score - a.score);
+      const allChunks = [
+        ...userDocChunks.map((chunk) => ({
+          ...chunk,
+          source: 'user_document',
+          sourceType: 'USER_UPLOAD',
+        })),
+        ...secChunks.map((chunk) => ({
+          ...chunk,
+          score: (chunk.score || 0) + SEC_SCORE_BOOST,
+          source: 'sec_filing',
+          sourceType: 'SEC_FILING',
+        })),
+      ];
 
-    // Return top K
-    return allChunks.slice(0, topK);
-  }
+      // Sort by boosted score (descending)
+      allChunks.sort((a, b) => b.score - a.score);
+
+      // Return top K
+      return allChunks.slice(0, topK);
+    }
 
   /**
    * Build context string from chunks for LLM prompt
