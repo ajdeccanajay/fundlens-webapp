@@ -657,28 +657,26 @@ export class RAGService {
             // Analyst PDFs (e.g. DBS reports) have financial tables (Sales,
             // EBITDA, margins, P/E, FCF) rendered as positioned graphics —
             // pdfplumber/pdf2json extract narrative text but NOT these tables.
-            // The page images ARE cached in InstantRAGService.sessionImageCache.
-            // Use Claude Vision to extract structured financial data from the
-            // images and append it to the text content so the synthesis LLM
-            // can cross-reference analyst estimates against SEC actuals.
+            // Page images are persisted to DB (page_images JSONB column) and
+            // cached in-memory for performance. getVisionImagesFromDB() checks
+            // the in-memory cache first, then falls back to DB — so this
+            // survives container restarts and ECS deployments.
             let visionExtractedText = '';
-            const hasVision = this.instantRAGService.hasVisionContent(options.instantRagSessionId);
-            if (hasVision) {
-              try {
-                const sessionImages = this.instantRAGService.getSessionImages(options.instantRagSessionId);
-                if (sessionImages && sessionImages.size > 0) {
-                  const allImages: { base64: string; mediaType: 'image/png' | 'image/jpeg' }[] = [];
-                  for (const [, images] of sessionImages) {
-                    for (const img of images) {
-                      if (allImages.length >= 10) break; // Cap at 10 pages for cost control
-                      allImages.push({ base64: img, mediaType: 'image/png' });
-                    }
-                    if (allImages.length >= 10) break;
+            try {
+              const sessionImages = await this.instantRAGService.getVisionImagesFromDB(options.instantRagSessionId);
+              if (sessionImages && sessionImages.size > 0) {
+                const allImages: { base64: string; mediaType: 'image/png' | 'image/jpeg' }[] = [];
+                for (const [, images] of sessionImages) {
+                  for (const img of images) {
+                    if (allImages.length >= 10) break; // Cap at 10 pages for cost control
+                    allImages.push({ base64: img, mediaType: 'image/png' });
                   }
+                  if (allImages.length >= 10) break;
+                }
 
-                  if (allImages.length > 0) {
-                    this.logger.log(`👁️ Vision extraction: sending ${allImages.length} page images to Claude for table extraction`);
-                    const visionPrompt = `Extract ALL financial data tables from these document pages. For each table found, output the data in a structured format:
+                if (allImages.length > 0) {
+                  this.logger.log(`👁️ Vision extraction: sending ${allImages.length} page images to Claude for table extraction`);
+                  const visionPrompt = `Extract ALL financial data tables from these document pages. For each table found, output the data in a structured format:
 
 TABLE: [Table Name]
 | Column1 | Column2 | Column3 | ... |
@@ -696,25 +694,26 @@ For each number, preserve the exact value and units (millions, billions, %, x).
 If a cell contains "nm" or "na", include it as-is.
 Output ONLY the extracted tables, no commentary.`;
 
-                    visionExtractedText = await this.bedrock.invokeClaudeWithVision({
-                      prompt: visionPrompt,
-                      images: allImages,
-                      systemPrompt: 'You are a financial data extraction specialist. Extract all financial tables from document images with perfect accuracy. Preserve all numbers, units, and column headers exactly as shown.',
-                      max_tokens: 8000,
-                    });
+                  visionExtractedText = await this.bedrock.invokeClaudeWithVision({
+                    prompt: visionPrompt,
+                    images: allImages,
+                    systemPrompt: 'You are a financial data extraction specialist. Extract all financial tables from document images with perfect accuracy. Preserve all numbers, units, and column headers exactly as shown.',
+                    max_tokens: 8000,
+                  });
 
-                    if (visionExtractedText && visionExtractedText.trim().length > 100) {
-                      this.logger.log(`👁️ Vision extraction successful: ${visionExtractedText.length} chars of table data extracted`);
-                    } else {
-                      this.logger.log(`👁️ Vision extraction returned minimal content (${visionExtractedText?.length || 0} chars)`);
-                      visionExtractedText = '';
-                    }
+                  if (visionExtractedText && visionExtractedText.trim().length > 100) {
+                    this.logger.log(`👁️ Vision extraction successful: ${visionExtractedText.length} chars of table data extracted`);
+                  } else {
+                    this.logger.log(`👁️ Vision extraction returned minimal content (${visionExtractedText?.length || 0} chars)`);
+                    visionExtractedText = '';
                   }
                 }
-              } catch (visionError) {
-                this.logger.warn(`⚠️ Vision extraction failed (non-fatal, continuing with text only): ${visionError.message}`);
-                visionExtractedText = '';
+              } else {
+                this.logger.log(`👁️ No vision images found for session ${options.instantRagSessionId} (neither in-memory nor DB)`);
               }
+            } catch (visionError) {
+              this.logger.warn(`⚠️ Vision extraction failed (non-fatal, continuing with text only): ${visionError.message}`);
+              visionExtractedText = '';
             }
 
             // Convert SessionDocument[] to narrative chunk format.

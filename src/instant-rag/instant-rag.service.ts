@@ -396,17 +396,22 @@ export class InstantRAGService {
     doc: ProcessedDocument,
   ): Promise<string> {
     // Note: session_id is UUID, tenant_id is TEXT
+    // Persist page_images to JSONB so vision extraction survives container restarts.
+    // The in-memory sessionImageCache is a performance optimization, not the source of truth.
+    const pageImagesJson = doc.pageImages && doc.pageImages.length > 0
+      ? JSON.stringify(doc.pageImages)
+      : '[]';
     const result = await this.prisma.$queryRaw<{ id: string }[]>`
       INSERT INTO instant_rag_documents (
         session_id, tenant_id, file_name, file_type, file_size_bytes,
         content_hash, s3_key, extracted_text, extracted_tables,
-        page_count, processing_status, processing_duration_ms
+        page_count, page_images, processing_status, processing_duration_ms
       ) VALUES (
         ${sessionId}::uuid, ${tenantId}, ${doc.fileName},
         ${doc.fileType}, ${BigInt(Math.round(doc.fileSizeMb * 1024 * 1024))},
         ${doc.contentHash}, ${'instant-rag/' + sessionId + '/' + doc.fileName},
         ${doc.extractedText}, ${JSON.stringify(doc.extractedTables)}::jsonb,
-        ${doc.pageCount}, 'complete', ${doc.processingDurationMs}
+        ${doc.pageCount}, ${pageImagesJson}::jsonb, 'complete', ${doc.processingDurationMs}
       )
       RETURNING id
     `;
@@ -1316,17 +1321,64 @@ RESPONSE FORMAT:
 
   /**
    * Get cached images for a session (for vision queries)
+   * Fast path: in-memory cache. Fallback: load from DB.
    */
   getSessionImages(sessionId: string): Map<string, string[]> | undefined {
     return this.sessionImageCache.get(sessionId);
   }
 
   /**
-   * Check if session has vision content available
+   * Check if session has vision content available (in-memory only — fast check).
+   * For a deployment-safe check, use getVisionImagesFromDB().
    */
   hasVisionContent(sessionId: string): boolean {
     const cache = this.sessionImageCache.get(sessionId);
     return !!cache && cache.size > 0;
+  }
+
+  /**
+   * Load vision page images from the database (deployment-safe).
+   * Returns a Map<fileName, base64Images[]> just like sessionImageCache.
+   * Also populates the in-memory cache so subsequent calls are fast.
+   * 
+   * This is the source of truth — survives container restarts and deployments.
+   * Only loads the page_images column (not extractedText) to minimize DB transfer.
+   */
+  async getVisionImagesFromDB(sessionId: string): Promise<Map<string, string[]>> {
+    // Fast path: in-memory cache is populated
+    const cached = this.sessionImageCache.get(sessionId);
+    if (cached && cached.size > 0) {
+      return cached;
+    }
+
+    // Load from DB — only fetch page_images and file_name to minimize transfer
+    const rows = await this.prisma.$queryRaw<{ fileName: string; pageImages: string[] | null }[]>`
+      SELECT file_name as "fileName", page_images as "pageImages"
+      FROM instant_rag_documents
+      WHERE session_id = ${sessionId}::uuid
+        AND processing_status = 'complete'
+        AND page_images IS NOT NULL
+        AND page_images != '[]'::jsonb
+    `;
+
+    if (rows.length === 0) {
+      return new Map();
+    }
+
+    // Build the map and populate in-memory cache
+    const imageMap = new Map<string, string[]>();
+    for (const row of rows) {
+      if (row.pageImages && Array.isArray(row.pageImages) && row.pageImages.length > 0) {
+        imageMap.set(row.fileName, row.pageImages);
+      }
+    }
+
+    if (imageMap.size > 0) {
+      this.sessionImageCache.set(sessionId, imageMap);
+      this.logger.log(`📸 Loaded ${imageMap.size} documents with vision images from DB for session ${sessionId}`);
+    }
+
+    return imageMap;
   }
 
   /**

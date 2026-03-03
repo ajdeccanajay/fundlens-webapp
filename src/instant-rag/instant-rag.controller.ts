@@ -186,17 +186,20 @@ export class InstantRAGController {
       // Store document in database (both complete and failed, skip duplicates)
       // Note: session_id is UUID, tenant_id is TEXT
       if (!result.isDuplicate) {
+        const pageImagesJson = result.pageImages && result.pageImages.length > 0
+          ? JSON.stringify(result.pageImages)
+          : '[]';
         const docResult = await this.prisma.$queryRaw<{ id: string }[]>`
           INSERT INTO instant_rag_documents (
             session_id, tenant_id, file_name, file_type, file_size_bytes,
             content_hash, s3_key, extracted_text, extracted_tables,
-            page_count, processing_status, processing_error, processing_duration_ms
+            page_count, page_images, processing_status, processing_error, processing_duration_ms
           ) VALUES (
             ${session.id}::uuid, ${tenantId}, ${result.fileName},
             ${result.fileType}, ${BigInt(Math.round(result.fileSizeMb * 1024 * 1024))},
             ${result.contentHash}, ${'instant-rag/' + session.id + '/' + result.fileName},
             ${result.extractedText || ''}, ${JSON.stringify(result.extractedTables)}::jsonb,
-            ${result.pageCount}, ${result.processingStatus}, ${result.processingError || null},
+            ${result.pageCount}, ${pageImagesJson}::jsonb, ${result.processingStatus}, ${result.processingError || null},
             ${result.processingDurationMs}
           )
           RETURNING id
@@ -494,17 +497,20 @@ export class InstantRAGController {
         if (result.processingStatus === 'complete' && !result.isDuplicate) {
           // Store document in database
           // Note: session_id is UUID, tenant_id is TEXT
+          const pageImagesJson = result.pageImages && result.pageImages.length > 0
+            ? JSON.stringify(result.pageImages)
+            : '[]';
           const docResult = await this.prisma.$queryRaw<{ id: string }[]>`
             INSERT INTO instant_rag_documents (
               session_id, tenant_id, file_name, file_type, file_size_bytes,
               content_hash, s3_key, extracted_text, extracted_tables,
-              page_count, processing_status, processing_duration_ms
+              page_count, page_images, processing_status, processing_duration_ms
             ) VALUES (
               ${sessionId}::uuid, ${tenantId}, ${result.fileName},
               ${result.fileType}, ${BigInt(Math.round(result.fileSizeMb * 1024 * 1024))},
               ${result.contentHash}, ${'instant-rag/' + sessionId + '/' + result.fileName},
               ${result.extractedText}, ${JSON.stringify(result.extractedTables)}::jsonb,
-              ${result.pageCount}, 'complete', ${result.processingDurationMs}
+              ${result.pageCount}, ${pageImagesJson}::jsonb, 'complete', ${result.processingDurationMs}
             )
             RETURNING id
           `;
