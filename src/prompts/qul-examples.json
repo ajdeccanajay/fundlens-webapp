@@ -29,7 +29,10 @@
       "confidence": 0.92,
       "temporalScope": { "type": "latest" },
       "normalizedQuery": "ABNB revenue latest",
-      "suggestedChart": "metric_card"
+      "suggestedChart": "metric_card",
+      "subQueries": [
+        { "intent": "METRIC_LOOKUP", "entity": "ABNB", "metric": "revenue", "temporal": "latest", "path": "structured_db", "metricType": "atomic" }
+      ]
     }
   },
   {
@@ -89,7 +92,10 @@
       "confidence": 0.90,
       "useWorkspaceContext": false,
       "temporalScope": { "type": "latest" },
-      "normalizedQuery": "NVDA operating margin latest"
+      "normalizedQuery": "NVDA operating margin latest",
+      "subQueries": [
+        { "intent": "METRIC_LOOKUP", "entity": "NVDA", "metric": "operating_margin", "temporal": "latest", "path": "structured_db", "metricType": "computed" }
+      ]
     }
   },
   {
@@ -229,6 +235,48 @@
       "confidence": 0.90,
       "temporalScope": { "type": "all_available" },
       "normalizedQuery": "key person risk management depth assessment TargetCo"
+    }
+  },
+  {
+    "description": "Simple revenue query with explicit ticker in workspace",
+    "input": {
+      "query": "What is the revenue for AMZN?",
+      "workspace": { "ticker": "AMZN", "company_name": "Amazon", "domain": "public_equity" },
+      "uploaded_documents": [],
+      "conversation_history": []
+    },
+    "output": {
+      "entities": [{ "name": "Amazon", "ticker": "AMZN", "entityType": "public_company", "source": "explicit" }],
+      "intent": "METRIC_LOOKUP",
+      "domain": "public_equity",
+      "isValidQuery": true,
+      "confidence": 0.95,
+      "temporalScope": { "type": "latest" },
+      "normalizedQuery": "AMZN revenue latest",
+      "subQueries": [
+        { "intent": "METRIC_LOOKUP", "entity": "AMZN", "metric": "revenue", "temporal": "latest", "path": "structured_db", "metricType": "atomic" }
+      ]
+    }
+  },
+  {
+    "description": "Multi-word metric query: net income",
+    "input": {
+      "query": "Show me AAPL's net income for last year",
+      "workspace": { "ticker": "AAPL", "company_name": "Apple", "domain": "public_equity" },
+      "uploaded_documents": [],
+      "conversation_history": []
+    },
+    "output": {
+      "entities": [{ "name": "Apple", "ticker": "AAPL", "entityType": "public_company", "source": "workspace_context" }],
+      "intent": "METRIC_LOOKUP",
+      "domain": "public_equity",
+      "isValidQuery": true,
+      "confidence": 0.93,
+      "temporalScope": { "type": "specific_period", "periods": ["FY2025"] },
+      "normalizedQuery": "AAPL net income FY2025",
+      "subQueries": [
+        { "intent": "METRIC_LOOKUP", "entity": "AAPL", "metric": "net_income", "temporal": "FY2025", "path": "structured_db", "metricType": "atomic" }
+      ]
     }
   }
 ]

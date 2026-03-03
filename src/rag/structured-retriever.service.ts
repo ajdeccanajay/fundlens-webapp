@@ -568,9 +568,9 @@ export class StructuredRetrieverService {
 
     const results = await this.prisma.financialMetric.findMany({
       where: {
-        ticker,
+        ticker: { equals: ticker, mode: 'insensitive' },
         normalizedMetric: { in: synonyms, mode: 'insensitive' },
-        filingType,
+        filingType: { equals: filingType, mode: 'insensitive' },
       },
       orderBy: { statementDate: 'desc' },
     });

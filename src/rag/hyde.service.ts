@@ -143,7 +143,7 @@ Hypothetical Answer:`;
     try {
       const response = await this.bedrock.invokeClaude({
         prompt,
-        modelId: 'us.anthropic.claude-3-haiku-20240307-v1:0', // Fast model for HyDE
+        modelId: 'us.anthropic.claude-haiku-4-5-20251001-v1:0', // Fast model for HyDE
         max_tokens: 500,
       });
 

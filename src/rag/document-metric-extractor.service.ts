@@ -130,7 +130,7 @@ export class DocumentMetricExtractorService {
       const response = await this.bedrock.invokeClaude({
         prompt: userMessage,
         systemPrompt,
-        modelId: 'us.anthropic.claude-3-5-haiku-20241022-v1:0',
+        modelId: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
         max_tokens: 1024,
         temperature: 0.0,
       });

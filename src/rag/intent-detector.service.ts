@@ -148,14 +148,12 @@ export class IntentDetectorService implements OnModuleInit {
 
     const startTime = Date.now();
 
-    // Layer 1: Regex Fast-Path (Req 1.2)
+    // Regex pre-processing — provides seed data for fallback only, NEVER short-circuits.
+    // Previously returned early at ≥0.9 confidence, bypassing LLM entirely.
+    // Disabled because: regex hardcodes needsNarrative=false, misses synonyms,
+    // and every edge case requires a new regex rule (unscalable).
     const fastPathResult = this.regexFastPath(query, contextTicker);
-    if (fastPathResult.confidence >= 0.9) {
-      this.llmUsageStats.regexSuccess++;
-      this.logger.log(`✅ Regex fast-path hit (confidence: ${fastPathResult.confidence.toFixed(2)}, latency: ${Date.now() - startTime}ms)`);
-      await this.logDetection(fastPathResult, 'regex_fast_path', tenantId, startTime);
-      return fastPathResult;
-    }
+    this.logger.debug(`Regex pre-parse (seed only): ticker=${JSON.stringify(fastPathResult.ticker)}, metrics=${JSON.stringify(fastPathResult.metrics)}, confidence=${fastPathResult.confidence.toFixed(2)}`);
 
     // Layer 2: Fast-Path Cache (Req 1.3, 4.2)
     if (this.fastPathCache) {

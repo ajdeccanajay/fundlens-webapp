@@ -79,7 +79,7 @@ export class LlmDetectionEngine {
   private cachedSystemPrompt: string | null = null;
   private promptVersion: number = 0;
 
-  private static readonly MODEL_ID = 'us.anthropic.claude-3-5-haiku-20241022-v1:0';
+  private static readonly MODEL_ID = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
   private static readonly MAX_TOKENS = 500;
   private static readonly TIMEOUT_MS = 3000;
 

@@ -1,10 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { BedrockService, ChunkResult, MetadataFilter } from './bedrock.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StructuredRetrieverService } from './structured-retriever.service';
 import { AdvancedRetrievalService, AdvancedRetrievalConfig } from './advanced-retrieval.service';
 import { DocumentType } from './types/query-intent';
 import { MetricResolution } from './metric-resolution/types';
+import { MetricRegistryService } from './metric-resolution/metric-registry.service';
 
 export interface SemanticQuery {
   query: string;
@@ -53,6 +54,7 @@ export class SemanticRetrieverService {
     private readonly prisma: PrismaService,
     private readonly structuredRetriever: StructuredRetrieverService,
     private readonly advancedRetrieval: AdvancedRetrievalService,
+    @Optional() private readonly metricRegistry?: MetricRegistryService,
   ) {
     this.useBedrockKB = !!process.env.BEDROCK_KB_ID;
     this.useAdvancedRetrieval = process.env.ENABLE_ADVANCED_RETRIEVAL !== 'false';
@@ -765,52 +767,44 @@ export class SemanticRetrieverService {
     }
 
     try {
-      // Determine what metrics to fetch based on query content
-      const queryLower = query.query.toLowerCase();
+      // Extract metrics from query using MetricRegistryService — no hardcoded keyword maps.
+      // Same approach as buildIntentFromQUL: tokenize, build candidates, resolve through registry.
+      const queryTokens = query.query.toLowerCase().split(/\s+/).filter(t => t.length > 1);
+      const candidates: string[] = [...queryTokens];
+      for (let i = 0; i < queryTokens.length - 1; i++) {
+        candidates.push(`${queryTokens[i]} ${queryTokens[i + 1]}`);
+        candidates.push(`${queryTokens[i]}_${queryTokens[i + 1]}`);
+      }
+      for (let i = 0; i < queryTokens.length - 2; i++) {
+        candidates.push(`${queryTokens[i]} ${queryTokens[i + 1]} ${queryTokens[i + 2]}`);
+      }
+
       const metrics: string[] = [];
+      const seen = new Set<string>();
+      const registry = this.metricRegistry;
 
-      // Map query terms to relevant metrics
-      // CRITICAL FIX: Be more precise - don't add multiple metrics for a single query term
-      if ((queryLower.includes('revenue') || queryLower.includes('sales') || queryLower.includes('top line')) 
-          && !queryLower.includes('net income') && !queryLower.includes('income statement')) {
-        metrics.push('revenue', 'total_revenue');
-      }
-      
-      if (queryLower.includes('net income') || queryLower.includes('profit') || queryLower.includes('earnings') || queryLower.includes('bottom line')) {
-        metrics.push('net_income');
-      }
-      
-      if (queryLower.includes('gross profit') || queryLower.includes('gross margin')) {
-        metrics.push('gross_profit');
-      }
-      
-      if (queryLower.includes('operating income') || queryLower.includes('operating profit') || queryLower.includes('ebit')) {
-        metrics.push('operating_income');
-      }
-      
-      if (queryLower.includes('cash') || queryLower.includes('flow')) {
-        metrics.push('operating_cash_flow', 'free_cash_flow', 'cash_and_equivalents');
-      }
-      
-      if (queryLower.includes('debt') || queryLower.includes('liability')) {
-        metrics.push('total_debt', 'total_liabilities', 'long_term_debt');
-      }
-      
-      if (queryLower.includes('asset') || queryLower.includes('balance')) {
-        metrics.push('total_assets', 'current_assets', 'total_equity');
+      if (registry) {
+        for (const candidate of candidates) {
+          try {
+            const resolution = registry.resolve(candidate);
+            if (resolution && resolution.confidence !== 'unresolved' && !seen.has(resolution.canonical_id)) {
+              metrics.push(resolution.canonical_id);
+              seen.add(resolution.canonical_id);
+            }
+          } catch { /* skip */ }
+        }
       }
 
-      if (queryLower.includes('margin') || queryLower.includes('profitability')) {
-        metrics.push('gross_margin', 'operating_margin', 'net_margin');
-      }
-
-      // If no specific metrics identified, get key financial metrics
+      // Fallback: if no metrics identified (registry unavailable or query has no metric terms),
+      // use core financial metrics for general context
       if (metrics.length === 0) {
         metrics.push('revenue', 'net_income', 'total_assets', 'operating_cash_flow');
       }
 
       // Build structured query for contextual metrics
       // Create lightweight MetricResolution objects for each metric name
+      // getSynonymsForDbColumn produces ALL variant forms (original + storage-normalized),
+      // ensuring we match regardless of how the data was ingested.
       const metricResolutions: MetricResolution[] = metrics.map(m => ({
         canonical_id: m,
         display_name: m.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),

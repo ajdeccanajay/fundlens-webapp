@@ -199,7 +199,7 @@ export class QueryUnderstandingService implements OnModuleInit {
       this.bedrock.invokeClaude({
         prompt: fullPrompt,
         systemPrompt: this.systemPrompt,
-        modelId: 'us.anthropic.claude-3-5-haiku-20241022-v1:0',
+        modelId: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
         max_tokens: 1024,
         temperature: 0,
       }),
@@ -247,7 +247,7 @@ export class QueryUnderstandingService implements OnModuleInit {
         this.bedrock.invokeClaude({
           prompt: fullPrompt,
           systemPrompt: this.systemPrompt,
-          modelId: 'us.anthropic.claude-3-5-sonnet-20241022-v2:0',
+          modelId: 'us.anthropic.claude-sonnet-4-6',
           max_tokens: 1024,
           temperature: 0,
         }),

@@ -9,7 +9,7 @@ import {
 } from './types/query-intent-object';
 
 /** Haiku model configuration */
-const HAIKU_MODEL = 'us.anthropic.claude-3-5-haiku-20241022-v1:0';
+const HAIKU_MODEL = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
 const HAIKU_MAX_TOKENS = 800;
 const HAIKU_TIMEOUT_MS = 8000;
 

@@ -95,8 +95,8 @@ describe('HaikuIntentParserService', () => {
 
       expect(bedrockMock.invokeClaude).toHaveBeenCalledTimes(1);
       const callArgs = bedrockMock.invokeClaude.mock.calls[0][0];
-      expect(callArgs.modelId).toBe('anthropic.claude-3-5-haiku-20241022-v1:0');
-      expect(callArgs.max_tokens).toBe(500);
+      expect(callArgs.modelId).toBe('us.anthropic.claude-haiku-4-5-20251001-v1:0');
+      expect(callArgs.max_tokens).toBe(800);
       expect(callArgs.temperature).toBe(0);
       expect(callArgs.systemPrompt).toBeDefined();
       expect(callArgs.prompt).toContain("What is ABNB's latest revenue?");
@@ -220,7 +220,7 @@ describe('HaikuIntentParserService', () => {
       await service.parse('AAPL revenue');
 
       expect(loggerDebugSpy).toHaveBeenCalledWith(
-        expect.stringContaining('prompt_version=v1.0.0'),
+        expect.stringContaining('prompt_version=v1.2.0'),
       );
     });
 
@@ -239,7 +239,7 @@ describe('HaikuIntentParserService', () => {
       await service.parse('test');
 
       expect(loggerDebugSpy).toHaveBeenCalledWith(
-        expect.stringContaining('model=anthropic.claude-3-5-haiku-20241022-v1:0'),
+        expect.stringContaining('model=us.anthropic.claude-haiku-4-5-20251001-v1:0'),
       );
     });
   });

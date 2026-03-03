@@ -94,19 +94,19 @@ describe('PerformanceOptimizerService', () => {
     it('should return correct TTL for latest queries', () => {
       const intent = { periodType: 'latest' };
       const ttl = service.getCacheTTL(intent);
-      expect(ttl).toBe(3600); // 1 hour
+      expect(ttl).toBe(300); // 5 minutes (reduced to prevent stale chart data)
     });
 
     it('should return correct TTL for historical queries', () => {
       const intent = { period: 'FY2023' };
       const ttl = service.getCacheTTL(intent);
-      expect(ttl).toBe(86400); // 24 hours
+      expect(ttl).toBe(3600); // 1 hour
     });
 
     it('should return correct TTL for semantic queries', () => {
       const intent = { type: 'semantic' };
       const ttl = service.getCacheTTL(intent);
-      expect(ttl).toBe(21600); // 6 hours
+      expect(ttl).toBe(1800); // 30 minutes
     });
   });
 
@@ -161,10 +161,10 @@ describe('PerformanceOptimizerService', () => {
   });
 
   describe('Model Tier Selection', () => {
-    it('should select Haiku for simple queries', () => {
+    it('should select Sonnet minimum for simple queries', () => {
       const complexity = { level: 'simple' as const, factors: [], estimatedTokens: 100, score: 10 };
       const tier = service.selectModelTier(complexity);
-      expect(tier).toBe('haiku');
+      expect(tier).toBe('sonnet');
     });
 
     it('should select Sonnet for medium queries', () => {
@@ -187,13 +187,13 @@ describe('PerformanceOptimizerService', () => {
   });
 
   describe('LLM Usage Decision', () => {
-    it('should skip LLM for simple metric lookups', () => {
+    it('should always use LLM when data is available', () => {
       const intent = { type: 'structured', needsNarrative: false };
       const metrics = [{ value: 100 }];
       const narratives = [];
       
       const shouldUse = service.shouldUseLLM(intent, metrics, narratives);
-      expect(shouldUse).toBe(false);
+      expect(shouldUse).toBe(true);
     });
 
     it('should skip LLM when no data found', () => {

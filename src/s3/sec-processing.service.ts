@@ -271,9 +271,8 @@ export class SECProcessingService {
 
       return metrics;
     } catch (error) {
-      this.logger.error(`Error extracting metrics (falling back to mock): ${error.message}`);
-      // Fall back to mock metrics
-      return this.extractMetricsMock(ticker, filingType, content, accessionNumber);
+      this.logger.error(`Python parser failed for ${ticker} ${filingType}: ${error.message}. Returning empty — filing will need reprocessing.`);
+      return [];
     }
   }
 

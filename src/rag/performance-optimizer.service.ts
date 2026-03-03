@@ -389,9 +389,9 @@ export class PerformanceOptimizerService {
    */
   getModelId(tier: ModelTier): string {
     const models = {
-      haiku: 'us.anthropic.claude-3-5-haiku-20241022-v1:0',
-      sonnet: 'us.anthropic.claude-3-5-sonnet-20241022-v2:0',
-      opus: 'us.anthropic.claude-opus-4-5-20251101-v1:0',
+      haiku: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+      sonnet: 'us.anthropic.claude-sonnet-4-6',
+      opus: 'us.anthropic.claude-opus-4-6-v1',
     };
     return models[tier];
   }

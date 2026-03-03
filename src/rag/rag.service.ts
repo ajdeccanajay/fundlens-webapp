@@ -953,7 +953,10 @@ export class RAGService {
           // These prove the numbers independently of which narrative chunks the LLM cited.
           if (metrics.length > 0) {
             const secMetrics = metrics.filter((m: any) =>
-              m.filingType !== 'uploaded-document'
+              m.filingType !== 'uploaded-document' &&
+              (m as any).source !== 'user_document' &&
+              (m as any).sourceType !== 'USER_UPLOAD' &&
+              !(m as any)._fromUploadedDoc
             );
             if (secMetrics.length > 0) {
               const metricCitations = this.buildMetricCitations(secMetrics);
@@ -1190,7 +1193,10 @@ export class RAGService {
       // ALWAYS ensure SEC metric citations exist alongside any narrative citations.
       if (metrics.length > 0) {
         const secMetrics = metrics.filter(
-          (m: any) => m.filingType !== 'uploaded-document'
+          (m: any) => m.filingType !== 'uploaded-document' &&
+            (m as any).source !== 'user_document' &&
+            (m as any).sourceType !== 'USER_UPLOAD' &&
+            !(m as any)._fromUploadedDoc
         );
         if (secMetrics.length > 0) {
           const metricCitations = this.buildMetricCitations(secMetrics);
@@ -1626,6 +1632,46 @@ export class RAGService {
       }
     }
 
+    // When QUL provides no subQueries (standard for METRIC_LOOKUP — the few-shot
+    // examples intentionally omit them for simple queries), extract metric terms
+    // from normalizedQuery by resolving every token through MetricRegistryService.
+    //
+    // No stopword arrays or hardcoded keyword maps. The registry IS the filter:
+    //   resolve('amzn') → unresolved → skip
+    //   resolve('revenue') → exact → keep
+    //   resolve('net income') → exact → keep
+    //   resolve('revnue') → fuzzy_auto (0.88) → keep (handles typos)
+    if (metrics.length === 0 && qul.normalizedQuery && this['metricRegistry']) {
+      const tokens = qul.normalizedQuery.toLowerCase().split(/\s+/).filter(t => t.length > 1);
+
+      // Build candidate list: single tokens + bigrams + underscore-joined bigrams
+      const candidates: string[] = [...tokens];
+      for (let i = 0; i < tokens.length - 1; i++) {
+        candidates.push(`${tokens[i]} ${tokens[i + 1]}`);
+        candidates.push(`${tokens[i]}_${tokens[i + 1]}`);
+      }
+      // Trigrams for three-word metrics: "cost of revenue", "cash from operations"
+      for (let i = 0; i < tokens.length - 2; i++) {
+        candidates.push(`${tokens[i]} ${tokens[i + 1]} ${tokens[i + 2]}`);
+        candidates.push(`${tokens[i]}_${tokens[i + 1]}_${tokens[i + 2]}`);
+      }
+
+      const seen = new Set<string>();
+      for (const candidate of candidates) {
+        try {
+          const resolution = this['metricRegistry'].resolve(candidate);
+          if (resolution && resolution.confidence !== 'unresolved' && !seen.has(resolution.canonical_id)) {
+            metrics.push(resolution.canonical_id);
+            seen.add(resolution.canonical_id);
+          }
+        } catch { /* resolve() threw — skip this candidate */ }
+      }
+
+      if (metrics.length > 0) {
+        this.logger.log(`📊 Extracted ${metrics.length} metric(s) from normalizedQuery: [${metrics.join(', ')}]`);
+      }
+    }
+
     return {
       type,
       ticker,
@@ -1713,7 +1759,38 @@ export class RAGService {
     const effectiveUseSemantic = paths.length === 0 ? true : useSemantic || hasUploadedEntity || isPE || isComparison;
 
     // Resolve metrics through MetricRegistryService (same as queryRouter does)
-    const metricHints = intent.metrics || [];
+    let metricHints = intent.metrics || [];
+
+    // Safety net: if buildIntentFromQUL didn't extract metrics (unusual phrasing,
+    // or metric appears only as trigram), try once more from normalizedQuery.
+    // Uses the same registry-as-filter pattern — no stopword arrays.
+    if (metricHints.length === 0 && qul.normalizedQuery && this.metricRegistry) {
+      const tokens = (qul.normalizedQuery || '').toLowerCase().split(/\s+/).filter((t: string) => t.length > 1);
+      const candidates = [...tokens];
+      for (let i = 0; i < tokens.length - 1; i++) {
+        candidates.push(`${tokens[i]} ${tokens[i + 1]}`);
+        candidates.push(`${tokens[i]}_${tokens[i + 1]}`);
+      }
+      for (let i = 0; i < tokens.length - 2; i++) {
+        candidates.push(`${tokens[i]} ${tokens[i + 1]} ${tokens[i + 2]}`);
+        candidates.push(`${tokens[i]}_${tokens[i + 1]}_${tokens[i + 2]}`);
+      }
+      const seen = new Set<string>();
+      for (const candidate of candidates) {
+        try {
+          const res = this.metricRegistry.resolve(candidate);
+          if (res && res.confidence !== 'unresolved' && !seen.has(res.canonical_id)) {
+            metricHints.push(res.canonical_id);
+            seen.add(res.canonical_id);
+          }
+        } catch { /* skip */ }
+      }
+      if (metricHints.length > 0) {
+        intent.metrics = metricHints;
+        this.logger.log(`📊 buildPlanFromQUL safety net: extracted [${metricHints.join(', ')}] from normalizedQuery`);
+      }
+    }
+
     let resolvedMetrics: any[] = [];
     // Track which metric hints were expanded via concept resolution so we
     // can suppress the "I don't have a metric mapped" degradation message.
@@ -2920,9 +2997,17 @@ export class RAGService {
       let num = 1;
 
       for (const metric of metrics) {
-        // Handle uploaded document metrics — generate UPLOADED_DOC citations
-        if ((metric as any).filingType === 'uploaded-document' && (metric as any).fileName) {
-          const key = `upload-${(metric as any).fileName}-${metric.normalizedMetric}`;
+        // Detect uploaded document source — check ALL available signals.
+        // Previously checked only filingType + fileName. If fileName was undefined,
+        // uploaded doc metrics fell through and were labeled SEC_FILING.
+        const isUploadedDoc =
+          (metric as any).filingType === 'uploaded-document' ||
+          (metric as any).source === 'user_document' ||
+          (metric as any).sourceType === 'USER_UPLOAD' ||
+          (metric as any)._fromUploadedDoc === true;
+
+        if (isUploadedDoc) {
+          const key = `upload-${(metric as any).fileName || metric.ticker}-${metric.normalizedMetric}-${metric.fiscalPeriod || ''}`;
           if (seen.has(key)) continue;
           seen.add(key);
 
@@ -2945,8 +3030,10 @@ export class RAGService {
           continue;
         }
 
-        // SEC filing metrics
-        const key = `${metric.ticker}-${metric.filingType}-${metric.fiscalPeriod}`;
+        // SEC filing metrics — include normalizedMetric in dedup key so each metric
+        // gets its own citation (revenue and net_income from the same 10-K are separate).
+        // Prefix with 'sec-' to prevent any collision with uploaded doc keys.
+        const key = `sec-${metric.ticker}-${metric.filingType}-${metric.fiscalPeriod}-${metric.normalizedMetric}`;
         if (seen.has(key)) continue;
         seen.add(key);
 

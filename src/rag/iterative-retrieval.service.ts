@@ -280,7 +280,7 @@ Follow-up Query:`;
     try {
       const response = await this.bedrock.invokeClaude({
         prompt,
-        modelId: 'us.anthropic.claude-3-haiku-20240307-v1:0',
+        modelId: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
         max_tokens: 100,
       });
 
