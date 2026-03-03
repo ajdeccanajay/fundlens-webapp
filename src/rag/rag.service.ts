@@ -1149,6 +1149,8 @@ export class RAGService {
           'analyst_revenue_estimate', 'analyst_estimate', 'analyst_expectations',
           'consensus_estimate', 'revenue_estimate', 'earnings_estimate',
           'price_target', 'analyst_forecast', 'forward_estimate',
+          'actual_revenue', 'actual_earnings', 'actual_eps',
+          'reported_revenue', 'reported_earnings',
         ]);
         const trulyUnresolved = unresolved.filter(u => {
           // Already resolved by another source?
@@ -1164,7 +1166,7 @@ export class RAGService {
             return false;
           }
           // Also suppress compound qualitative concepts (e.g. "advertising_profitability")
-          const qualitativeKeywords = ['outlook', 'profitability', 'sentiment', 'risk', 'guidance', 'commentary', 'business', 'advertising', 'segment', 'analyst', 'estimate', 'expectation', 'consensus', 'forecast', 'projection', 'target'];
+          const qualitativeKeywords = ['outlook', 'profitability', 'sentiment', 'risk', 'guidance', 'commentary', 'business', 'advertising', 'segment', 'analyst', 'estimate', 'expectation', 'consensus', 'forecast', 'projection', 'target', 'actual', 'reported'];
           if (narratives.length > 0 && qualitativeKeywords.some(kw => canonicalLower.includes(kw) || queryLower.includes(kw))) {
             this.logger.log(`🔍 Suppressing degradation for qualitative keyword match "${u.original_query}" — narratives available`);
             return false;
@@ -1763,6 +1765,22 @@ export class RAGService {
 
     // Resolve metrics through MetricRegistryService (same as queryRouter does)
     let metricHints = intent.metrics || [];
+
+    // Normalize compound metric aliases that the LLM sometimes generates
+    // e.g. "actual_revenue" → "revenue", "actual_earnings" → "net_income"
+    const metricAliasMap: Record<string, string> = {
+      actual_revenue: 'revenue',
+      reported_revenue: 'revenue',
+      actual_earnings: 'net_income',
+      reported_earnings: 'net_income',
+      actual_eps: 'eps',
+      reported_eps: 'eps',
+      analyst_revenue_estimate: 'revenue',
+    };
+    metricHints = metricHints.map(h => metricAliasMap[h] || h);
+    // Deduplicate after aliasing
+    metricHints = [...new Set(metricHints)];
+    intent.metrics = metricHints;
 
     // Safety net: if buildIntentFromQUL didn't extract metrics (unusual phrasing,
     // or metric appears only as trigram), try once more from normalizedQuery.
@@ -3140,10 +3158,10 @@ export class RAGService {
       const uploadedDocKeyMap: Record<string, string[]> = {
         price_target: ['price target', 'target price', 'pt', 'analyst'],
         rating: ['rating', 'recommendation', 'buy', 'sell', 'hold', 'overweight', 'underweight', 'analyst'],
-        revenue: ['revenue', 'sales', 'top line', 'top-line'],
+        revenue: ['revenue', 'sales', 'top line', 'top-line', 'actual revenue', 'reported revenue', 'analyst estimate', 'analyst expect', 'consensus'],
         ebitda: ['ebitda'],
-        net_profit: ['net profit', 'net income', 'earnings', 'bottom line'],
-        eps: ['eps', 'earnings per share'],
+        net_profit: ['net profit', 'net income', 'earnings', 'bottom line', 'actual earnings', 'reported earnings'],
+        eps: ['eps', 'earnings per share', 'actual eps'],
         gross_margin: ['gross margin', 'profitability', 'margin profile', 'margins'],
         operating_margin: ['operating margin', 'profitability', 'margin profile'],
         net_margin: ['net margin', 'profitability', 'profit margin'],
