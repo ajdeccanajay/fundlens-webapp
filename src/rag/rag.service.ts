@@ -1146,6 +1146,9 @@ export class RAGService {
           'competitive_position', 'market_share', 'growth_drivers',
           'advertising_profitability', 'advertising_revenue', 'advertising_business',
           'profitability_outlook', 'segment_profitability', 'business_outlook',
+          'analyst_revenue_estimate', 'analyst_estimate', 'analyst_expectations',
+          'consensus_estimate', 'revenue_estimate', 'earnings_estimate',
+          'price_target', 'analyst_forecast', 'forward_estimate',
         ]);
         const trulyUnresolved = unresolved.filter(u => {
           // Already resolved by another source?
@@ -1161,7 +1164,7 @@ export class RAGService {
             return false;
           }
           // Also suppress compound qualitative concepts (e.g. "advertising_profitability")
-          const qualitativeKeywords = ['outlook', 'profitability', 'sentiment', 'risk', 'guidance', 'commentary', 'business', 'advertising', 'segment'];
+          const qualitativeKeywords = ['outlook', 'profitability', 'sentiment', 'risk', 'guidance', 'commentary', 'business', 'advertising', 'segment', 'analyst', 'estimate', 'expectation', 'consensus', 'forecast', 'projection', 'target'];
           if (narratives.length > 0 && qualitativeKeywords.some(kw => canonicalLower.includes(kw) || queryLower.includes(kw))) {
             this.logger.log(`🔍 Suppressing degradation for qualitative keyword match "${u.original_query}" — narratives available`);
             return false;

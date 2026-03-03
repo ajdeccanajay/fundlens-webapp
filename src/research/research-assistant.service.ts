@@ -606,7 +606,11 @@ export class ResearchAssistantService {
           
           // Preserve explicit entities, only add peers that aren't already named
           const peersToAdd = peerTickers.filter(t => !explicitTickers.includes(t));
-          tickers = [...new Set([...explicitTickers, ...peersToAdd])].slice(0, 5);
+          // CRITICAL: Always include primaryTicker in the tickers array.
+          // Previously, when primaryTicker (e.g. AMZN) was detected as the QUL
+          // primary entity but NOT as an explicit comparison entity, it was dropped
+          // from the tickers array — causing structured retrieval to skip it entirely.
+          tickers = [...new Set([primaryTicker, ...explicitTickers, ...peersToAdd])].slice(0, 6);
           
           this.logger.log(`📊 Expanded tickers for peer comparison: ${tickers.join(', ')} (explicit: [${explicitTickers.join(', ')}], peers added: [${peersToAdd.join(', ')}])`);
           
