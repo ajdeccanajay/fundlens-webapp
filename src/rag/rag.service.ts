@@ -653,19 +653,34 @@ export class RAGService {
           const validDocs = sessionDocs.filter(doc => doc.extractedText && doc.extractedText.trim().length > 0);
           
           if (validDocs.length > 0) {
-            // Convert SessionDocument[] to UserDocumentChunk[] format
-            // Cap at 4000 chars per doc to prevent OOM (was 8000)
-            const sessionChunks = validDocs.slice(0, 3).map(doc => ({
+            // Convert SessionDocument[] to narrative chunk format.
+            // CRITICAL: Use generous char limit — analyst reports have financial
+            // tables (revenue, EBITDA, margins, forecasts) that often appear after
+            // the first 4K chars. 16K chars ≈ 4K tokens, well within context budget.
+            // Tag as 'uploaded-document' so buildStructuredPrompt() activates
+            // CROSS-SOURCE RULES for actual-vs-estimate comparison.
+            const sessionChunks = validDocs.slice(0, 5).map(doc => ({
               id: doc.id,
               documentId: doc.id,
-              content: doc.extractedText!.substring(0, 4000),
+              content: doc.extractedText!.substring(0, 16000),
               pageNumber: null,
               ticker: null,
               filename: doc.fileName,
-              score: 0.85, // User explicitly uploaded = high relevance
+              score: 0.90, // User explicitly uploaded = high relevance
+              metadata: {
+                ticker: options?.ticker || '',
+                sectionType: 'uploaded-document',
+                filingType: 'uploaded-document',
+                fiscalPeriod: undefined,
+                chunkIndex: undefined,
+              },
+              source: {
+                location: doc.fileName,
+                type: 'instant-rag-session',
+              },
             }));
             
-            this.logger.log(`📎 Found ${sessionChunks.length} valid session document chunks`);
+            this.logger.log(`📎 Found ${sessionChunks.length} valid session document chunks (${sessionChunks.map(c => `${c.filename}: ${c.content.length} chars`).join(', ')})`);
             
             // Merge session docs with existing narratives
             narratives = this.documentRAG.mergeAndRerankResults(sessionChunks, narratives, 10);
