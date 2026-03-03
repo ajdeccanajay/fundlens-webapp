@@ -653,34 +653,106 @@ export class RAGService {
           const validDocs = sessionDocs.filter(doc => doc.extractedText && doc.extractedText.trim().length > 0);
           
           if (validDocs.length > 0) {
+            // ── VISION EXTRACTION BRIDGE ─────────────────────────────────
+            // Analyst PDFs (e.g. DBS reports) have financial tables (Sales,
+            // EBITDA, margins, P/E, FCF) rendered as positioned graphics —
+            // pdfplumber/pdf2json extract narrative text but NOT these tables.
+            // The page images ARE cached in InstantRAGService.sessionImageCache.
+            // Use Claude Vision to extract structured financial data from the
+            // images and append it to the text content so the synthesis LLM
+            // can cross-reference analyst estimates against SEC actuals.
+            let visionExtractedText = '';
+            const hasVision = this.instantRAGService.hasVisionContent(options.instantRagSessionId);
+            if (hasVision) {
+              try {
+                const sessionImages = this.instantRAGService.getSessionImages(options.instantRagSessionId);
+                if (sessionImages && sessionImages.size > 0) {
+                  const allImages: { base64: string; mediaType: 'image/png' | 'image/jpeg' }[] = [];
+                  for (const [, images] of sessionImages) {
+                    for (const img of images) {
+                      if (allImages.length >= 10) break; // Cap at 10 pages for cost control
+                      allImages.push({ base64: img, mediaType: 'image/png' });
+                    }
+                    if (allImages.length >= 10) break;
+                  }
+
+                  if (allImages.length > 0) {
+                    this.logger.log(`👁️ Vision extraction: sending ${allImages.length} page images to Claude for table extraction`);
+                    const visionPrompt = `Extract ALL financial data tables from these document pages. For each table found, output the data in a structured format:
+
+TABLE: [Table Name]
+| Column1 | Column2 | Column3 | ... |
+| --- | --- | --- | --- |
+| data | data | data | ... |
+
+Focus on:
+- Financial Summary tables (Revenue/Sales, EBITDA, Net Profit, EPS, margins)
+- Valuation Metrics tables (P/E, EV/EBITDA, P/B, dividend yield)
+- Credit & Cashflow tables (FCF, debt ratios, interest coverage)
+- Forecast/estimate tables (FY projections with "F" or "E" suffix)
+- Any tables with numerical financial data
+
+For each number, preserve the exact value and units (millions, billions, %, x).
+If a cell contains "nm" or "na", include it as-is.
+Output ONLY the extracted tables, no commentary.`;
+
+                    visionExtractedText = await this.bedrock.invokeClaudeWithVision({
+                      prompt: visionPrompt,
+                      images: allImages,
+                      systemPrompt: 'You are a financial data extraction specialist. Extract all financial tables from document images with perfect accuracy. Preserve all numbers, units, and column headers exactly as shown.',
+                      max_tokens: 8000,
+                    });
+
+                    if (visionExtractedText && visionExtractedText.trim().length > 100) {
+                      this.logger.log(`👁️ Vision extraction successful: ${visionExtractedText.length} chars of table data extracted`);
+                    } else {
+                      this.logger.log(`👁️ Vision extraction returned minimal content (${visionExtractedText?.length || 0} chars)`);
+                      visionExtractedText = '';
+                    }
+                  }
+                }
+              } catch (visionError) {
+                this.logger.warn(`⚠️ Vision extraction failed (non-fatal, continuing with text only): ${visionError.message}`);
+                visionExtractedText = '';
+              }
+            }
+
             // Convert SessionDocument[] to narrative chunk format.
             // CRITICAL: Use generous char limit — analyst reports have financial
             // tables (revenue, EBITDA, margins, forecasts) that often appear after
             // the first 4K chars. 16K chars ≈ 4K tokens, well within context budget.
             // Tag as 'uploaded-document' so buildStructuredPrompt() activates
             // CROSS-SOURCE RULES for actual-vs-estimate comparison.
-            const sessionChunks = validDocs.slice(0, 5).map(doc => ({
-              id: doc.id,
-              documentId: doc.id,
-              content: doc.extractedText!.substring(0, 16000),
-              pageNumber: null,
-              ticker: null,
-              filename: doc.fileName,
-              score: 0.90, // User explicitly uploaded = high relevance
-              metadata: {
-                ticker: options?.ticker || '',
-                sectionType: 'uploaded-document',
-                filingType: 'uploaded-document',
-                fiscalPeriod: undefined,
-                chunkIndex: undefined,
-              },
-              source: {
-                location: doc.fileName,
-                type: 'instant-rag-session',
-              },
-            }));
+            const sessionChunks = validDocs.slice(0, 5).map(doc => {
+              let content = doc.extractedText!.substring(0, 16000);
+              // Append vision-extracted tables to the FIRST doc's content
+              // so the synthesis LLM sees both narrative text AND financial tables
+              if (visionExtractedText && doc === validDocs[0]) {
+                content += '\n\n=== FINANCIAL TABLES (extracted from document images via vision) ===\n' + visionExtractedText.substring(0, 12000);
+              }
+              return {
+                id: doc.id,
+                documentId: doc.id,
+                content,
+                pageNumber: null,
+                ticker: null,
+                filename: doc.fileName,
+                score: 0.90, // User explicitly uploaded = high relevance
+                metadata: {
+                  ticker: options?.ticker || '',
+                  sectionType: 'uploaded-document',
+                  filingType: 'uploaded-document',
+                  fiscalPeriod: undefined,
+                  chunkIndex: undefined,
+                },
+                source: {
+                  location: doc.fileName,
+                  type: 'instant-rag-session',
+                },
+              };
+            });
             
-            this.logger.log(`📎 Found ${sessionChunks.length} valid session document chunks (${sessionChunks.map(c => `${c.filename}: ${c.content.length} chars`).join(', ')})`);
+            this.logger.log(`📎 Found ${sessionChunks.length} valid session document chunks (${sessionChunks.map(c => `${c.filename}: ${c.content.length} chars`).join(', ')}${visionExtractedText ? ` + ${visionExtractedText.length} chars vision data` : ''})`);
             
             // Merge session docs with existing narratives
             narratives = this.documentRAG.mergeAndRerankResults(sessionChunks, narratives, 10);

@@ -370,6 +370,21 @@ export class InstantRAGService {
         error: error.message,
       };
     }
+
+    // ── IMMEDIATE SESSION-TO-PERMANENT PROMOTION ─────────────────────
+    // Trigger async sync NOW (not just on session expiry) so uploaded docs
+    // persist to the deal immediately. This ensures analysts don't lose
+    // access to uploaded documents when the session expires, and the docs
+    // become available in the permanent document library right away.
+    // The sync is fire-and-forget — it runs in the background after the
+    // user receives their upload confirmation.
+    try {
+      this.logger.log(`🔄 Triggering immediate sync-to-permanent for session ${sessionId}`);
+      await this.syncEnvelopeGenerator.executeAsyncSync(sessionId);
+    } catch (syncError) {
+      // Non-fatal — docs are still available via session, sync will retry on expiry
+      this.logger.warn(`⚠️ Immediate sync failed (will retry on session expiry): ${syncError.message}`);
+    }
   }
 
   /**

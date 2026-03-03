@@ -396,6 +396,8 @@ describe('DocumentProcessorService', () => {
     it('should call vision pipeline for PDF and include pageImages', async () => {
       const file = createMockFile('fake-pdf-content', 'report.pdf', 'application/pdf');
       prisma.$queryRaw.mockResolvedValueOnce([]); // No duplicate
+      // Mock extractPDF so we don't need a real PDF buffer
+      jest.spyOn(service, 'extractPDF').mockResolvedValueOnce({ text: 'Extracted PDF text', tables: [], pageCount: 2 });
 
       const result = await service.processFile(file, mockSessionId, mockTenantId, mockDealId);
 
@@ -426,6 +428,8 @@ describe('DocumentProcessorService', () => {
     it('should gracefully handle vision pipeline failure for PDF', async () => {
       const file = createMockFile('fake-pdf-content', 'report.pdf', 'application/pdf');
       prisma.$queryRaw.mockResolvedValueOnce([]); // No duplicate
+      // Mock extractPDF so we don't need a real PDF buffer
+      jest.spyOn(service, 'extractPDF').mockResolvedValueOnce({ text: 'Extracted PDF text', tables: [], pageCount: 1 });
       visionPipeline.renderPDF.mockRejectedValueOnce(new Error('Python service unavailable'));
 
       const result = await service.processFile(file, mockSessionId, mockTenantId, mockDealId);
