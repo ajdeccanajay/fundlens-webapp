@@ -31,6 +31,7 @@
     "test:properties:watch": "jest --config ./test/jest-unit.json --testPathPatterns=properties --watch",
     "test:eval": "RUN_EVAL=true jest --config ./test/jest-unit.json --testPathPatterns=eval/haiku-intent-eval --runInBand --no-coverage",
     "test:eval:scoring": "jest --config ./test/jest-unit.json --testPathPatterns=eval/haiku-intent-eval --testNamePattern='Eval Scoring Logic' --no-coverage",
+    "test:rag-eval": "RUN_RAG_EVAL=true jest --config ./test/jest-eval.json --testPathPattern=eval/rag-pipeline-eval --runInBand --no-coverage",
     "db:setup": "./scripts/setup-db.sh",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
