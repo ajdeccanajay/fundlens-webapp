@@ -350,41 +350,57 @@ export class QueryUnderstandingService implements OnModuleInit {
    * Select the most relevant few-shot examples for this query.
    */
   private selectRelevantExamples(query: string, workspace: WorkspaceContext, conversationHistory: ConversationMessage[] = []): any[] {
-    const lowerQuery = query.toLowerCase();
+      const lowerQuery = query.toLowerCase();
 
-    // CRITICAL: If conversation_history is non-empty, always include a coreference example
-    // This is the #1 disambiguation signal for follow-up queries
-    const hasConversationHistory = conversationHistory.length > 0;
+      // CRITICAL: If conversation_history is non-empty, always include a coreference example
+      // This is the #1 disambiguation signal for follow-up queries
+      const hasConversationHistory = conversationHistory.length > 0;
 
-    const scored = this.fewShotExamples.map(ex => {
-      let score = 0;
-      const desc = (ex.description || '').toLowerCase();
-      // Boost examples that match query characteristics
-      if (lowerQuery.includes('compare') && desc.includes('comparison')) score += 3;
-      if (lowerQuery.includes('cim') && (desc.includes('pe') || desc.includes('deal'))) score += 3;
-      if (!workspace.ticker && desc.includes('gibberish')) score += 1;
-      if (workspace.domain === 'private_equity' && (desc.includes('pe') || desc.includes('deal') || desc.includes('management'))) score += 2;
-      // Cross-domain: PE workspace + public company mention
-      if (workspace.domain === 'private_equity' && /\b[A-Z]{2,5}\b/.test(query) && desc.includes('cross-domain')) score += 3;
-      // PE-specific keywords
-      if ((lowerQuery.includes('target') || lowerQuery.includes('portfolio')) && desc.includes('pe')) score += 2;
-      if ((lowerQuery.includes('due diligence') || lowerQuery.includes('data room')) && desc.includes('deal')) score += 2;
-      if ((lowerQuery.includes('key person') || lowerQuery.includes('management')) && desc.includes('management')) score += 3;
-      // Coreference: when conversation_history exists, ALWAYS boost coreference examples
-      if (hasConversationHistory && desc.includes('coreference')) score += 10;
-      // Also boost on pronoun/follow-up patterns in query text
-      if ((lowerQuery.includes(' it ') || lowerQuery.includes(' their ') || lowerQuery.includes('the company') ||
-           lowerQuery.includes('what about') || lowerQuery.includes('how does that') || lowerQuery.includes('how has it') ||
-           lowerQuery.includes('can you break') || lowerQuery.includes('why did it') || lowerQuery.includes('what could go wrong') ||
-           lowerQuery.match(/^(and |also |what about |how about |show me the |now )/))
-          && desc.includes('coreference')) score += 5;
-      // Always include the "company name overrides workspace" example — it's the key fix
-      if (desc.includes('overrides workspace')) score += 2;
-      return { ex, score };
-    });
-    scored.sort((a, b) => b.score - a.score);
-    return scored.slice(0, 3).map(s => s.ex);
-  }
+      // Detect analyst/estimate/cross-source signals — these should NEVER trigger peer expansion
+      const hasAnalystSignal = /\b(analyst|estimate|forecast|projection|consensus|price target|rating|the report|dbs|morgan stanley|goldman|jpmorgan|citi|barclays|ubs|bofa|sell.?side|advisor|qoe)\b/.test(lowerQuery);
+
+      const scored = this.fewShotExamples.map(ex => {
+        let score = 0;
+        const desc = (ex.description || '').toLowerCase();
+
+        // ANALYST/CROSS-SOURCE: When query mentions analyst/estimates/forecasts,
+        // strongly boost cross-source and analyst examples over peer comparison.
+        // This is the #1 fix for "compare to analyst" being misrouted to peer expansion.
+        if (hasAnalystSignal && (desc.includes('analyst') || desc.includes('cross-source') || desc.includes('forecast') || desc.includes('advisor'))) score += 8;
+        if (hasAnalystSignal && desc.includes('peer')) score -= 3; // Suppress peer examples when analyst signal present
+
+        // Boost examples that match query characteristics
+        if (lowerQuery.includes('compare') && desc.includes('comparison')) score += 3;
+        if (lowerQuery.includes('compare') && desc.includes('not peer')) score += 4; // Boost "NOT peer" examples for compare queries
+        if (lowerQuery.includes('cim') && (desc.includes('pe') || desc.includes('deal'))) score += 3;
+        if (!workspace.ticker && desc.includes('gibberish')) score += 1;
+        if (workspace.domain === 'private_equity' && (desc.includes('pe') || desc.includes('deal') || desc.includes('management') || desc.includes('advisor') || desc.includes('qoe'))) score += 2;
+        // Cross-domain: PE workspace + public company mention
+        if (workspace.domain === 'private_equity' && /\b[A-Z]{2,5}\b/.test(query) && desc.includes('cross-domain')) score += 3;
+        // PE-specific keywords
+        if ((lowerQuery.includes('target') || lowerQuery.includes('portfolio')) && desc.includes('pe')) score += 2;
+        if ((lowerQuery.includes('due diligence') || lowerQuery.includes('data room')) && desc.includes('deal')) score += 2;
+        if ((lowerQuery.includes('key person') || lowerQuery.includes('management')) && desc.includes('management')) score += 3;
+        if ((lowerQuery.includes('quality of earnings') || lowerQuery.includes('qoe') || lowerQuery.includes('add-back') || lowerQuery.includes('adjustment')) && desc.includes('qoe')) score += 5;
+        // Summarize/report keywords
+        if ((lowerQuery.includes('summarize') || lowerQuery.includes('summary')) && desc.includes('summarize')) score += 4;
+        if ((lowerQuery.includes('price target') || lowerQuery.includes('rating')) && desc.includes('price target')) score += 5;
+        if ((lowerQuery.includes('risk') || lowerQuery.includes('concern') || lowerQuery.includes('headwind')) && desc.includes('risk')) score += 4;
+        // Coreference: when conversation_history exists, ALWAYS boost coreference examples
+        if (hasConversationHistory && desc.includes('coreference')) score += 10;
+        // Also boost on pronoun/follow-up patterns in query text
+        if ((lowerQuery.includes(' it ') || lowerQuery.includes(' their ') || lowerQuery.includes('the company') ||
+             lowerQuery.includes('what about') || lowerQuery.includes('how does that') || lowerQuery.includes('how has it') ||
+             lowerQuery.includes('can you break') || lowerQuery.includes('why did it') || lowerQuery.includes('what could go wrong') ||
+             lowerQuery.match(/^(and |also |what about |how about |show me the |now )/))
+            && desc.includes('coreference')) score += 5;
+        // Always include the "company name overrides workspace" example — it's the key fix
+        if (desc.includes('overrides workspace')) score += 2;
+        return { ex, score };
+      });
+      scored.sort((a, b) => b.score - a.score);
+      return scored.slice(0, 4).map(s => s.ex);
+    }
 
   /**
    * Fallback when Haiku fails or circuit breaker is open.

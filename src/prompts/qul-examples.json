@@ -99,7 +99,7 @@
     }
   },
   {
-    "description": "Multi-company comparison",
+    "description": "Direct multi-company comparison — NOT peer expansion",
     "input": {
       "query": "Compare Apple and Google's revenue growth",
       "workspace": { "ticker": "ABNB", "domain": "public_equity" }
@@ -117,7 +117,7 @@
       "temporalScope": { "type": "latest" },
       "normalizedQuery": "AAPL GOOGL revenue growth comparison",
       "suggestedChart": "bar_chart",
-      "needsPeerComparison": true
+      "needsPeerComparison": false
     }
   },
   {
@@ -182,11 +182,12 @@
         { "intent": "METRIC_TREND", "entity": "AMZN", "metric": "cash_and_cash_equivalents", "temporal": { "type": "range", "rangeStart": "FY2020", "rangeEnd": "FY2024" }, "path": "structured_db" }
       ],
       "unifyingInstruction": "Present NVDA current cash, then 5-year trend with YoY changes, then compare trajectory to AMZN.",
-      "suggestedChart": "line_chart"
+      "suggestedChart": "line_chart",
+      "needsPeerComparison": false
     }
   },
   {
-    "description": "Cross-domain PE target vs public comps comparison",
+    "description": "Cross-domain PE target vs explicit public comps — NOT peer expansion",
     "input": {
       "query": "How does TargetCo's EBITDA margin compare to AAPL and MSFT?",
       "workspace": { "ticker": null, "domain": "private_equity", "deal_name": "Project Falcon" },
@@ -214,7 +215,7 @@
       ],
       "unifyingInstruction": "Compare TargetCo EBITDA margin from CIM against public comps. Note any differences in margin definition or period.",
       "suggestedChart": "bar_chart",
-      "needsPeerComparison": true
+      "needsPeerComparison": false
     }
   },
   {
@@ -277,6 +278,282 @@
       "subQueries": [
         { "intent": "METRIC_LOOKUP", "entity": "AAPL", "metric": "net_income", "temporal": "FY2025", "path": "structured_db", "metricType": "atomic" }
       ]
+    }
+  },
+  {
+    "description": "SEC actuals vs analyst estimates — cross-source, NOT peer comparison",
+    "input": {
+      "query": "How does AMZN's revenue compare to what the analyst expects?",
+      "workspace": { "ticker": "AMZN", "company_name": "Amazon", "domain": "public_equity" },
+      "uploaded_documents": [
+        { "id": "doc_dbs", "name": "Amazon - DBS.pdf", "type": "analyst_report", "entity": "Amazon", "ticker": "AMZN" }
+      ]
+    },
+    "output": {
+      "entities": [{ "name": "Amazon", "ticker": "AMZN", "entityType": "public_company", "source": "explicit" }],
+      "intent": "HYBRID_ANALYSIS",
+      "domain": "cross_domain",
+      "isValidQuery": true,
+      "confidence": 0.95,
+      "complexity": "comparative",
+      "temporalScope": { "type": "latest" },
+      "normalizedQuery": "AMZN revenue SEC actuals vs analyst estimates DBS report",
+      "subQueries": [
+        { "intent": "METRIC_LOOKUP", "entity": "AMZN", "metric": "revenue", "temporal": "latest", "path": "structured_db", "metricType": "atomic" },
+        { "intent": "UPLOADED_DOC_QUERY", "entity": "AMZN", "metric": "revenue_estimate", "path": "uploaded_doc_rag", "metricType": "extracted" }
+      ],
+      "unifyingInstruction": "Compare AMZN actual revenue from SEC filings against analyst revenue estimates/projections from the uploaded DBS report. Highlight any beat/miss and growth trajectory differences.",
+      "needsPeerComparison": false,
+      "suggestedChart": "bar_chart"
+    }
+  },
+  {
+    "description": "Explicit cross-source comparison: SEC filings vs analyst estimates",
+    "input": {
+      "query": "Compare Amazon's revenue growth from SEC filings with DBS analyst estimates",
+      "workspace": { "ticker": "AMZN", "company_name": "Amazon", "domain": "public_equity" },
+      "uploaded_documents": [
+        { "id": "doc_dbs", "name": "Amazon - DBS.pdf", "type": "analyst_report", "entity": "Amazon", "ticker": "AMZN" }
+      ]
+    },
+    "output": {
+      "entities": [{ "name": "Amazon", "ticker": "AMZN", "entityType": "public_company", "source": "explicit" }],
+      "intent": "HYBRID_ANALYSIS",
+      "domain": "cross_domain",
+      "isValidQuery": true,
+      "confidence": 0.96,
+      "complexity": "comparative",
+      "temporalScope": { "type": "range", "rangeStart": "FY2023", "rangeEnd": "FY2026F" },
+      "normalizedQuery": "AMZN revenue growth SEC filings vs DBS analyst estimates projections",
+      "subQueries": [
+        { "intent": "METRIC_TREND", "entity": "AMZN", "metric": "revenue", "temporal": { "type": "range" }, "path": "structured_db", "metricType": "atomic" },
+        { "intent": "UPLOADED_DOC_QUERY", "entity": "AMZN", "metric": "revenue_forecast", "path": "uploaded_doc_rag", "metricType": "extracted" }
+      ],
+      "unifyingInstruction": "Present AMZN historical revenue from SEC filings alongside DBS analyst revenue estimates and forecasts. Show actual vs estimated for overlapping periods and forward projections.",
+      "needsPeerComparison": false,
+      "suggestedChart": "line_chart"
+    }
+  },
+  {
+    "description": "Analyst price target query — pure uploaded doc",
+    "input": {
+      "query": "What is the analyst's price target for AMZN?",
+      "workspace": { "ticker": "AMZN", "company_name": "Amazon", "domain": "public_equity" },
+      "uploaded_documents": [
+        { "id": "doc_dbs", "name": "Amazon - DBS.pdf", "type": "analyst_report", "entity": "Amazon", "ticker": "AMZN" }
+      ]
+    },
+    "output": {
+      "entities": [{ "name": "Amazon", "ticker": "AMZN", "entityType": "public_company", "source": "explicit" }],
+      "intent": "UPLOADED_DOC_QUERY",
+      "domain": "uploaded_doc",
+      "isValidQuery": true,
+      "confidence": 0.95,
+      "temporalScope": { "type": "latest" },
+      "normalizedQuery": "AMZN analyst price target rating recommendation DBS",
+      "needsPeerComparison": false
+    }
+  },
+  {
+    "description": "Analyst key risks — narrative from uploaded report",
+    "input": {
+      "query": "What are the key risks the analyst highlights for Amazon?",
+      "workspace": { "ticker": "AMZN", "company_name": "Amazon", "domain": "public_equity" },
+      "uploaded_documents": [
+        { "id": "doc_dbs", "name": "Amazon - DBS.pdf", "type": "analyst_report", "entity": "Amazon", "ticker": "AMZN" }
+      ]
+    },
+    "output": {
+      "entities": [{ "name": "Amazon", "ticker": "AMZN", "entityType": "public_company", "source": "explicit" }],
+      "intent": "UPLOADED_DOC_QUERY",
+      "domain": "uploaded_doc",
+      "isValidQuery": true,
+      "confidence": 0.94,
+      "temporalScope": { "type": "latest" },
+      "normalizedQuery": "AMZN analyst key risks concerns headwinds DBS report",
+      "needsPeerComparison": false
+    }
+  },
+  {
+    "description": "Analyst EBITDA forecast vs SEC actuals — cross-source metric comparison",
+    "input": {
+      "query": "Does the analyst's EBITDA forecast align with SEC reported figures?",
+      "workspace": { "ticker": "AMZN", "company_name": "Amazon", "domain": "public_equity" },
+      "uploaded_documents": [
+        { "id": "doc_dbs", "name": "Amazon - DBS.pdf", "type": "analyst_report", "entity": "Amazon", "ticker": "AMZN" }
+      ]
+    },
+    "output": {
+      "entities": [{ "name": "Amazon", "ticker": "AMZN", "entityType": "public_company", "source": "explicit" }],
+      "intent": "HYBRID_ANALYSIS",
+      "domain": "cross_domain",
+      "isValidQuery": true,
+      "confidence": 0.93,
+      "complexity": "comparative",
+      "temporalScope": { "type": "latest" },
+      "normalizedQuery": "AMZN EBITDA analyst forecast vs SEC reported actuals comparison",
+      "subQueries": [
+        { "intent": "METRIC_LOOKUP", "entity": "AMZN", "metric": "ebitda", "temporal": "latest", "path": "structured_db", "metricType": "computed" },
+        { "intent": "UPLOADED_DOC_QUERY", "entity": "AMZN", "metric": "ebitda_forecast", "path": "uploaded_doc_rag", "metricType": "extracted" }
+      ],
+      "unifyingInstruction": "Compare AMZN EBITDA from SEC filings against analyst EBITDA forecast from the uploaded report. Note any variance and whether the analyst's model assumptions differ from reported figures.",
+      "needsPeerComparison": false,
+      "suggestedChart": "bar_chart"
+    }
+  },
+  {
+    "description": "Summarize uploaded analyst report — pure doc query",
+    "input": {
+      "query": "Summarize the DBS report on Amazon",
+      "workspace": { "ticker": "AMZN", "company_name": "Amazon", "domain": "public_equity" },
+      "uploaded_documents": [
+        { "id": "doc_dbs", "name": "Amazon - DBS.pdf", "type": "analyst_report", "entity": "Amazon", "ticker": "AMZN" }
+      ]
+    },
+    "output": {
+      "entities": [{ "name": "Amazon", "ticker": "AMZN", "entityType": "public_company", "source": "explicit" }],
+      "intent": "UPLOADED_DOC_QUERY",
+      "domain": "uploaded_doc",
+      "isValidQuery": true,
+      "confidence": 0.96,
+      "temporalScope": { "type": "all_available" },
+      "normalizedQuery": "summarize DBS analyst report Amazon AMZN key findings rating",
+      "needsPeerComparison": false
+    }
+  },
+  {
+    "description": "PE: advisor projections vs CIM management figures — two uploaded docs compared",
+    "input": {
+      "query": "How do the advisor's revenue projections compare to management's CIM figures?",
+      "workspace": { "ticker": null, "domain": "private_equity", "deal_name": "Project Falcon" },
+      "uploaded_documents": [
+        { "id": "doc_cim", "name": "Project_Falcon_CIM.pdf", "type": "CIM", "entity": "TargetCo Inc.", "ticker": null },
+        { "id": "doc_advisor", "name": "Sell_Side_Advisor_Report.pdf", "type": "advisor_report", "entity": "TargetCo Inc.", "ticker": null }
+      ]
+    },
+    "output": {
+      "entities": [{ "name": "TargetCo Inc.", "entityType": "uploaded_entity", "source": "uploaded_document", "documentId": "doc_cim" }],
+      "intent": "DEAL_ANALYSIS",
+      "domain": "private_equity",
+      "isValidQuery": true,
+      "confidence": 0.92,
+      "complexity": "comparative",
+      "temporalScope": { "type": "all_available" },
+      "normalizedQuery": "TargetCo advisor revenue projections vs CIM management figures comparison",
+      "subQueries": [
+        { "intent": "UPLOADED_DOC_QUERY", "entity": { "name": "TargetCo Inc.", "entityType": "uploaded_entity", "documentId": "doc_cim" }, "metric": "revenue_projection", "path": "uploaded_doc_rag", "metricType": "extracted" },
+        { "intent": "UPLOADED_DOC_QUERY", "entity": { "name": "TargetCo Inc.", "entityType": "uploaded_entity", "documentId": "doc_advisor" }, "metric": "revenue_projection", "path": "uploaded_doc_rag", "metricType": "extracted" }
+      ],
+      "unifyingInstruction": "Compare management's revenue projections from the CIM against the sell-side advisor's independent projections. Highlight any gaps in growth assumptions.",
+      "needsPeerComparison": false
+    }
+  },
+  {
+    "description": "PE: sell-side advisor narrative on target growth — uploaded doc in PE context",
+    "input": {
+      "query": "What does the sell-side advisor say about the target's growth prospects?",
+      "workspace": { "ticker": null, "domain": "private_equity", "deal_name": "Project Falcon" },
+      "uploaded_documents": [
+        { "id": "doc_advisor", "name": "Sell_Side_Advisor_Report.pdf", "type": "advisor_report", "entity": "TargetCo Inc.", "ticker": null }
+      ]
+    },
+    "output": {
+      "entities": [{ "name": "TargetCo Inc.", "entityType": "uploaded_entity", "source": "uploaded_document", "documentId": "doc_advisor" }],
+      "intent": "DEAL_ANALYSIS",
+      "domain": "private_equity",
+      "isValidQuery": true,
+      "confidence": 0.93,
+      "temporalScope": { "type": "all_available" },
+      "normalizedQuery": "TargetCo sell-side advisor growth prospects outlook commentary",
+      "needsPeerComparison": false
+    }
+  },
+  {
+    "description": "True peer comparison — auto-discover peers for single company",
+    "input": {
+      "query": "How does AMZN stack up against its peers?",
+      "workspace": { "ticker": "AMZN", "company_name": "Amazon", "domain": "public_equity" }
+    },
+    "output": {
+      "entities": [{ "name": "Amazon", "ticker": "AMZN", "entityType": "public_company", "source": "workspace_context" }],
+      "intent": "PEER_SCREENING",
+      "domain": "public_equity",
+      "isValidQuery": true,
+      "confidence": 0.90,
+      "temporalScope": { "type": "latest" },
+      "normalizedQuery": "AMZN peer comparison key metrics vs competitors",
+      "needsPeerComparison": true,
+      "peerContext": "Large-cap technology and e-commerce companies",
+      "suggestedChart": "bar_chart"
+    }
+  },
+  {
+    "description": "PE: benchmark target against public comps — true peer expansion",
+    "input": {
+      "query": "How does TargetCo's margin profile compare to public comps?",
+      "workspace": { "ticker": null, "domain": "private_equity", "deal_name": "Project Falcon" },
+      "uploaded_documents": [
+        { "id": "doc_cim", "name": "Project_Falcon_CIM.pdf", "type": "CIM", "entity": "TargetCo Inc.", "ticker": null }
+      ]
+    },
+    "output": {
+      "entities": [{ "name": "TargetCo Inc.", "entityType": "uploaded_entity", "source": "uploaded_document", "documentId": "doc_cim" }],
+      "intent": "DEAL_COMPARISON",
+      "domain": "cross_domain",
+      "isValidQuery": true,
+      "confidence": 0.88,
+      "complexity": "comparative",
+      "temporalScope": { "type": "latest" },
+      "normalizedQuery": "TargetCo margin profile vs public comparable companies",
+      "needsPeerComparison": true,
+      "peerContext": "Public companies in the same sector as TargetCo for margin benchmarking"
+    }
+  },
+  {
+    "description": "Analyst consensus vs company guidance — cross-source",
+    "input": {
+      "query": "How does MSFT's guidance compare to analyst consensus?",
+      "workspace": { "ticker": "MSFT", "company_name": "Microsoft", "domain": "public_equity" },
+      "uploaded_documents": [
+        { "id": "doc_ms", "name": "MSFT_Morgan_Stanley_Initiation.pdf", "type": "analyst_report", "entity": "Microsoft", "ticker": "MSFT" }
+      ]
+    },
+    "output": {
+      "entities": [{ "name": "Microsoft", "ticker": "MSFT", "entityType": "public_company", "source": "explicit" }],
+      "intent": "HYBRID_ANALYSIS",
+      "domain": "cross_domain",
+      "isValidQuery": true,
+      "confidence": 0.93,
+      "complexity": "comparative",
+      "temporalScope": { "type": "latest" },
+      "normalizedQuery": "MSFT company guidance vs analyst consensus estimates Morgan Stanley",
+      "subQueries": [
+        { "intent": "NARRATIVE_SEARCH", "entity": "MSFT", "metric": "guidance", "path": "semantic_kb" },
+        { "intent": "UPLOADED_DOC_QUERY", "entity": "MSFT", "metric": "consensus_estimates", "path": "uploaded_doc_rag", "metricType": "extracted" }
+      ],
+      "unifyingInstruction": "Compare Microsoft's own forward guidance from SEC filings/earnings calls against analyst consensus estimates from the uploaded report.",
+      "needsPeerComparison": false,
+      "suggestedChart": "bar_chart"
+    }
+  },
+  {
+    "description": "PE: quality of earnings from advisor report",
+    "input": {
+      "query": "What are the key EBITDA adjustments in the QoE report?",
+      "workspace": { "ticker": null, "domain": "private_equity", "deal_name": "Project Falcon" },
+      "uploaded_documents": [
+        { "id": "doc_qoe", "name": "Quality_of_Earnings_Report.pdf", "type": "qoe_report", "entity": "TargetCo Inc.", "ticker": null }
+      ]
+    },
+    "output": {
+      "entities": [{ "name": "TargetCo Inc.", "entityType": "uploaded_entity", "source": "uploaded_document", "documentId": "doc_qoe" }],
+      "intent": "DEAL_ANALYSIS",
+      "domain": "private_equity",
+      "isValidQuery": true,
+      "confidence": 0.95,
+      "temporalScope": { "type": "all_available" },
+      "normalizedQuery": "TargetCo EBITDA adjustments add-backs quality of earnings QoE report",
+      "needsPeerComparison": false
     }
   }
 ]

@@ -83,15 +83,35 @@ You will receive:
      separate sub-queries with different retrieval paths
 
 6. PEER COMPARISON DETECTION
-   - If the user names 2+ specific companies to compare (e.g., "compare AAPL
-     to ABNB", "Apple vs Microsoft profitability"), set needsPeerComparison: false.
-     This is a DIRECT COMPARISON (intent: METRIC_COMPARISON), not a peer comparison.
-     Both named companies must appear in entities with source: "explicit".
-   - If the user says "compare to peers", "how does it stack up", "vs the sector",
-     "relative to competitors", or names only ONE company with comparative language,
-     set needsPeerComparison: true. The system will auto-discover peers.
+   - needsPeerComparison: true means "the system should auto-discover peer
+     companies." Only set this when the user wants to compare against an
+     UNKNOWN set of peers (e.g., "vs peers", "vs the sector", "vs competitors",
+     "vs public comps" without naming specific companies).
+   - needsPeerComparison: false in ALL of these cases:
+     a) The user names 2+ specific companies to compare (e.g., "compare AAPL
+        to ABNB", "Apple vs Microsoft profitability"). This is a DIRECT
+        COMPARISON — both named companies appear in entities with source: "explicit".
+     b) The user compares a company's SEC actuals against analyst estimates,
+        projections, forecasts, or price targets from an uploaded document.
+        Words like "analyst expects", "analyst estimates", "DBS projections",
+        "consensus", "price target", "forecast", "the report says" signal
+        a CROSS-SOURCE comparison (SEC data vs uploaded doc), NOT a peer
+        comparison. Set domain: "cross_domain" and intent: "HYBRID_ANALYSIS".
+     c) The user compares management CIM figures against advisor projections
+        (PE context). This is a document-vs-document comparison.
+     d) The user asks about a single company's data from an uploaded report
+        (e.g., "What is the analyst's rating?", "Summarize the DBS report").
+   - needsPeerComparison: true ONLY when:
+     a) The user says "compare to peers", "how does it stack up", "vs the
+        sector", "relative to competitors", "vs public comps" WITHOUT naming
+        specific peer companies.
+     b) PE context: "benchmark against public comps" without naming specific
+        companies.
    - Explicit entities are NEVER dropped by peer expansion. If the analyst names
      specific companies, those companies are sacred and must always be included.
+   - CRITICAL: The word "compare" alone does NOT mean peer comparison. "Compare
+     revenue to analyst estimates" is cross-source. "Compare to peers" is peer
+     comparison. Look at WHAT is being compared, not just the word "compare".
 
 7. CHART INFERENCE
    - Trends over time -> line_chart
