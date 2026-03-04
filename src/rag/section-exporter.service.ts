@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { S3Client, PutObjectCommand, DeleteObjectsCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
+import { humanizeSectionType } from '../common/section-labels';
 
 /**
  * Section metadata for Bedrock KB filtering
@@ -197,47 +198,10 @@ export class SectionExporterService {
 
   /**
    * Get human-readable section title
+   * Delegates to consolidated section-labels module (§8.1)
    */
   getSectionTitle(sectionType: string): string {
-    const titles: Record<string, string> = {
-      'item_1': 'Business',
-      'item_1a': 'Risk Factors',
-      'item_1b': 'Unresolved Staff Comments',
-      'item_1c': 'Cybersecurity',
-      'item_2': 'Properties',
-      'item_3': 'Legal Proceedings',
-      'item_4': 'Mine Safety Disclosures',
-      'item_5': 'Market for Common Equity',
-      'item_6': 'Reserved',
-      'item_7': 'Management Discussion and Analysis',
-      'item_7a': 'Market Risk Disclosures',
-      'item_8': 'Financial Statements',
-      'item_9': 'Accountant Changes',
-      'item_9a': 'Controls and Procedures',
-      'item_9b': 'Other Information',
-      'item_9c': 'Foreign Jurisdictions',
-      'item_10': 'Directors and Officers',
-      'item_11': 'Executive Compensation',
-      'item_12': 'Security Ownership',
-      'item_13': 'Related Party Transactions',
-      'item_14': 'Accountant Fees',
-      'item_15': 'Exhibits',
-      'item_16': 'Form 10-K Summary',
-      'item_1_p2': 'Legal Proceedings (Part II)',
-      'item_1a_p2': 'Risk Factors (Part II)',
-      'item_2_p2': 'Unregistered Sales',
-      'item_5_p2': 'Other Information (Part II)',
-      'item_6_p2': 'Exhibits (Part II)',
-      'item_1_01': 'Material Definitive Agreement',
-      'item_2_02': 'Results of Operations',
-      'item_5_02': 'Director/Officer Changes',
-      'item_5_07': 'Shareholder Vote',
-      'item_7_01': 'Regulation FD Disclosure',
-      'item_8_01': 'Other Events',
-      'item_9_01': 'Financial Statements and Exhibits',
-      'preamble': 'Filing Preamble',
-    };
-    return titles[sectionType] || sectionType;
+    return humanizeSectionType(sectionType);
   }
 
   /**

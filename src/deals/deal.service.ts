@@ -25,11 +25,13 @@ import {
   Inject,
   Scope,
   Optional,
+  forwardRef,
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import type { Request } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TenantContext, TENANT_CONTEXT_KEY, DEFAULT_TENANT_ID } from '../tenant/tenant-context';
+import { PipelineOrchestrationService } from './pipeline-orchestration.service';
 
 export interface CreateDealDto {
   name: string;
@@ -88,6 +90,8 @@ export class DealService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional() @Inject(REQUEST) private readonly request?: Request,
+    @Optional() @Inject(forwardRef(() => PipelineOrchestrationService))
+    private readonly pipelineService?: PipelineOrchestrationService,
   ) {}
 
   /**
@@ -186,8 +190,30 @@ export class DealService {
 
     const createdDeal = await this.getDealById(result.id);
 
-    // For public companies, set status to 'draft' - frontend will call /analyze endpoint
-    if (createDealDto.dealType === 'public') {
+    // For public companies, auto-start the pipeline (§7.2)
+    if (createDealDto.dealType === 'public' && createDealDto.ticker && this.pipelineService) {
+      // Keep status as 'processing' — pipeline will update it
+      setImmediate(async () => {
+        try {
+          this.logger.log(`🚀 Auto-starting pipeline for ${createDealDto.ticker} (deal ${createdDeal.id})`);
+          await this.pipelineService!.startPipeline(
+            createdDeal.id,
+            createDealDto.ticker!,
+            createDealDto.years || 5,
+          );
+        } catch (error) {
+          this.logger.error(`Auto-pipeline failed for ${createDealDto.ticker}: ${error.message}`);
+          try {
+            await this.updateDealStatus(
+              createdDeal.id,
+              'error',
+              `Auto-processing failed: ${error.message}. Click "Retry" to try again.`,
+            );
+          } catch (_) { /* best-effort status update */ }
+        }
+      });
+    } else if (createDealDto.dealType === 'public') {
+      // Fallback if pipeline service not injected — set to draft
       await this.updateDealStatus(createdDeal.id, 'draft', 'Ready to start analysis. Click "Start Analysis" to begin.');
     }
 

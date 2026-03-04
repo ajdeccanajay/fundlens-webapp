@@ -56,7 +56,7 @@ export class FilingDetectorService {
    */
   async detectNewFilings(
     ticker: string,
-    filingTypes: string[] = ['10-K', '10-Q', '8-K'],
+    filingTypes: string[] = ['10-K', '10-Q', '8-K', '13F-HR', 'DEF 14A', '4', 'S-1'],
     maxRetries: number = 3,
   ): Promise<DetectionResult> {
     this.logger.log(`Detecting new filings for ${ticker}...`);
@@ -321,7 +321,7 @@ export class FilingDetectorService {
     const { cik } = await this.secService.getCikForTicker(ticker);
     const allFilings: SECFiling[] = [];
 
-    for (const filingType of ['10-K', '10-Q', '8-K']) {
+    for (const filingType of ['10-K', '10-Q', '8-K', '13F-HR', 'DEF 14A', '4', 'S-1']) {
       // Wait for rate limit compliance
       await this.rateLimiter.waitForRateLimit();
 

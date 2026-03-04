@@ -1188,3 +1188,87 @@ model PendingFormula {
   @@index([submittedAt], map: "idx_pending_formulas_submitted_at")
   @@map("pending_formulas")
 }
+
+
+// ============================================================
+// FILING EXPANSION MODELS (Phase 1)
+// Spec: KIRO_SPEC_FILING_EXPANSION_AND_AGENTIC_ACQUISITION §4.1
+// ============================================================
+
+model InstitutionalHolding {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticker                String?   @db.VarChar(10)
+  holderCik             String    @map("holder_cik")
+  holderName            String    @map("holder_name")
+  cusip                 String    @db.VarChar(9)
+  issuerName            String    @map("issuer_name")
+  shareClass            String?   @map("share_class")
+  sharesHeld            BigInt    @map("shares_held")
+  marketValue           Decimal   @db.Decimal(20,2) @map("market_value")
+  investmentDiscretion  String?   @map("investment_discretion")
+  votingSole            BigInt?   @map("voting_sole")
+  votingShared          BigInt?   @map("voting_shared")
+  votingNone            BigInt?   @map("voting_none")
+  reportDate            DateTime  @map("report_date")
+  filingDate            DateTime  @map("filing_date")
+  accessionNo           String    @map("accession_no")
+  quarter               String    @db.VarChar(10)
+  createdAt             DateTime  @default(now()) @map("created_at")
+
+  @@unique([holderCik, cusip, reportDate, accessionNo])
+  @@index([ticker])
+  @@index([holderCik])
+  @@index([cusip])
+  @@index([reportDate])
+  @@map("institutional_holdings")
+}
+
+model InsiderTransaction {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticker               String    @db.VarChar(10)
+  insiderName          String    @map("insider_name")
+  insiderTitle         String?   @map("insider_title")
+  insiderRelationship  String    @map("insider_relationship")
+  transactionDate      DateTime  @map("transaction_date")
+  transactionCode      String    @map("transaction_code") @db.VarChar(5)
+  equitySwap           Boolean   @default(false) @map("equity_swap")
+  sharesTransacted     Decimal   @db.Decimal(20,4) @map("shares_transacted")
+  pricePerShare        Decimal?  @db.Decimal(20,4) @map("price_per_share")
+  sharesOwnedAfter     Decimal?  @db.Decimal(20,4) @map("shares_owned_after")
+  isDerivative         Boolean   @default(false) @map("is_derivative")
+  derivativeTitle      String?   @map("derivative_title")
+  exercisePrice        Decimal?  @db.Decimal(20,4) @map("exercise_price")
+  expirationDate       DateTime? @map("expiration_date")
+  underlyingShares     Decimal?  @db.Decimal(20,4) @map("underlying_shares")
+  filingDate           DateTime  @map("filing_date")
+  accessionNo          String    @map("accession_no")
+  createdAt            DateTime  @default(now()) @map("created_at")
+
+  @@unique([ticker, accessionNo, insiderName, transactionDate, transactionCode, isDerivative])
+  @@index([ticker])
+  @@index([insiderName])
+  @@index([transactionDate])
+  @@index([ticker, transactionDate])
+  @@map("insider_transactions")
+}
+
+model IrPageMapping {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticker                String    @unique @db.VarChar(10)
+  companyName           String    @map("company_name")
+  irBaseUrl             String    @map("ir_base_url")
+  earningsPageUrl       String?   @map("earnings_page_url")
+  transcriptsPageUrl    String?   @map("transcripts_page_url")
+  secFilingsPageUrl     String?   @map("sec_filings_page_url")
+  pressReleasesUrl      String?   @map("press_releases_url")
+  webcastsUrl           String?   @map("webcasts_url")
+  confidence            Decimal?  @db.Decimal(3,2)
+  lastVerified          DateTime  @map("last_verified")
+  lastSuccessful        DateTime? @map("last_successful")
+  verificationFailures  Int       @default(0) @map("verification_failures")
+  notes                 String?
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@map("ir_page_mappings")
+}

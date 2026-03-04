@@ -232,6 +232,26 @@ export class FilingDetectionScheduler {
   }
 
   /**
+   * Cron health check — runs at 8 AM ET daily (§7.1 Change 3)
+   * If the daily 6 AM detection hasn't run in >26 hours, triggers a catch-up.
+   */
+  @Cron('0 8 * * *', { timeZone: 'America/New_York' })
+  async checkCronHealth(): Promise<void> {
+    const states = await this.prisma.filingDetectionState.findMany({
+      orderBy: { lastCheckDate: 'desc' },
+      take: 1,
+    });
+    if (states.length === 0) return;
+    const hoursSince = (Date.now() - states[0].lastCheckDate.getTime()) / 3600000;
+    if (hoursSince > 26) {
+      this.logger.error(`⚠️ CRON MISSED: ${hoursSince.toFixed(1)}h since last detection run. Triggering catch-up.`);
+      await this.runDailyDetection();
+    } else {
+      this.logger.log(`✅ Cron health check: last detection ${hoursSince.toFixed(1)}h ago — OK`);
+    }
+  }
+
+  /**
    * Manual trigger for testing (admin only)
    */
   async triggerDetectionForTicker(ticker: string): Promise<DetectionResult> {

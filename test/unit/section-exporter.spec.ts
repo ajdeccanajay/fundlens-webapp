@@ -215,7 +215,7 @@ describe('SectionExporterService', () => {
     it('should return correct titles for 10-K items', () => {
       expect(service.getSectionTitle('item_1')).toBe('Business');
       expect(service.getSectionTitle('item_1a')).toBe('Risk Factors');
-      expect(service.getSectionTitle('item_7')).toBe('Management Discussion and Analysis');
+      expect(service.getSectionTitle('item_7')).toBe('MD&A');
       expect(service.getSectionTitle('item_8')).toBe('Financial Statements');
     });
 
@@ -230,7 +230,7 @@ describe('SectionExporterService', () => {
     });
 
     it('should return section type as fallback for unknown sections', () => {
-      expect(service.getSectionTitle('unknown_section')).toBe('unknown_section');
+      expect(service.getSectionTitle('unknown_section')).toBe('Unknown Section');
     });
   });
 

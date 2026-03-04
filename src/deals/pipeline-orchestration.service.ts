@@ -181,6 +181,7 @@ export class PipelineOrchestrationService {
   private initializePipelineSteps(): PipelineStep[] {
     return [
       { id: 'A', name: 'Download SEC Filings', status: 'pending', message: 'Waiting to start...' },
+      { id: 'A2', name: 'Acquire Earnings Transcripts', status: 'pending', message: 'Waiting to start...' },
       { id: 'B', name: 'Parse & Store Metrics', status: 'pending', message: 'Waiting to start...' },
       { id: 'C', name: 'Chunk & Store Narratives', status: 'pending', message: 'Waiting to start...' },
       { id: 'D', name: 'Sync to Bedrock KB', status: 'pending', message: 'Waiting to start...' },
@@ -272,6 +273,14 @@ export class PipelineOrchestrationService {
 
       // Step A: Download SEC Filings
       await this.executeStepA(dealId, ticker, years, status);
+
+      // Step A2: Acquire Earnings Transcripts (placeholder — parser not yet implemented)
+      {
+        const stepA2 = status.steps.find(s => s.id === 'A2')!;
+        stepA2.status = 'skipped';
+        stepA2.message = 'Transcript acquisition not yet implemented (Phase 4)';
+        stepA2.completedAt = new Date();
+      }
 
       // Step B: Parse & Store Metrics
       await this.executeStepB(dealId, ticker, years, status);
@@ -399,7 +408,7 @@ export class PipelineOrchestrationService {
           const result = await this.secPipeline.processCompanyComprehensive(ticker, {
             companies: [ticker],
             years: Array.from({ length: years }, (_, i) => new Date().getFullYear() - i),
-            filingTypes: ['10-K', '10-Q', '8-K'],
+            filingTypes: ['10-K', '10-Q', '8-K', '13F-HR', 'DEF 14A', '4', 'S-1'],
             batchSize: 1,
             skipExisting: true,
             syncToKnowledgeBase: false,

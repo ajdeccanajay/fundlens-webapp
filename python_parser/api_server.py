@@ -234,8 +234,49 @@ async def test_parser():
 @app.post("/sec-parser")
 async def sec_parser_legacy(request: dict):
     """
-    Legacy endpoint for compatibility with Node.js ingestion service
+    Legacy endpoint for compatibility with Node.js ingestion service.
+    
+    Dispatches to the appropriate parser based on filing_type.
+    Unknown filing types return status='unsupported_filing_type' instead of
+    silently falling through to the hybrid parser (§5.1).
     """
+    # Dispatcher: map filing types to parser keys
+    FILING_PARSERS = {
+        '10-K': 'hybrid',      '10-K/A': 'hybrid',
+        '10-Q': 'hybrid',      '10-Q/A': 'hybrid',
+        '8-K': 'hybrid',
+        # Phase 2+ parsers (not yet implemented — will return unsupported)
+        # 'S-1': 'hybrid_s1',  'S-1/A': 'hybrid_s1',
+        # '13F-HR': 'form_13f','13F-HR/A': 'form_13f',
+        # 'DEF 14A': 'proxy',  'DEFA14A': 'proxy',
+        # '4': 'form_4',       '4/A': 'form_4',
+        # 'EARNINGS': 'transcript',
+    }
+
+    filing_type = request.get("filing_type", "10-K")
+    ticker = request.get("ticker", "UNKNOWN")
+
+    # Check if we have a parser for this filing type
+    parser_key = FILING_PARSERS.get(filing_type)
+    if parser_key is None:
+        logger.info(f"Unsupported filing type: {filing_type} for {ticker} — returning unsupported_filing_type")
+        return {
+            "structured_metrics": [],
+            "narrative_chunks": [],
+            "holdings": [],
+            "transactions": [],
+            "metadata": {
+                "ticker": ticker,
+                "filing_type": filing_type,
+                "status": "unsupported_filing_type",
+                "message": f"Parser not implemented for: {filing_type}",
+                "total_metrics": 0,
+                "total_chunks": 0,
+                "high_confidence_metrics": 0,
+            }
+        }
+
+    # Existing hybrid parser path for 10-K, 10-Q, 8-K
     try:
         # Convert legacy format to new format
         filing_request = FilingRequest(

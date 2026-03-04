@@ -21,6 +21,7 @@ import { MetricRegistryService } from './metric-resolution/metric-registry.servi
 import { FormulaResolutionService } from './metric-resolution/formula-resolution.service';
 import { ConceptRegistryService } from './metric-resolution/concept-registry.service';
 import { BackgroundEnrichmentService } from '../documents/background-enrichment.service';
+import { humanizeSectionType } from '../common/section-labels';
 
 /**
  * RAG Service
@@ -2659,22 +2660,10 @@ Output ONLY the extracted tables, no commentary.`;
 
   /**
    * Format section type for display
+   * Delegates to consolidated section-labels module (§8.1)
    */
   private formatSectionName(sectionType: string): string {
-    const sectionNames: Record<string, string> = {
-      'risk_factors': 'Risk Factors',
-      'business': 'Business Overview',
-      'mda': 'Management Discussion & Analysis',
-      'properties': 'Properties',
-      'legal_proceedings': 'Legal Proceedings',
-      'directors_officers': 'Directors & Officers',
-      'controls_procedures': 'Controls & Procedures',
-      'executive_compensation': 'Executive Compensation',
-      'general': 'General Information',
-      'uploaded_document': 'Uploaded Documents',
-    };
-
-    return sectionNames[sectionType] || sectionType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    return humanizeSectionType(sectionType);
   }
 
   /**
