@@ -67,6 +67,13 @@ export class IngestionService {
     // Parse with Python API (with timeout and retry)
     this.logger.log(`🔍 Parsing with Python API...`);
     const parsedData = await this.parseWithPythonRetry(htmlContent, ticker, filingType, cik);
+
+    // Reject unsupported filing types cleanly (§5.3)
+    if (parsedData.metadata?.status === 'unsupported_filing_type') {
+      this.logger.warn(`⏭️  Unsupported filing type: ${filingType} for ${ticker}`);
+      return { status: 'skipped', reason: 'unsupported_filing_type' };
+    }
+
     this.logger.log(
       `✅ Parsed: ${parsedData.metadata.total_metrics} metrics, ${parsedData.metadata.total_chunks} narrative chunks`,
     );
@@ -199,6 +206,23 @@ export class IngestionService {
       this.logger.log(`✅ Saved ${savedChunks} chunks (${skippedChunks} skipped/failed)`);
     }
 
+    // ── Phase 2: Route holdings from 13F-HR parser ──────────────────
+    let savedHoldings = 0;
+    if (parsedData.holdings?.length > 0) {
+      savedHoldings = await this.storeHoldings(ticker, parsedData.holdings, filingDate);
+    }
+
+    // ── Phase 2: Route transactions from Form 4 parser ───────────────
+    let savedTransactions = 0;
+    if (parsedData.transactions?.length > 0) {
+      savedTransactions = await this.storeInsiderTransactions(ticker, parsedData.transactions, filingDate);
+    }
+
+    // Flag failed verification
+    if (parsedData.metadata?.verification && !parsedData.metadata.verification.passed) {
+      this.logger.warn(`⚠️ Verification FAILED: ${ticker} ${filingType} — ${JSON.stringify(parsedData.metadata.verification)}`);
+    }
+
     return {
       status: 'success',
       filing_id: filingMetadata.id,
@@ -208,8 +232,140 @@ export class IngestionService {
         total_chunks: parsedData.metadata.total_chunks,
         saved_metrics: savedMetrics,
         saved_chunks: savedChunks,
+        saved_holdings: savedHoldings,
+        saved_transactions: savedTransactions,
       },
     };
+  }
+
+  /**
+   * Store institutional holdings from 13F-HR filings (Phase 2, §2.2)
+   */
+  async storeHoldings(ticker: string, holdings: any[], filingDate: string): Promise<number> {
+    this.logger.log(`💾 Saving ${holdings.length} institutional holdings for ${ticker}...`);
+    let saved = 0;
+
+    for (const h of holdings) {
+      try {
+        await this.executeWithRetry(async () => {
+          return (this.prisma as any).institutionalHolding.upsert({
+            where: {
+              holderCik_cusip_reportDate_accessionNo: {
+                holderCik: h.holder_cik || '',
+                cusip: h.cusip || '',
+                reportDate: new Date(h.report_date || filingDate),
+                accessionNo: h.accession_no || '',
+              },
+            },
+            update: {
+              ticker: h.resolved_ticker || null,
+              holderName: h.holder_name || '',
+              issuerName: h.issuer_name || '',
+              shareClass: h.share_class || null,
+              sharesHeld: h.shares_held ? BigInt(h.shares_held) : BigInt(0),
+              marketValue: h.market_value || 0,
+              investmentDiscretion: h.investment_discretion || null,
+              votingSole: h.voting_sole != null ? BigInt(h.voting_sole) : null,
+              votingShared: h.voting_shared != null ? BigInt(h.voting_shared) : null,
+              votingNone: h.voting_none != null ? BigInt(h.voting_none) : null,
+            },
+            create: {
+              ticker: h.resolved_ticker || null,
+              holderCik: h.holder_cik || '',
+              holderName: h.holder_name || '',
+              cusip: h.cusip || '',
+              issuerName: h.issuer_name || '',
+              shareClass: h.share_class || null,
+              sharesHeld: h.shares_held ? BigInt(h.shares_held) : BigInt(0),
+              marketValue: h.market_value || 0,
+              investmentDiscretion: h.investment_discretion || null,
+              votingSole: h.voting_sole != null ? BigInt(h.voting_sole) : null,
+              votingShared: h.voting_shared != null ? BigInt(h.voting_shared) : null,
+              votingNone: h.voting_none != null ? BigInt(h.voting_none) : null,
+              reportDate: new Date(h.report_date || filingDate),
+              filingDate: new Date(h.filing_date || filingDate),
+              accessionNo: h.accession_no || '',
+              quarter: h.quarter || '',
+            },
+          });
+        });
+        saved++;
+      } catch (error) {
+        if (!error.message?.includes('Unique constraint')) {
+          this.logger.warn(`Failed to save holding ${h.cusip} (${h.issuer_name}): ${error.message}`);
+        }
+      }
+    }
+
+    this.logger.log(`✅ Saved ${saved}/${holdings.length} institutional holdings`);
+    return saved;
+  }
+
+  /**
+   * Store insider transactions from Form 4 filings (Phase 2, §2.3)
+   */
+  async storeInsiderTransactions(ticker: string, transactions: any[], filingDate: string): Promise<number> {
+    this.logger.log(`💾 Saving ${transactions.length} insider transactions for ${ticker}...`);
+    let saved = 0;
+
+    for (const t of transactions) {
+      try {
+        const txnDate = t.transaction_date ? new Date(t.transaction_date) : new Date(filingDate);
+        await this.executeWithRetry(async () => {
+          return (this.prisma as any).insiderTransaction.upsert({
+            where: {
+              ticker_accessionNo_insiderName_transactionDate_transactionCode_isDerivative: {
+                ticker: t.ticker || ticker,
+                accessionNo: t.accession_no || '',
+                insiderName: t.insider_name || '',
+                transactionDate: txnDate,
+                transactionCode: t.transaction_code || '',
+                isDerivative: t.is_derivative || false,
+              },
+            },
+            update: {
+              insiderTitle: t.insider_title || null,
+              insiderRelationship: t.relationship || '',
+              equitySwap: t.equity_swap || false,
+              sharesTransacted: t.shares_transacted || 0,
+              pricePerShare: t.price_per_share || null,
+              sharesOwnedAfter: t.shares_owned_after || null,
+              derivativeTitle: t.derivative_title || null,
+              exercisePrice: t.exercise_price || null,
+              expirationDate: t.expiration_date ? new Date(t.expiration_date) : null,
+              underlyingShares: t.underlying_shares || null,
+            },
+            create: {
+              ticker: t.ticker || ticker,
+              insiderName: t.insider_name || '',
+              insiderTitle: t.insider_title || null,
+              insiderRelationship: t.relationship || '',
+              transactionDate: txnDate,
+              transactionCode: t.transaction_code || '',
+              equitySwap: t.equity_swap || false,
+              sharesTransacted: t.shares_transacted || 0,
+              pricePerShare: t.price_per_share || null,
+              sharesOwnedAfter: t.shares_owned_after || null,
+              isDerivative: t.is_derivative || false,
+              derivativeTitle: t.derivative_title || null,
+              exercisePrice: t.exercise_price || null,
+              expirationDate: t.expiration_date ? new Date(t.expiration_date) : null,
+              underlyingShares: t.underlying_shares || null,
+              filingDate: new Date(t.filing_date || filingDate),
+              accessionNo: t.accession_no || '',
+            },
+          });
+        });
+        saved++;
+      } catch (error) {
+        if (!error.message?.includes('Unique constraint')) {
+          this.logger.warn(`Failed to save transaction for ${t.insider_name}: ${error.message}`);
+        }
+      }
+    }
+
+    this.logger.log(`✅ Saved ${saved}/${transactions.length} insider transactions`);
+    return saved;
   }
 
   /**

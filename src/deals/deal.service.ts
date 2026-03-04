@@ -691,4 +691,79 @@ export class DealService {
 
     this.logger.log(`Ticker validation passed for ${upperTicker}`);
   }
+
+  /**
+   * Get data coverage summary for a deal (Phase 2, §8.4)
+   * Shows what filing types and counts are available.
+   */
+  async getDataCoverage(dealId: string): Promise<{
+    ticker: string;
+    filings: Record<string, { count: number; latest: string | null }>;
+    insiderTransactions: number;
+    institutionalHoldings: number;
+    lastUpdated: string | null;
+  }> {
+    const deal = await this.getDealById(dealId);
+    const ticker = deal.ticker;
+    if (!ticker) {
+      return {
+        ticker: '',
+        filings: {},
+        insiderTransactions: 0,
+        institutionalHoldings: 0,
+        lastUpdated: null,
+      };
+    }
+
+    // Filing counts by type from filing_metadata
+    const filingCounts = await this.prisma.$queryRawUnsafe<
+      { filing_type: string; count: number; latest: string }[]
+    >(`
+      SELECT filing_type, COUNT(*)::int as count,
+             MAX(filing_date)::text as latest
+      FROM filing_metadata
+      WHERE ticker = $1 AND processed = true
+      GROUP BY filing_type
+      ORDER BY filing_type
+    `, ticker.toUpperCase());
+
+    const filings: Record<string, { count: number; latest: string | null }> = {};
+    for (const row of filingCounts) {
+      filings[row.filing_type] = { count: row.count, latest: row.latest };
+    }
+
+    // Insider transaction count
+    let insiderTransactions = 0;
+    try {
+      const itResult = await this.prisma.$queryRawUnsafe<{ count: number }[]>(
+        `SELECT COUNT(*)::int as count FROM insider_transactions WHERE ticker = $1`,
+        ticker.toUpperCase(),
+      );
+      insiderTransactions = itResult[0]?.count || 0;
+    } catch {
+      // Table may not exist yet in some environments
+    }
+
+    // Institutional holdings count
+    let institutionalHoldings = 0;
+    try {
+      const ihResult = await this.prisma.$queryRawUnsafe<{ count: number }[]>(
+        `SELECT COUNT(*)::int as count FROM institutional_holdings WHERE ticker = $1`,
+        ticker.toUpperCase(),
+      );
+      institutionalHoldings = ihResult[0]?.count || 0;
+    } catch {
+      // Table may not exist yet in some environments
+    }
+
+    // Last updated from filing_metadata
+    const lastRow = await this.prisma.$queryRawUnsafe<{ latest: string }[]>(
+      `SELECT MAX(created_at)::text as latest FROM filing_metadata WHERE ticker = $1`,
+      ticker.toUpperCase(),
+    );
+    const lastUpdated = lastRow[0]?.latest || null;
+
+    return { ticker: ticker.toUpperCase(), filings, insiderTransactions, institutionalHoldings, lastUpdated };
+  }
+
 }

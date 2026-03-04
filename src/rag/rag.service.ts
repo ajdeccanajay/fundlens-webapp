@@ -21,6 +21,7 @@ import { MetricRegistryService } from './metric-resolution/metric-registry.servi
 import { FormulaResolutionService } from './metric-resolution/formula-resolution.service';
 import { ConceptRegistryService } from './metric-resolution/concept-registry.service';
 import { BackgroundEnrichmentService } from '../documents/background-enrichment.service';
+import { FilingDataRetrieverService } from './filing-data-retriever.service';
 import { humanizeSectionType } from '../common/section-labels';
 
 /**
@@ -66,6 +67,8 @@ export class RAGService {
     private readonly conceptRegistry?: ConceptRegistryService,
     @Optional()
     private readonly backgroundEnrichment?: BackgroundEnrichmentService,
+    @Optional()
+    private readonly filingDataRetriever?: FilingDataRetrieverService,
   ) {}
 
   /**
@@ -888,6 +891,54 @@ Output ONLY the extracted tables, no commentary.`;
         this.logger.log(
           `🔄 Retrieval loop completed after ${retrievalIteration} iteration(s)`,
         );
+      }
+
+      // ── Phase 2: Enrich with insider/institutional data ────────────
+      // When the query references insider activity or institutional holdings,
+      // inject structured data as virtual narratives for the LLM to reference.
+      if (this.filingDataRetriever) {
+        const queryLower = query.toLowerCase();
+        const tickers = Array.isArray(intent.ticker) ? intent.ticker : intent.ticker ? [intent.ticker] : [];
+        const primaryTicker = tickers[0];
+
+        if (primaryTicker) {
+          const isInsiderQuery = /\b(insider|insiders|insider\s*(?:buying|selling|trading|transaction|activity)|form\s*4|officer\s*(?:sold|bought|purchased)|director\s*(?:sold|bought|purchased)|ceo\s*(?:sold|bought)|cfo\s*(?:sold|bought))\b/i.test(query);
+          const isHoldingsQuery = /\b(institutional|institution|13f|13\-f|holder|holders|holdings|ownership|who\s*(?:owns|holds|bought)|largest\s*(?:shareholder|holder|investor))\b/i.test(query);
+
+          if (isInsiderQuery) {
+            const insiderNarrative = await this.filingDataRetriever.buildInsiderNarrative(primaryTicker);
+            if (insiderNarrative) {
+              narratives.push({
+                content: insiderNarrative,
+                score: 0.95,
+                metadata: {
+                  ticker: primaryTicker,
+                  sectionType: 'insider_transactions',
+                  filingType: '4',
+                },
+                source: { location: 'Form 4 filings', type: 'structured-data' },
+              });
+              this.logger.log(`📋 Injected insider transaction narrative for ${primaryTicker}`);
+            }
+          }
+
+          if (isHoldingsQuery) {
+            const holdingsNarrative = await this.filingDataRetriever.buildHoldingsNarrative(primaryTicker);
+            if (holdingsNarrative) {
+              narratives.push({
+                content: holdingsNarrative,
+                score: 0.95,
+                metadata: {
+                  ticker: primaryTicker,
+                  sectionType: 'institutional_holdings',
+                  filingType: '13F-HR',
+                },
+                source: { location: '13F-HR filings', type: 'structured-data' },
+              });
+              this.logger.log(`📋 Injected institutional holdings narrative for ${primaryTicker}`);
+            }
+          }
+        }
       }
 
       // If both retrieval paths returned nothing, try to provide helpful context

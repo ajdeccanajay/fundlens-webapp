@@ -245,11 +245,12 @@ async def sec_parser_legacy(request: dict):
         '10-K': 'hybrid',      '10-K/A': 'hybrid',
         '10-Q': 'hybrid',      '10-Q/A': 'hybrid',
         '8-K': 'hybrid',
-        # Phase 2+ parsers (not yet implemented — will return unsupported)
+        # Phase 2: Form 4 + 13F parsers
+        '13F-HR': 'form_13f',  '13F-HR/A': 'form_13f',
+        '4': 'form_4',         '4/A': 'form_4',
+        # Phase 3+ parsers (not yet implemented — will return unsupported)
         # 'S-1': 'hybrid_s1',  'S-1/A': 'hybrid_s1',
-        # '13F-HR': 'form_13f','13F-HR/A': 'form_13f',
         # 'DEF 14A': 'proxy',  'DEFA14A': 'proxy',
-        # '4': 'form_4',       '4/A': 'form_4',
         # 'EARNINGS': 'transcript',
     }
 
@@ -275,6 +276,36 @@ async def sec_parser_legacy(request: dict):
                 "high_confidence_metrics": 0,
             }
         }
+
+    # ── Phase 2: Form 4 parser dispatch ──────────────────────────────
+    if parser_key == 'form_4':
+        from parse_form4 import parse_form4
+        result = parse_form4(
+            content=request.get("html_content", ""),
+            ticker=ticker,
+            filing_date=request.get("filing_date"),
+        )
+        logger.info(f"Form 4 parser: {result['metadata']['total_transactions']} transactions for {ticker}")
+        return result
+
+    # ── Phase 2: 13F-HR parser dispatch ──────────────────────────────
+    if parser_key == 'form_13f':
+        from parse_13f import parse_13f
+        from cusip_resolver import get_resolver
+        resolver = await get_resolver()
+        result = parse_13f(
+            content=request.get("html_content", ""),
+            ticker=ticker,
+            holder_cik=request.get("cik", ""),
+            holder_name=request.get("holder_name", ""),
+            filing_date=request.get("filing_date"),
+            report_date=request.get("report_date"),
+            accession_no=request.get("accession_no", ""),
+            cusip_resolver=resolver,
+            cover_page_content=request.get("cover_page_content"),
+        )
+        logger.info(f"13F parser: {result['metadata']['total_holdings']} holdings for {ticker}")
+        return result
 
     # Existing hybrid parser path for 10-K, 10-Q, 8-K
     try:

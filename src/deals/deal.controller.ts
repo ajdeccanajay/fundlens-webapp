@@ -435,4 +435,31 @@ export class DealController {
       };
     }
   }
+
+  /**
+   * GET /api/deals/:id/data-coverage
+   * Returns filing type counts and data availability for a deal (Phase 2, §8.4)
+   */
+  @Get(':id/data-coverage')
+  async getDataCoverage(@Param('id') id: string) {
+    try {
+      const coverage = await this.dealService.getDataCoverage(id);
+      return {
+        success: true,
+        data: coverage,
+        message: 'Data coverage retrieved',
+      };
+    } catch (error) {
+      this.logger.error(`Failed to get data coverage for deal ${id}: ${error.message}`);
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      return {
+        success: false,
+        error: error.message,
+        message: 'Failed to get data coverage',
+      };
+    }
+  }
+
 }

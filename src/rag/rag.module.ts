@@ -47,6 +47,7 @@ import { QueryUnderstandingService } from './query-understanding.service';
 import { DocumentMetricExtractorService } from './document-metric-extractor.service';
 import { PromptRegistryService as QULPromptRegistryService } from './prompt-registry.service';
 import { QULObservabilityService } from './qul-observability.service';
+import { FilingDataRetrieverService } from './filing-data-retriever.service';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { SecModule } from '../dataSources/sec/sec.module';
 import { S3Module } from '../s3/s3.module';
@@ -108,6 +109,8 @@ import { DocumentsModule } from '../documents/documents.module';
     // QUL Phase 5: Prompt Registry + Observability
     QULPromptRegistryService,
     QULObservabilityService,
+    // Phase 2: Filing Data Retriever (insider transactions + institutional holdings)
+    FilingDataRetrieverService,
   ],
   exports: [
     RAGService,
@@ -146,6 +149,7 @@ import { DocumentsModule } from '../documents/documents.module';
     DocumentMetricExtractorService,
     QULPromptRegistryService,
     QULObservabilityService,
+    FilingDataRetrieverService,
   ],
 })
 export class RAGModule {}
