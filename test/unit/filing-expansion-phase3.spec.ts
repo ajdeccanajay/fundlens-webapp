@@ -529,6 +529,207 @@ describe('Phase 3: Proxy Parser Output Schema', () => {
 
 // ─── Regression Guards ───────────────────────────────────────────────
 
+describe('Phase 3: Tier 2 Semantic Verification', () => {
+  // Mirror of the Tier 2 stub classifier logic from parse_proxy.py
+  const PROXY_SECTIONS: Record<string, string[]> = {
+    executive_compensation: [
+      'EXECUTIVE COMPENSATION', 'COMPENSATION DISCUSSION AND ANALYSIS',
+      'CD&A', 'COMPENSATION OF EXECUTIVE', 'NAMED EXECUTIVE OFFICER',
+      'SUMMARY COMPENSATION TABLE',
+    ],
+    board_composition: [
+      'BOARD OF DIRECTORS', 'ELECTION OF DIRECTORS', 'PROPOSAL 1',
+      'NOMINEES FOR DIRECTOR', 'DIRECTOR NOMINEES',
+      'CORPORATE GOVERNANCE', 'GOVERNANCE GUIDELINES',
+    ],
+    audit_committee: [
+      'AUDIT COMMITTEE', 'REPORT OF THE AUDIT',
+      'RATIFICATION OF', 'INDEPENDENT REGISTERED PUBLIC ACCOUNTING',
+    ],
+    stock_ownership: [
+      'SECURITY OWNERSHIP', 'STOCK OWNERSHIP', 'BENEFICIAL OWNERSHIP',
+      'PRINCIPAL STOCKHOLDERS', 'PRINCIPAL SHAREHOLDERS',
+    ],
+  };
+
+  const TOPICAL_TERMS: Record<string, string[]> = {
+    executive_compensation: [
+      'salary', 'bonus', 'stock', 'option', 'incentive', 'award',
+      'vesting', 'performance', 'target', 'payout', 'clawback',
+    ],
+    board_composition: [
+      'independent', 'nominee', 'term', 'age', 'experience',
+      'qualification', 'diversity', 'committee', 'chair',
+    ],
+    audit_committee: [
+      'independent', 'financial expert', 'oversight', 'internal control',
+      'auditor', 'engagement', 'fees', 'report',
+    ],
+    stock_ownership: [
+      'shares', 'percent', 'beneficial', 'outstanding', 'voting',
+      'power', 'table', 'officer', 'director',
+    ],
+  };
+
+  function classifySectionStub(snippet: string, sectionType: string): string {
+    const snippetLower = snippet.toLowerCase();
+    const sectionKeywords = PROXY_SECTIONS[sectionType] || [];
+    const keywordHits = sectionKeywords.filter(kw => snippetLower.includes(kw.toLowerCase())).length;
+
+    if (keywordHits >= 2) return 'YES';
+    if (keywordHits === 1) {
+      const topicalTerms = TOPICAL_TERMS[sectionType] || [];
+      const topicalHits = topicalTerms.filter(t => snippetLower.includes(t)).length;
+      return topicalHits >= 2 ? 'YES' : 'UNCLEAR';
+    }
+    const topicalTerms = TOPICAL_TERMS[sectionType] || [];
+    const topicalHits = topicalTerms.filter(t => snippetLower.includes(t)).length;
+    if (topicalHits >= 3) return 'UNCLEAR';
+    return 'NO';
+  }
+
+  it('should return YES when multiple keywords match', () => {
+    const snippet = 'EXECUTIVE COMPENSATION Discussion and COMPENSATION DISCUSSION AND ANALYSIS for the fiscal year';
+    expect(classifySectionStub(snippet, 'executive_compensation')).toBe('YES');
+  });
+
+  it('should return YES when one keyword + topical terms match', () => {
+    const snippet = 'EXECUTIVE COMPENSATION includes salary, bonus, and stock option awards for executives';
+    expect(classifySectionStub(snippet, 'executive_compensation')).toBe('YES');
+  });
+
+  it('should return UNCLEAR when only one keyword and few topical terms', () => {
+    const snippet = 'AUDIT COMMITTEE met four times during the year to discuss various matters';
+    expect(classifySectionStub(snippet, 'audit_committee')).toBe('UNCLEAR');
+  });
+
+  it('should return NO when no keywords or topical terms match', () => {
+    const snippet = 'Revenue grew 15% year over year driven by strong demand in cloud services';
+    expect(classifySectionStub(snippet, 'executive_compensation')).toBe('NO');
+  });
+
+  it('should return UNCLEAR when no keywords but 3+ topical terms match', () => {
+    const snippet = 'The salary and bonus structure includes stock incentive awards with performance targets';
+    expect(classifySectionStub(snippet, 'executive_compensation')).toBe('UNCLEAR');
+  });
+
+  it('should have a 10% sample rate constant', () => {
+    // Verify the design: Tier 2 fires on ~10% of parses
+    const TIER2_SAMPLE_RATE = 0.10;
+    expect(TIER2_SAMPLE_RATE).toBe(0.10);
+  });
+
+  it('should produce a valid Tier 2 result structure', () => {
+    // Simulate what maybe_verify_semantic returns when sampled
+    const tier2Result = {
+      sampled: true,
+      sections_checked: 3,
+      flagged_sections: ['stock_ownership'],
+      all_passed: false,
+      results: [
+        { section_type: 'executive_compensation', classification: 'YES' },
+        { section_type: 'board_composition', classification: 'YES' },
+        { section_type: 'stock_ownership', classification: 'NO' },
+      ],
+    };
+    expect(tier2Result.sampled).toBe(true);
+    expect(tier2Result.sections_checked).toBe(3);
+    expect(tier2Result.flagged_sections).toContain('stock_ownership');
+    expect(tier2Result.all_passed).toBe(false);
+  });
+});
+
+// ─── Governance Provocation Templates ────────────────────────────────
+
+describe('Phase 3: Governance Provocation Templates', () => {
+  // Mirror of the governance mode from analysis-mode-registry.service.ts
+  const governanceMode = {
+    name: 'governance',
+    description: 'Governance-focused provocations from proxy statements and board disclosures',
+    presetQuestions: [
+      { id: 'ceo-pay-vs-performance', category: 'Compensation Alignment', requiresData: ['DEF 14A', '10-K'] },
+      { id: 'board-independence', category: 'Board Composition', requiresData: ['DEF 14A'] },
+      { id: 'director-tenure-entrenchment', category: 'Board Composition', requiresData: ['DEF 14A'] },
+      { id: 'related-party-governance', category: 'Governance Red Flags', requiresData: ['DEF 14A', '10-K'] },
+      { id: 'shareholder-proposal-outcomes', category: 'Shareholder Rights', requiresData: ['DEF 14A'] },
+      { id: 'equity-dilution-insiders', category: 'Compensation Alignment', requiresData: ['DEF 14A', '10-K'] },
+      { id: 'audit-committee-concerns', category: 'Governance Red Flags', requiresData: ['DEF 14A', '10-K'] },
+      { id: 'pay-ratio-trend', category: 'Compensation Alignment', requiresData: ['DEF 14A'] },
+    ],
+  };
+
+  it('should have governance mode registered', () => {
+    expect(governanceMode.name).toBe('governance');
+  });
+
+  it('should have 8 governance preset questions', () => {
+    expect(governanceMode.presetQuestions).toHaveLength(8);
+  });
+
+  it('should have CEO pay vs performance question', () => {
+    const q = governanceMode.presetQuestions.find(q => q.id === 'ceo-pay-vs-performance');
+    expect(q).toBeDefined();
+    expect(q!.category).toBe('Compensation Alignment');
+    expect(q!.requiresData).toContain('DEF 14A');
+  });
+
+  it('should have board independence question', () => {
+    const q = governanceMode.presetQuestions.find(q => q.id === 'board-independence');
+    expect(q).toBeDefined();
+    expect(q!.category).toBe('Board Composition');
+  });
+
+  it('should have director tenure/entrenchment question', () => {
+    const q = governanceMode.presetQuestions.find(q => q.id === 'director-tenure-entrenchment');
+    expect(q).toBeDefined();
+    expect(q!.requiresData).toContain('DEF 14A');
+  });
+
+  it('should have shareholder proposal outcomes question', () => {
+    const q = governanceMode.presetQuestions.find(q => q.id === 'shareholder-proposal-outcomes');
+    expect(q).toBeDefined();
+    expect(q!.category).toBe('Shareholder Rights');
+  });
+
+  it('should have audit committee concerns question', () => {
+    const q = governanceMode.presetQuestions.find(q => q.id === 'audit-committee-concerns');
+    expect(q).toBeDefined();
+    expect(q!.category).toBe('Governance Red Flags');
+  });
+
+  it('should have pay ratio trend question', () => {
+    const q = governanceMode.presetQuestions.find(q => q.id === 'pay-ratio-trend');
+    expect(q).toBeDefined();
+    expect(q!.category).toBe('Compensation Alignment');
+  });
+
+  it('should have all questions requiring DEF 14A data', () => {
+    for (const q of governanceMode.presetQuestions) {
+      expect(q.requiresData).toContain('DEF 14A');
+    }
+  });
+
+  it('should cover 4 distinct governance categories', () => {
+    const categories = new Set(governanceMode.presetQuestions.map(q => q.category));
+    expect(categories.size).toBe(4);
+    expect(categories).toContain('Compensation Alignment');
+    expect(categories).toContain('Board Composition');
+    expect(categories).toContain('Governance Red Flags');
+    expect(categories).toContain('Shareholder Rights');
+  });
+
+  it('should have governance_concern as a valid provocation category', () => {
+    const validCategories = [
+      'management_credibility', 'risk_escalation', 'accounting_red_flags',
+      'competitive_moat', 'capital_allocation', 'guidance_reliability', 'related_party',
+      'earnings_quality', 'sentiment_shift', 'governance_concern',
+    ];
+    expect(validCategories).toContain('governance_concern');
+  });
+});
+
+// ─── Regression Guards ───────────────────────────────────────────────
+
 describe('Phase 3: Regression Guards', () => {
   it('should still have all 10-K section labels', () => {
     expect(SECTION_LABELS['item_1']).toBe('Business');

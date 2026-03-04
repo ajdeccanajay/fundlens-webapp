@@ -122,5 +122,62 @@ export class AnalysisModeRegistryService {
         },
       ],
     });
+
+    // Governance Mode — provocation templates for governance concerns (Phase 3 §9.3 item 6)
+    this.registerMode({
+      name: 'governance',
+      description: 'Governance-focused provocations from proxy statements and board disclosures',
+      systemPrompt: `You are a governance-focused adversarial analyst. Your job is to surface governance red flags, compensation misalignment, board independence concerns, and shareholder rights issues from DEF 14A proxy statements and related filings. Be specific, cite proxy sections, and challenge management entrenchment.`,
+      presetQuestions: [
+        {
+          id: 'ceo-pay-vs-performance',
+          category: 'Compensation Alignment',
+          text: 'Has CEO total compensation increased while operating margins compressed or TSR underperformed peers?',
+          requiresData: ['DEF 14A', '10-K'],
+        },
+        {
+          id: 'board-independence',
+          category: 'Board Composition',
+          text: 'What is the board independence ratio and how does it compare to peer median?',
+          requiresData: ['DEF 14A'],
+        },
+        {
+          id: 'director-tenure-entrenchment',
+          category: 'Board Composition',
+          text: 'Are there directors with tenure exceeding 15 years who may lack independence despite classification?',
+          requiresData: ['DEF 14A'],
+        },
+        {
+          id: 'related-party-governance',
+          category: 'Governance Red Flags',
+          text: 'Are there related-party transactions involving board members or executives that raise conflict-of-interest concerns?',
+          requiresData: ['DEF 14A', '10-K'],
+        },
+        {
+          id: 'shareholder-proposal-outcomes',
+          category: 'Shareholder Rights',
+          text: 'Were any shareholder proposals approved by majority vote but not implemented by the board?',
+          requiresData: ['DEF 14A'],
+        },
+        {
+          id: 'equity-dilution-insiders',
+          category: 'Compensation Alignment',
+          text: 'What percentage of equity awards went to named executives vs. total share-based compensation expense?',
+          requiresData: ['DEF 14A', '10-K'],
+        },
+        {
+          id: 'audit-committee-concerns',
+          category: 'Governance Red Flags',
+          text: 'Has the audit committee flagged any material weaknesses or changed auditors recently?',
+          requiresData: ['DEF 14A', '10-K'],
+        },
+        {
+          id: 'pay-ratio-trend',
+          category: 'Compensation Alignment',
+          text: 'How has the CEO-to-median-employee pay ratio trended over the last 3 proxy filings?',
+          requiresData: ['DEF 14A'],
+        },
+      ],
+    });
   }
 }

@@ -9,6 +9,7 @@ We use keyword matching to identify sections, then chunk within each section.
 """
 
 import re
+import random
 import logging
 from typing import Dict, List, Any, Optional
 from bs4 import BeautifulSoup
@@ -91,6 +92,11 @@ def parse_proxy(
 
     # Tier 1 structural verification (§3.4)
     verification = verify_proxy_structural(sections, len(full_text.split()))
+
+    # Tier 2 semantic verification — sampled on ~10% of parses (§3.4)
+    tier2_result = maybe_verify_semantic(sections, ticker)
+    if tier2_result is not None:
+        verification['tier2'] = tier2_result
 
     # If fewer than 3 sections detected, flag for review — do NOT mark as success
     status = 'success' if verification['passed'] else 'needs_review'
@@ -285,3 +291,126 @@ def verify_proxy_structural(
         'confidence': max(0.0, 1.0 - len(issues) * 0.15),
         'tier': 1,
     }
+
+
+# ─── Tier 2: Semantic Verification (§3.4) ─────────────────────────────
+
+# Sample rate for Tier 2 verification (10% of parses)
+TIER2_SAMPLE_RATE = 0.10
+
+
+def maybe_verify_semantic(
+    sections: List[Dict[str, Any]],
+    ticker: str,
+) -> Optional[Dict[str, Any]]:
+    """
+    Tier 2 semantic verification — fires on ~10% of parses.
+    Sends the first 200 words of each section to an LLM for classification.
+
+    Currently a stub that logs intent and returns classification results
+    without making actual LLM calls. When Bedrock is available in the
+    Python container, swap _classify_section_stub for a real Haiku call.
+    """
+    if random.random() > TIER2_SAMPLE_RATE:
+        return None  # Not sampled this time
+
+    logger.info(f"Tier 2 semantic verification triggered for {ticker} (10% sample)")
+
+    results = []
+    flagged = []
+
+    for section in sections:
+        snippet = ' '.join(section['content'].split()[:200])
+        classification = _classify_section_stub(snippet, section['section_type'])
+        results.append({
+            'section_type': section['section_type'],
+            'classification': classification,
+        })
+        if classification == 'NO':
+            flagged.append(section['section_type'])
+            logger.warning(
+                f"Tier 2 flag: {ticker} section '{section['section_type']}' "
+                f"may be misclassified"
+            )
+
+    return {
+        'sampled': True,
+        'sections_checked': len(results),
+        'flagged_sections': flagged,
+        'all_passed': len(flagged) == 0,
+        'results': results,
+    }
+
+
+def _classify_section_stub(snippet: str, section_type: str) -> str:
+    """
+    Stub classifier that uses keyword heuristics to approximate what
+    Haiku would return. Replace with actual Bedrock Haiku call when
+    the Python container has AWS credentials configured.
+
+    Returns: 'YES', 'NO', or 'UNCLEAR'
+    """
+    snippet_lower = snippet.lower()
+    section_keywords = PROXY_SECTIONS.get(section_type, [])
+
+    # Check if any of the section's keywords appear in the snippet
+    keyword_hits = sum(
+        1 for kw in section_keywords if kw.lower() in snippet_lower
+    )
+
+    if keyword_hits >= 2:
+        return 'YES'
+    elif keyword_hits == 1:
+        # Single keyword hit — check for broader topical relevance
+        topical_terms = _get_topical_terms(section_type)
+        topical_hits = sum(1 for t in topical_terms if t in snippet_lower)
+        return 'YES' if topical_hits >= 2 else 'UNCLEAR'
+    else:
+        # No keyword hits — check topical terms as fallback
+        topical_terms = _get_topical_terms(section_type)
+        topical_hits = sum(1 for t in topical_terms if t in snippet_lower)
+        if topical_hits >= 3:
+            return 'UNCLEAR'
+        return 'NO'
+
+
+def _get_topical_terms(section_type: str) -> List[str]:
+    """Return broad topical terms for a section type (beyond exact keywords)."""
+    terms = {
+        'executive_compensation': [
+            'salary', 'bonus', 'stock', 'option', 'incentive', 'award',
+            'vesting', 'performance', 'target', 'payout', 'clawback',
+        ],
+        'director_compensation': [
+            'retainer', 'fee', 'annual', 'cash', 'equity', 'board',
+            'meeting', 'committee', 'service',
+        ],
+        'board_composition': [
+            'independent', 'nominee', 'term', 'age', 'experience',
+            'qualification', 'diversity', 'committee', 'chair',
+        ],
+        'shareholder_proposals': [
+            'vote', 'resolution', 'proposal', 'recommend', 'against',
+            'for', 'abstain', 'majority', 'advisory',
+        ],
+        'related_party_transactions': [
+            'transaction', 'agreement', 'affiliate', 'family', 'officer',
+            'director', 'interest', 'approval', 'policy',
+        ],
+        'ceo_pay_ratio': [
+            'median', 'employee', 'ratio', 'annual', 'total',
+        ],
+        'pay_vs_performance': [
+            'total shareholder return', 'tsr', 'peer group', 'actually paid',
+            'net income', 'table',
+        ],
+        'audit_committee': [
+            'independent', 'financial expert', 'oversight', 'internal control',
+            'auditor', 'engagement', 'fees', 'report',
+        ],
+        'stock_ownership': [
+            'shares', 'percent', 'beneficial', 'outstanding', 'voting',
+            'power', 'table', 'officer', 'director',
+        ],
+    }
+    return terms.get(section_type, [])

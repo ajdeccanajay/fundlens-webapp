@@ -13,7 +13,8 @@ export type ProvocationCategory =
   | 'guidance_reliability'
   | 'related_party'
   | 'earnings_quality'
-  | 'sentiment_shift';
+  | 'sentiment_shift'
+  | 'governance_concern';
 
 export interface FilingReference {
   filingType: string;
@@ -232,7 +233,7 @@ Return ONLY a JSON array of provocation objects. No other text.`;
     const valid: ProvocationCategory[] = [
       'management_credibility', 'risk_escalation', 'accounting_red_flags',
       'competitive_moat', 'capital_allocation', 'guidance_reliability', 'related_party',
-      'earnings_quality', 'sentiment_shift',
+      'earnings_quality', 'sentiment_shift', 'governance_concern',
     ];
     return valid.includes(c as ProvocationCategory) ? (c as ProvocationCategory) : 'risk_escalation';
   }
