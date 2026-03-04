@@ -555,5 +555,71 @@
       "normalizedQuery": "TargetCo EBITDA adjustments add-backs quality of earnings QoE report",
       "needsPeerComparison": false
     }
+  },
+  {
+    "description": "Computed metric: enterprise value and multiples — split into separate subQueries",
+    "input": {
+      "query": "Compare analyst forecasts, enterprise values and multiples on Amazon",
+      "workspace": { "ticker": "AMZN", "company_name": "Amazon", "domain": "public_equity" },
+      "uploaded_documents": [
+        { "id": "doc_dbs", "name": "Amazon - DBS.pdf", "type": "analyst_report", "entity": "Amazon", "ticker": "AMZN" }
+      ]
+    },
+    "output": {
+      "entities": [{ "name": "Amazon", "ticker": "AMZN", "entityType": "public_company", "source": "explicit" }],
+      "intent": "HYBRID_ANALYSIS",
+      "domain": "cross_domain",
+      "isValidQuery": true,
+      "confidence": 0.9,
+      "temporalScope": { "type": "latest" },
+      "normalizedQuery": "AMZN analyst forecasts enterprise value multiples",
+      "subQueries": [
+        { "intent": "METRIC_LOOKUP", "entity": "AMZN", "metric": "enterprise_value", "metricType": "computed", "path": "structured_db" },
+        { "intent": "METRIC_LOOKUP", "entity": "AMZN", "metric": "valuation", "metricType": "concept", "path": "structured_db" },
+        { "intent": "NARRATIVE_SEARCH", "entity": "AMZN", "path": "uploaded_doc_rag" }
+      ],
+      "needsPeerComparison": false,
+      "suggestedChart": "bar_chart"
+    }
+  },
+  {
+    "description": "Synonym resolution: 'top line' -> revenue",
+    "input": {
+      "query": "What's the top line?",
+      "workspace": { "ticker": "NVDA", "company_name": "NVIDIA", "domain": "public_equity" }
+    },
+    "output": {
+      "entities": [{ "name": "NVIDIA", "ticker": "NVDA", "entityType": "public_company", "source": "workspace_context" }],
+      "intent": "METRIC_LOOKUP",
+      "domain": "public_equity",
+      "isValidQuery": true,
+      "confidence": 0.9,
+      "temporalScope": { "type": "latest" },
+      "normalizedQuery": "NVDA revenue latest",
+      "subQueries": [
+        { "intent": "METRIC_LOOKUP", "entity": "NVDA", "metric": "revenue", "metricType": "atomic", "path": "structured_db" }
+      ],
+      "suggestedChart": "metric_card"
+    }
+  },
+  {
+    "description": "Multiple metrics: net income and free cash flow",
+    "input": {
+      "query": "Show me AAPL's net income and free cash flow",
+      "workspace": { "ticker": "AAPL", "company_name": "Apple", "domain": "public_equity" }
+    },
+    "output": {
+      "entities": [{ "name": "Apple", "ticker": "AAPL", "entityType": "public_company", "source": "explicit" }],
+      "intent": "METRIC_LOOKUP",
+      "domain": "public_equity",
+      "isValidQuery": true,
+      "confidence": 0.95,
+      "temporalScope": { "type": "latest" },
+      "normalizedQuery": "AAPL net income free cash flow latest",
+      "subQueries": [
+        { "intent": "METRIC_LOOKUP", "entity": "AAPL", "metric": "net_income", "metricType": "atomic", "path": "structured_db" },
+        { "intent": "METRIC_LOOKUP", "entity": "AAPL", "metric": "free_cash_flow", "metricType": "atomic", "path": "structured_db" }
+      ]
+    }
   }
 ]

@@ -271,6 +271,7 @@ export class RAGService {
               unifyingInstruction: decomposed.unifyingInstruction,
               modelTier: optimizationDecisions.modelTier as 'haiku' | 'sonnet' | 'opus',
               tenantId: options?.tenantId,
+              qulIntent: options?.understanding?.intent,
             };
 
             // Use HybridSynthesisService with unifying prompt (Req 14.3)
@@ -1025,6 +1026,7 @@ Output ONLY the extracted tables, no commentary.`;
             computedSummary, // Pass FinancialCalculatorService results (includes computed margins for all tickers)
             modelTier: optimizationDecisions.modelTier as 'haiku' | 'sonnet' | 'opus',
             tenantId: options?.tenantId,
+            qulIntent: options?.understanding?.intent,
           };
 
           // Req 10.2: Call hybridSynthesis.synthesize() instead of bedrock.generate()
@@ -1252,7 +1254,7 @@ Output ONLY the extracted tables, no commentary.`;
             return false;
           }
           // Also suppress compound qualitative concepts (e.g. "advertising_profitability")
-          const qualitativeKeywords = ['outlook', 'profitability', 'sentiment', 'risk', 'guidance', 'commentary', 'business', 'advertising', 'segment', 'analyst', 'estimate', 'expectation', 'consensus', 'forecast', 'projection', 'target', 'actual', 'reported'];
+          const qualitativeKeywords = ['outlook', 'profitability', 'sentiment', 'risk', 'guidance', 'commentary', 'business', 'advertising', 'segment', 'analyst', 'estimate', 'expectation', 'consensus', 'forecast', 'projection', 'target', 'actual', 'reported', 'thesis', 'rationale', 'recommendation', 'rating', 'upside', 'downside', 'bull_case', 'bear_case', 'catalyst', 'narrative', 'discussion', 'overview', 'summary', 'assessment', 'evaluation', 'scenario', 'assumptions'];
           if (narratives.length > 0 && qualitativeKeywords.some(kw => canonicalLower.includes(kw) || queryLower.includes(kw))) {
             this.logger.log(`🔍 Suppressing degradation for qualitative keyword match "${u.original_query}" — narratives available`);
             return false;
@@ -1715,23 +1717,81 @@ Output ONLY the extracted tables, no commentary.`;
       }
     }
 
-    // Extract metric hints from QUL subQueries
+    // ================================================================
+    // METRIC EXTRACTION: Three-layer defense
+    //
+    // Layer 1 (primary): Haiku's subQueries[].metric — validated through registry
+    // Layer 2 (decomposition): Compound strings split and re-resolved
+    // Layer 3 (fallback): Token extraction from normalizedQuery
+    //
+    // The goal: intent.metrics contains ONLY canonical metric IDs that
+    // the MetricRegistryService recognizes. Nothing else reaches downstream.
+    // ================================================================
     const metrics: string[] = [];
+    const seenMetrics = new Set<string>();
+
+    // --- Layer 1 + 2: Extract from subQueries with registry validation ---
     if (qul.subQueries && qul.subQueries.length > 0) {
       for (const sq of qul.subQueries) {
-        if (sq.metric) metrics.push(sq.metric);
+        if (!sq.metric) continue;
+
+        let resolved = false;
+
+        // Layer 1: Try resolving the full metric string as-is through registry
+        if (this['metricRegistry']) {
+          try {
+            const resolution = this['metricRegistry'].resolve(sq.metric);
+            if (resolution && resolution.confidence !== 'unresolved') {
+              if (!seenMetrics.has(resolution.canonical_id)) {
+                metrics.push(resolution.canonical_id);
+                seenMetrics.add(resolution.canonical_id);
+                this.logger.log(
+                  `📊 subQuery metric "${sq.metric}" -> resolved as "${resolution.canonical_id}" (${resolution.confidence})`,
+                );
+              }
+              resolved = true;
+            }
+          } catch { /* skip */ }
+
+          // Layer 2: If full string unresolved, decompose by underscores
+          // "enterprise_value_valuation_multiples" ->
+          //   try "enterprise_value" -> HIT (computed metric)
+          //   try "valuation_multiples" -> miss
+          //   try "valuation" -> HIT (concept)
+          if (!resolved) {
+            const parts = sq.metric.split('_');
+            if (parts.length >= 3) {
+              for (let len = Math.min(parts.length - 1, 4); len >= 1; len--) {
+                for (let start = 0; start <= parts.length - len; start++) {
+                  const candidate = parts.slice(start, start + len).join('_');
+                  try {
+                    const partRes = this['metricRegistry'].resolve(candidate);
+                    if (partRes && partRes.confidence !== 'unresolved'
+                        && !seenMetrics.has(partRes.canonical_id)) {
+                      metrics.push(partRes.canonical_id);
+                      seenMetrics.add(partRes.canonical_id);
+                      this.logger.log(
+                        `📊 Decomposed "${sq.metric}" -> found "${partRes.canonical_id}"`,
+                      );
+                    }
+                  } catch { /* skip */ }
+                }
+              }
+            }
+          }
+        } else {
+          // Registry unavailable — add raw as fallback
+          if (!seenMetrics.has(sq.metric)) {
+            metrics.push(sq.metric);
+            seenMetrics.add(sq.metric);
+          }
+        }
       }
     }
 
-    // When QUL provides no subQueries (standard for METRIC_LOOKUP — the few-shot
-    // examples intentionally omit them for simple queries), extract metric terms
-    // from normalizedQuery by resolving every token through MetricRegistryService.
-    //
-    // No stopword arrays or hardcoded keyword maps. The registry IS the filter:
-    //   resolve('amzn') → unresolved → skip
-    //   resolve('revenue') → exact → keep
-    //   resolve('net income') → exact → keep
-    //   resolve('revnue') → fuzzy_auto (0.88) → keep (handles typos)
+    // --- Layer 3: Extract from normalizedQuery when subQueries yield nothing ---
+    // This is the safety net for when Haiku produces no subQueries at all
+    // (e.g., simple queries where Haiku omits the optional field).
     if (metrics.length === 0 && qul.normalizedQuery && this['metricRegistry']) {
       const tokens = qul.normalizedQuery.toLowerCase().split(/\s+/).filter(t => t.length > 1);
 
@@ -1747,13 +1807,12 @@ Output ONLY the extracted tables, no commentary.`;
         candidates.push(`${tokens[i]}_${tokens[i + 1]}_${tokens[i + 2]}`);
       }
 
-      const seen = new Set<string>();
       for (const candidate of candidates) {
         try {
           const resolution = this['metricRegistry'].resolve(candidate);
-          if (resolution && resolution.confidence !== 'unresolved' && !seen.has(resolution.canonical_id)) {
+          if (resolution && resolution.confidence !== 'unresolved' && !seenMetrics.has(resolution.canonical_id)) {
             metrics.push(resolution.canonical_id);
-            seen.add(resolution.canonical_id);
+            seenMetrics.add(resolution.canonical_id);
           }
         } catch { /* resolve() threw — skip this candidate */ }
       }
@@ -1777,7 +1836,8 @@ Output ONLY the extracted tables, no commentary.`;
          'DEAL_ANALYSIS', 'DEAL_COMPARISON', 'MANAGEMENT_ASSESSMENT'].includes(qul.intent),
       needsComparison: qul.needsPeerComparison || qul.intent === 'METRIC_COMPARISON' || qul.intent === 'DEAL_COMPARISON',
       needsComputation: ['METRIC_LOOKUP', 'METRIC_TREND', 'METRIC_COMPARISON'].includes(qul.intent) ||
-        this.isRevenueClassMetric(metrics),
+        this.isRevenueClassMetric(metrics) ||
+        this.hasComputedMetrics(metrics),
       needsTrend: qul.intent === 'METRIC_TREND' ||
         (qul.intent === 'METRIC_LOOKUP' && this.isRevenueClassMetric(metrics)),
       needsPeerComparison: qul.needsPeerComparison,
@@ -1799,6 +1859,95 @@ Output ONLY the extracted tables, no commentary.`;
     ]);
     return metrics.some(m => REVENUE_CLASS.has(m.toLowerCase()));
   }
+
+  /**
+   * Check if any resolved metrics are computed type (have formulas).
+   * Computed metrics require the FinancialCalculatorService regardless
+   * of query intent. "Compare enterprise values" in a HYBRID_ANALYSIS
+   * still needs EV calculated deterministically.
+   */
+  private hasComputedMetrics(metrics: string[]): boolean {
+    if (!metrics || metrics.length === 0 || !this.metricRegistry) return false;
+    const registry = this.metricRegistry; // narrow for closure
+    return metrics.some(m => {
+      try {
+        const def = registry.getMetricById?.(m);
+        return def && def.type === 'computed';
+      } catch {
+        return false;
+      }
+    });
+  }
+
+  /**
+   * Intent-aware maxResults scaling for semantic retrieval.
+   * Narrative-heavy intents need more chunks for breadth; data lookups need fewer.
+   */
+  private computeSemanticMaxResults(
+    qulIntent: string,
+    intent: QueryIntent,
+    hasUploadedEntity: boolean,
+  ): number {
+    // Narrative-heavy: breadth across filing sections
+    if (['NARRATIVE_SEARCH', 'SEGMENT_ANALYSIS', 'CROSS_TRANSCRIPT',
+         'MANAGEMENT_ASSESSMENT'].includes(qulIntent)) {
+      return 15;
+    }
+    // Provocation and red flag: depth for non-obvious patterns
+    if (['PROVOCATION', 'RED_FLAG_DETECTION'].includes(qulIntent)) {
+      return 15;
+    }
+    // IC memo and hybrid: balanced
+    if (['HYBRID_ANALYSIS', 'IC_MEMO_GENERATION'].includes(qulIntent)) {
+      return 12;
+    }
+    // Comparison/trend
+    if (intent.needsComparison || intent.needsTrend || intent.needsPeerComparison) {
+      return 10;
+    }
+    // Deal analysis / uploaded docs
+    if (['DEAL_ANALYSIS', 'DEAL_COMPARISON'].includes(qulIntent) || hasUploadedEntity) {
+      return 10;
+    }
+    if (qulIntent === 'UPLOADED_DOC_QUERY') return 8;
+    // Data lookup: lightweight context
+    return 5;
+  }
+
+  /**
+   * Derive section-type filters from query content and intent.
+   * Returns undefined when no specific section is targeted — lets vector similarity decide.
+   */
+  private deriveSectionTypes(
+    qul: QueryUnderstanding,
+    intent: QueryIntent,
+  ): string[] | undefined {
+    const query = (qul.normalizedQuery || qul.rawQuery || '').toLowerCase();
+
+    if (query.includes('md&a') || query.includes('management discussion') ||
+        query.includes("management's discussion") || query.includes('item 7')) {
+      return ['mdna', 'management_discussion', 'item_7', 'item_7a'];
+    }
+    if ((query.includes('risk') && query.includes('factor')) ||
+        query.includes('item 1a')) {
+      return ['risk_factors', 'item_1a'];
+    }
+    if (query.includes('business overview') || query.includes('business description') ||
+        query.includes('company overview')) {
+      return ['business', 'item_1', 'business_overview'];
+    }
+    if (query.includes('legal') || query.includes('litigation')) {
+      return ['legal_proceedings', 'item_3'];
+    }
+    if (qul.intent === 'SEGMENT_ANALYSIS') {
+      return ['mdna', 'segment_information', 'notes_to_financial_statements'];
+    }
+    if (qul.intent === 'MANAGEMENT_ASSESSMENT') {
+      return ['management_discussion', 'executive_compensation', 'corporate_governance'];
+    }
+    return undefined; // No filter — let vector similarity decide
+  }
+
 
   /**
    * Build a RetrievalPlan from QUL data, using the MetricRegistry for metric resolution.
@@ -2003,10 +2152,14 @@ Output ONLY the extracted tables, no commentary.`;
       query: semanticQueryText,
       tickers: tickers.length > 0 ? tickers : undefined,
       documentTypes: filingTypes,
-      sectionTypes: undefined,
+      sectionTypes: this.deriveSectionTypes(qul, intent),
       period: intent.period,
-      maxResults: intent.needsComparison || intent.needsTrend ? 10 : (hasUploadedEntity ? 8 : 5),
-    } : undefined;
+      maxResults: this.computeSemanticMaxResults(qul.intent, intent, hasUploadedEntity),
+      // SemanticRetrieverService reads `numberOfResults` (its own interface),
+      // while RetrievalPlan uses `maxResults` (types/query-intent.ts).
+      // Set both so the value actually reaches the retriever.
+      numberOfResults: this.computeSemanticMaxResults(qul.intent, intent, hasUploadedEntity),
+    } as any : undefined;
 
     this.logger.log(`📋 QUL Plan: structured=${shouldBuildStructured}, semantic=${effectiveUseSemantic}, ` +
       `domain=${qul.domain}, uploadedEntity=${hasUploadedEntity}, tickers=[${tickers.join(',')}] (tickers may be patched by caller)`);
@@ -3363,7 +3516,7 @@ Output ONLY the extracted tables, no commentary.`;
         this.logger.log(`📄 Source 3: Vector search empty — checking long-context-fallback docs (ticker=${tickerForFallback || 'all'})`);
         const fallbackDocs = await this.documentIndexing.getLongContextFallbackText(
           options.tenantId,
-          { companyTicker: tickerForFallback, maxDocs: 2, maxCharsPerDoc: 6000 },
+          { companyTicker: tickerForFallback, maxDocs: 2, maxCharsPerDoc: 20000 },
         );
         if (fallbackDocs.length > 0) {
           this.logger.log(`📄 Source 3: Retrieved ${fallbackDocs.length} long-context-fallback docs`);

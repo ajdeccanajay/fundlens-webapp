@@ -394,4 +394,58 @@ Return ONLY valid JSON (no markdown fencing):
 
     return metrics;
   }
+
+  /**
+   * Convert vision extraction results to human-readable text representation.
+   * This text gets appended to the raw text S3 file so that long-context-fallback
+   * queries include financial tables that pdfplumber missed.
+   */
+  visionResultsToText(visionResults: VisionPageResult[]): string {
+    if (!visionResults || visionResults.length === 0) return '';
+
+    const sections: string[] = [];
+
+    for (const page of visionResults) {
+      for (const table of page.tables) {
+        const lines: string[] = [];
+        const title = table.title || table.tableType || 'Financial Table';
+        lines.push(`TABLE: ${title}${table.units ? ` (${table.units})` : ''}${table.currency ? ` [${table.currency}]` : ''}`);
+
+        // Headers
+        if (table.headers?.length > 0) {
+          for (const header of table.headers) {
+            lines.push('| ' + header.cells.join(' | ') + ' |');
+            lines.push('| ' + header.cells.map(() => '---').join(' | ') + ' |');
+          }
+        }
+
+        // Rows
+        for (const row of table.rows) {
+          const cells = row.cells.map(c => c.value || '');
+          lines.push(`| ${row.label} | ${cells.join(' | ')} |`);
+        }
+
+        if (lines.length > 1) {
+          sections.push(lines.join('\n'));
+        }
+      }
+
+      // Include chart data points as text
+      for (const chart of page.charts) {
+        if (chart.dataPoints?.length > 0) {
+          const lines: string[] = [`CHART: ${chart.title || chart.chartType}`];
+          for (const dp of chart.dataPoints) {
+            lines.push(`  ${dp.label}: ${dp.value}${dp.series ? ` (${dp.series})` : ''}`);
+          }
+          sections.push(lines.join('\n'));
+        }
+      }
+    }
+
+    if (sections.length === 0) return '';
+
+    return '\n\n=== FINANCIAL TABLES (extracted via document vision analysis) ===\n\n' +
+      sections.join('\n\n');
+  }
+
 }

@@ -1,8 +1,9 @@
-import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef, Optional } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BedrockService } from '../rag/bedrock.service';
 import { S3Service } from '../services/s3.service';
 import { BackgroundEnrichmentService } from './background-enrichment.service';
+import { VisionExtractionService } from './vision-extraction.service';
 import * as mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
 
@@ -18,6 +19,10 @@ Given the first 2-3 pages of a document, return a JSON response with:
 
 1. documentType: one of [sell-side-report, ic-memo, pe-cim, earnings-transcript,
    sec-10k, sec-10q, sec-8k, sec-proxy, fund-mandate, spreadsheet, presentation, generic]
+   CLASSIFICATION HINTS:
+   - If the document has a price target, rating (Buy/Sell/Hold/Overweight/Underweight), or analyst estimates, it is almost certainly a "sell-side-report"
+   - If the filename contains "SS", "Research", "Report", "Initiation", "Coverage", or a broker/bank name (e.g., DBS, Goldman, Morgan Stanley, JPM, Citi, Barclays, UBS), classify as "sell-side-report"
+   - Only classify as sec-10k or sec-10q if the document explicitly references SEC filing headers (e.g., "UNITED STATES SECURITIES AND EXCHANGE COMMISSION", "Form 10-K", "Form 10-Q")
 2. companyName: the primary company this document is about
 3. ticker: the stock ticker if identifiable
 4. summary: a 1-sentence description (e.g., "Goldman Sachs initiating coverage on Apple Inc.")
@@ -31,7 +36,7 @@ Given the first 2-3 pages of a document, return a JSON response with:
 
 Respond with ONLY valid JSON. No markdown, no explanation.
 
-Document text:
+{{FILENAME_HINT}}Document text:
 {{FIRST_PAGES}}`;
 
 /** Result of instant intelligence extraction (spec §3.1) */
@@ -76,6 +81,7 @@ export class DocumentIntelligenceService {
     private readonly s3: S3Service,
     @Inject(forwardRef(() => BackgroundEnrichmentService))
     private readonly backgroundEnrichment: BackgroundEnrichmentService,
+    @Optional() private readonly visionExtraction: VisionExtractionService,
   ) {}
 
   /**
@@ -107,7 +113,7 @@ export class DocumentIntelligenceService {
 
     // Step 2: Haiku classification + headline extraction (< 3 seconds)
     const firstPages = rawText.substring(0, 8000); // ~first 2-3 pages
-    const headline = await this.classifyAndExtract(firstPages);
+    const headline = await this.classifyAndExtract(firstPages, fileName);
     this.logger.log(
       `[${documentId}] Classified as ${headline.documentType} (${Date.now() - startTime}ms)`,
     );
@@ -155,12 +161,13 @@ export class DocumentIntelligenceService {
     );
 
     // Phase B: Background enrichment (chunking, embedding, vision, KB sync)
-    // Disabled by default on local dev (4GB heap = OOM when running concurrently with chat).
-    // Document is already queryable via long-context fallback after Phase A.
-    // On ECS (16GB+), set ENABLE_BACKGROUND_ENRICHMENT=true.
+    // Vision extraction is ALWAYS scheduled for PDFs — financial tables in analyst
+    // reports are rendered as positioned graphics that pdfplumber can't extract.
+    // Without vision, long-context-fallback queries miss critical data.
+    // Full enrichment (chunking, embedding, KB sync) requires ENABLE_BACKGROUND_ENRICHMENT=true.
+    const isPdf = fileType?.includes('pdf') || fileName?.toLowerCase().endsWith('.pdf');
     if (process.env.ENABLE_BACKGROUND_ENRICHMENT === 'true') {
-      // Delay Phase B by 30s — give the user's first query time to complete
-      // and free its memory before background enrichment starts Bedrock calls.
+      // Full enrichment: vision + chunking + embedding + KB sync
       const delayMs = parseInt(process.env.ENRICHMENT_DELAY_MS || '30000', 10);
       setTimeout(() => {
         this.backgroundEnrichment
@@ -170,8 +177,68 @@ export class DocumentIntelligenceService {
           );
       }, delayMs);
       this.logger.log(`[${documentId}] Background enrichment scheduled in ${delayMs}ms`);
+    } else if (isPdf && this.visionExtraction) {
+      // Vision-only extraction: extract financial tables from PDF pages
+      // and store as vision_text.txt alongside raw_text.txt.
+      // This runs even on local dev (4GB heap) because it's a single
+      // Bedrock call per batch, not the full chunking+embedding pipeline.
+      const visionDelayMs = parseInt(process.env.VISION_DELAY_MS || '5000', 10);
+      setTimeout(async () => {
+        try {
+          this.logger.log(`[${documentId}] Starting vision-only extraction for PDF`);
+          const keyPages = this.visionExtraction.identifyKeyPages(rawText, headline.documentType);
+          if (keyPages.length === 0) {
+            this.logger.log(`[${documentId}] No key pages identified for vision extraction`);
+            return;
+          }
+          this.logger.log(`[${documentId}] Vision: ${keyPages.length} key pages identified`);
+
+          const visionResults = await this.visionExtraction.extractFromPages(
+            s3Key, keyPages, headline.documentType,
+          );
+
+          if (visionResults.length > 0) {
+            // Store vision text to S3
+            const visionText = this.visionExtraction.visionResultsToText(visionResults);
+            if (visionText.length > 100) {
+              const visionTextS3Key = rawTextS3Key.replace(/raw_text\.txt$/, 'vision_text.txt');
+              await this.s3.uploadBuffer(
+                Buffer.from(visionText, 'utf-8'),
+                visionTextS3Key,
+                'text/plain',
+              );
+              await this.prisma.$executeRawUnsafe(
+                `UPDATE intel_documents SET vision_text_s3_key = $1, updated_at = NOW()
+                 WHERE document_id = $2::uuid`,
+                visionTextS3Key,
+                documentId,
+              );
+              this.logger.log(`[${documentId}] Vision text stored: ${visionText.length} chars → ${visionTextS3Key}`);
+            }
+
+            // Also persist extracted metrics
+            const flatMetrics = this.visionExtraction.flattenMetrics(visionResults);
+            for (const metric of flatMetrics) {
+              await this.prisma.$executeRawUnsafe(
+                `INSERT INTO intel_document_extractions (
+                  id, document_id, tenant_id, extraction_type, data,
+                  confidence, page_number, extraction_mode, created_at
+                ) VALUES (gen_random_uuid(), $1::uuid, $2::uuid, 'metric', $3::jsonb, $4, $5, 'pdf-native', NOW())`,
+                documentId, tenantId,
+                JSON.stringify(metric),
+                typeof metric.confidence === 'number' ? metric.confidence : (metric.confidence === 'high' ? 0.90 : 0.70),
+                metric.page_number || null,
+              ).catch(e => this.logger.warn(`[${documentId}] Vision metric persist failed: ${e.message}`));
+            }
+            this.logger.log(`[${documentId}] Vision-only extraction complete: ${flatMetrics.length} metrics, ${visionText.length} chars text`);
+          }
+        } catch (err) {
+          this.logger.warn(`[${documentId}] Vision-only extraction failed (non-fatal): ${err.message}`);
+        }
+      }, visionDelayMs);
+      this.logger.log(`[${documentId}] Vision-only extraction scheduled in ${visionDelayMs}ms (ENABLE_BACKGROUND_ENRICHMENT!=true)`);
     } else {
-      this.logger.log(`[${documentId}] Background enrichment skipped (ENABLE_BACKGROUND_ENRICHMENT!=true). Document queryable via long-context fallback.`);
+      this.logger.log(`[${documentId}] Background enrichment skipped (ENABLE_BACKGROUND_ENRICHMENT!=true${isPdf ? ', no vision service' : ', not PDF'}). Document queryable via long-context fallback.`);
     }
 
     return {
@@ -334,7 +401,7 @@ export class DocumentIntelligenceService {
    * Single LLM call combining classification AND headline extraction.
    * Uses Haiku for speed — 5-second budget demands it.
    */
-  private async classifyAndExtract(firstPages: string): Promise<{
+  private async classifyAndExtract(firstPages: string, fileName?: string): Promise<{
     documentType: string;
     companyName: string | null;
     ticker: string | null;
@@ -342,15 +409,20 @@ export class DocumentIntelligenceService {
     metrics: HeadlineMetric[];
     suggestedQuestions: string[];
   }> {
-    const prompt = INSTANT_INTELLIGENCE_PROMPT.replace(
-      '{{FIRST_PAGES}}',
-      firstPages,
-    );
+    // Build filename hint for classification
+    let filenameHint = '';
+    if (fileName) {
+      filenameHint = `Filename: "${fileName}"\n`;
+    }
+
+    const prompt = INSTANT_INTELLIGENCE_PROMPT
+      .replace('{{FILENAME_HINT}}', filenameHint)
+      .replace('{{FIRST_PAGES}}', firstPages);
 
     try {
       const response = await this.bedrock.invokeClaude({
         prompt,
-        modelId: 'us.anthropic.claude-3-haiku-20240307-v1:0',
+        modelId: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
         max_tokens: 1024,
         temperature: 0,
       });

@@ -60,6 +60,8 @@ export class DocumentRAGService {
     try {
       // Generate query embedding
       const queryEmbedding = await this.bedrock.generateEmbedding(query);
+      // Serialize embedding array to pgvector string format for $queryRawUnsafe
+      const embeddingStr = `[${queryEmbedding.join(',')}]`;
 
       // Build SQL query with tenant filtering.
       // When a ticker is specified: return chunks matching that ticker
@@ -68,8 +70,8 @@ export class DocumentRAGService {
       // while general docs (e.g., fund guidelines) are still searchable.
       const tickerFilter = ticker ? `AND (c.ticker = $3 OR c.ticker IS NULL)` : '';
       const params = ticker
-        ? [queryEmbedding, tenantId, ticker, topK]
-        : [queryEmbedding, tenantId, topK];
+        ? [embeddingStr, tenantId, ticker, topK]
+        : [embeddingStr, tenantId, topK];
 
       const sqlQuery = `
         SELECT 

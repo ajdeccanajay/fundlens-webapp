@@ -4,8 +4,8 @@
   "executionRoleArn": "arn:aws:iam::588082972864:role/fundlens-production-ecs-execution-role",
   "networkMode": "awsvpc",
   "requiresCompatibilities": ["FARGATE"],
-  "cpu": "2048",
-  "memory": "4096",
+  "cpu": "4096",
+  "memory": "8192",
   "containerDefinitions": [
     {
       "name": "python-parser",
@@ -49,8 +49,8 @@
     {
       "name": "backend",
       "image": "588082972864.dkr.ecr.us-east-1.amazonaws.com/fundlens-backend:latest",
-      "cpu": 1536,
-      "memory": 3072,
+      "cpu": 3584,
+      "memory": 6144,
       "portMappings": [
         {
           "containerPort": 3000,
@@ -74,7 +74,11 @@
         { "name": "CACHE_TTL_MS", "value": "86400000" },
         { "name": "COGNITO_REGION", "value": "us-east-1" },
         { "name": "NODE_ENV", "value": "production" },
-        { "name": "BEDROCK_CHUNKS_BUCKET", "value": "fundlens-bedrock-chunks" }
+        { "name": "BEDROCK_CHUNKS_BUCKET", "value": "fundlens-bedrock-chunks" },
+        { "name": "ENABLE_BACKGROUND_ENRICHMENT", "value": "true" },
+        { "name": "ENABLE_VISION_EXTRACTION", "value": "true" },
+        { "name": "ENRICHMENT_DELAY_MS", "value": "60000" },
+        { "name": "VISION_DELAY_MS", "value": "10000" }
       ],
       "secrets": [
         {

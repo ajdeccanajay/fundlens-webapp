@@ -311,7 +311,7 @@ JSON format:
     try {
       const response = await this.bedrockService.invokeClaude({
         prompt,
-        modelId: 'anthropic.claude-3-haiku-20240307-v1:0',
+        modelId: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
         max_tokens: 500,
       });
 
@@ -499,7 +499,7 @@ Format:
     try {
       const response = await this.bedrockService.invokeClaude({
         prompt,
-        modelId: 'anthropic.claude-3-haiku-20240307-v1:0',
+        modelId: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
         max_tokens: 2000,
       });
 
@@ -538,7 +538,7 @@ Format:
     try {
       const response = await this.bedrockService.invokeClaude({
         prompt,
-        modelId: 'anthropic.claude-3-haiku-20240307-v1:0',
+        modelId: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
         max_tokens: 1500,
       });
 

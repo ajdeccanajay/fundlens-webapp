@@ -100,6 +100,24 @@ export class BackgroundEnrichmentService {
     const pipelineStart = Date.now();
     this.logger.log(`━━━ Starting enrichment pipeline for ${documentId} ━━━`);
 
+    // Memory check: log heap usage and skip if dangerously high
+    const heapBefore = process.memoryUsage();
+    const heapUsedMB = heapBefore.heapUsed / (1024 * 1024);
+    const heapTotalMB = heapBefore.heapTotal / (1024 * 1024);
+    this.logger.log(`[${documentId}] Heap before enrichment: ${heapUsedMB.toFixed(0)}MB used / ${heapTotalMB.toFixed(0)}MB total`);
+
+    // If heap is already above 80% of a 4GB limit, skip enrichment to avoid OOM
+    if (heapUsedMB > 3200) {
+      this.logger.warn(`[${documentId}] Skipping enrichment — heap ${heapUsedMB.toFixed(0)}MB > 3200MB safety limit`);
+      return;
+    }
+
+    // Hint GC to reclaim before starting heavy work
+    if (global.gc) {
+      global.gc();
+      this.logger.log(`[${documentId}] GC triggered before enrichment`);
+    }
+
     // Fetch document record once for routing decisions
     const doc = await this.fetchDocumentRecord(documentId, tenantId);
     if (!doc) {
@@ -484,8 +502,8 @@ export class BackgroundEnrichmentService {
 
     // Heap guard
     const heapUsedMB = process.memoryUsage().heapUsed / (1024 * 1024);
-    if (heapUsedMB > 1500) {
-      this.logger.warn(`[${documentId}] Skipping vision — heap ${heapUsedMB.toFixed(0)}MB > 1.5GB`);
+    if (heapUsedMB > 3000) {
+      this.logger.warn(`[${documentId}] Skipping vision — heap ${heapUsedMB.toFixed(0)}MB > 3GB`);
       return 'heap-guard';
     }
 
@@ -550,6 +568,31 @@ export class BackgroundEnrichmentService {
       if (visionFlags.length > 0) {
         await this.documentFlagsPersistence.persist(documentId, tenantId, doc.company_ticker, visionFlags)
           .catch(() => {});
+      }
+
+      // Append vision-extracted text to the raw text S3 file so that
+      // long-context-fallback queries include financial tables that pdfplumber missed.
+      const visionText = this.visionExtraction.visionResultsToText(visionResults);
+      if (visionText.length > 100 && doc.raw_text_s3_key) {
+        try {
+          // Store vision text as a separate S3 key (sibling of raw_text.txt)
+          const visionTextS3Key = doc.raw_text_s3_key.replace(/raw_text\.txt$/, 'vision_text.txt');
+          await this.s3.uploadBuffer(
+            Buffer.from(visionText, 'utf-8'),
+            visionTextS3Key,
+            'text/plain',
+          );
+          // Record the vision text S3 key on the document
+          await this.prisma.$executeRawUnsafe(
+            `UPDATE intel_documents SET vision_text_s3_key = $1, updated_at = NOW()
+             WHERE document_id = $2::uuid`,
+            visionTextS3Key,
+            documentId,
+          );
+          this.logger.log(`[${documentId}] Vision text stored: ${visionText.length} chars → ${visionTextS3Key}`);
+        } catch (e) {
+          this.logger.warn(`[${documentId}] Vision text storage failed (non-fatal): ${e.message}`);
+        }
       }
 
       this.logger.log(`[${documentId}] Vision: ${metricCount} metrics from ${visionResults.length} pages`);

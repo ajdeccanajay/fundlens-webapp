@@ -220,7 +220,7 @@ export class DocumentIndexingService {
 
       if (options.companyTicker) {
         sql = `
-          SELECT
+          SELECT DISTINCT ON (e.data->>'metric_key', COALESCE(e.data->>'period', ''), d.file_name)
             e.id,
             e.document_id AS "documentId",
             e.data,
@@ -236,12 +236,12 @@ export class DocumentIndexingService {
             AND UPPER(d.company_ticker) = UPPER($2)
             AND e.extraction_type IN ('metric', 'headline')
             AND e.data->>'metric_key' = ANY($3::text[])
-          ORDER BY e.confidence DESC
+          ORDER BY e.data->>'metric_key', COALESCE(e.data->>'period', ''), d.file_name, e.confidence DESC
         `;
         params = [tenantId, options.companyTicker, metricKeys];
       } else {
         sql = `
-          SELECT
+          SELECT DISTINCT ON (e.data->>'metric_key', COALESCE(e.data->>'period', ''), d.file_name)
             e.id,
             e.document_id AS "documentId",
             e.data,
@@ -256,7 +256,7 @@ export class DocumentIndexingService {
           WHERE e.tenant_id = $1::uuid
             AND e.extraction_type IN ('metric', 'headline')
             AND e.data->>'metric_key' = ANY($2::text[])
-          ORDER BY e.confidence DESC
+          ORDER BY e.data->>'metric_key', COALESCE(e.data->>'period', ''), d.file_name, e.confidence DESC
         `;
         params = [tenantId, metricKeys];
       }
@@ -317,7 +317,8 @@ export class DocumentIndexingService {
 
       if (options.companyTicker) {
         sql = `
-          SELECT d.document_id, d.file_name, d.company_ticker, d.raw_text_s3_key
+          SELECT d.document_id, d.file_name, d.company_ticker, d.raw_text_s3_key,
+                 d.vision_text_s3_key
           FROM intel_documents d
           WHERE d.tenant_id = $1::uuid
             AND d.processing_mode = 'long-context-fallback'
@@ -330,7 +331,8 @@ export class DocumentIndexingService {
         params = [tenantId, options.companyTicker, maxDocs];
       } else {
         sql = `
-          SELECT d.document_id, d.file_name, d.company_ticker, d.raw_text_s3_key
+          SELECT d.document_id, d.file_name, d.company_ticker, d.raw_text_s3_key,
+                 d.vision_text_s3_key
           FROM intel_documents d
           WHERE d.tenant_id = $1::uuid
             AND d.processing_mode = 'long-context-fallback'
@@ -353,7 +355,26 @@ export class DocumentIndexingService {
         try {
           const buf = await this.s3.getFileBuffer(doc.raw_text_s3_key);
           const fullText = buf.toString('utf-8');
-          const content = fullText.substring(0, maxCharsPerDoc);
+          let content = fullText.substring(0, maxCharsPerDoc);
+
+          // Append vision-extracted text if available — financial tables that
+          // pdfplumber missed (analyst report charts, positioned graphics)
+          if (doc.vision_text_s3_key) {
+            try {
+              const visionBuf = await this.s3.getFileBuffer(doc.vision_text_s3_key);
+              const visionText = visionBuf.toString('utf-8');
+              if (visionText.length > 100) {
+                // Reserve space for vision text within the char budget
+                const visionBudget = Math.min(visionText.length, Math.floor(maxCharsPerDoc * 0.4));
+                const textBudget = maxCharsPerDoc - visionBudget;
+                content = fullText.substring(0, textBudget) + visionText.substring(0, visionBudget);
+                this.logger.log(`📄 Appended ${visionBudget} chars of vision text for ${doc.file_name}`);
+              }
+            } catch (ve) {
+              this.logger.debug(`📄 Vision text not available for ${doc.file_name}: ${ve.message}`);
+            }
+          }
+
           results.push({
             documentId: doc.document_id,
             fileName: doc.file_name,

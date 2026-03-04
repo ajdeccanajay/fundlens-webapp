@@ -1,0 +1,718 @@
+# COMPREHENSIVE SYNONYM EXPANSION — Addendum to Kiro Spec v2
+#
+# This file contains the ADDITIONAL synonyms to add to each metric definition
+# in the existing YAML files. These cover:
+#
+# 1. Analyst colloquial language ("top line", "bottom line", "burn rate")
+# 2. SEC filing raw labels (what actually appears in 10-K/10-Q statements)
+# 3. IFRS terminology (for non-US filers)
+# 4. Private equity terminology ("run-rate", "adjusted EBITDA")
+# 5. Abbreviations and shorthand ("rev", "NI", "GP", "opex")
+# 6. Common misspellings and alternate spellings
+# 7. Amazon/tech-specific labels ("net product sales", "net service sales")
+# 8. Storage-normalized forms are NOT needed — getSynonymsForDbColumn()
+#    auto-generates them (e.g., "Net Sales" → "net_sales")
+#
+# normalizeForLookup() strips all non-alphanumeric chars and lowercases.
+# So "Net Revenue" and "net_revenue" and "NET REVENUE" all normalize to
+# "netrevenue" and match identically. We only need to add semantically
+# distinct synonyms — not formatting variants.
+#
+# INSTRUCTIONS FOR KIRO:
+# For each metric below, ADD these synonyms to the existing synonyms list
+# in the corresponding YAML file. Do not remove existing synonyms.
+# The normalization chain handles case/spacing/underscores automatically.
+
+# ═══════════════════════════════════════════════════════════════════════
+# INCOME STATEMENT — income_statement.yaml
+# ═══════════════════════════════════════════════════════════════════════
+
+revenue:
+  # EXISTING: Revenue, Revenues, Net Revenue, Net Revenues, Sales, Net Sales,
+  #           Total Sales, Operating Revenues, Turnover
+  add_synonyms:
+  # --- Analyst colloquial ---
+  - Top Line
+  - Top-line
+  - Topline Revenue
+  # --- SEC filing raw labels (company-specific) ---
+  - Net Product Sales                  # Amazon 10-K
+  - Net Service Sales                  # Amazon 10-K (AWS + services)
+  - Net Product and Service Sales      # Amazon 10-K combined
+  - Product Revenue                    # Tech companies
+  - Service Revenue                    # Tech/SaaS companies
+  - Total Net Revenue                  # Common in consumer
+  - Total Net Sales                    # Common in retail (Costco, Walmart)
+  - Total Revenues                     # Insurance, utilities
+  - Net Revenues                       # Already present but adding for emphasis
+  - Revenue from Contracts with Customers  # ASC 606 label
+  - Revenue from Contract with Customers   # Singular variant
+  # --- IFRS ---
+  - Revenue from Continuing Operations
+  - Revenue from Ordinary Activities
+  # --- Abbreviations ---
+  - Rev
+  - Revs
+  # --- PE/LBO context ---
+  - Run Rate Revenue
+  - Pro Forma Revenue
+  - Annualized Revenue
+  - LTM Revenue
+  - NTM Revenue
+
+cost_of_goods_sold:
+  add_synonyms:
+  - Cost of Sales
+  - Cost of Products Sold
+  - Cost of Product Sales              # Amazon
+  - Cost of Service Sales              # Amazon (AWS)
+  - Cost of Net Revenue
+  - Direct Costs
+  - Manufacturing Costs
+  - Cost of Goods and Services
+  - Cost of Merchandise Sold           # Retail
+  - Food and Beverage Costs            # Restaurants
+  - Cost of Operations                 # Utilities/energy
+  - Fuel Costs                         # Airlines
+  - Claims and Benefits                # Insurance
+
+gross_profit:
+  add_synonyms:
+  - Gross Income
+  - Gross Earnings
+  - Gross Surplus
+  - GP                                 # Abbreviation
+
+operating_income:
+  add_synonyms:
+  - Operating Profit
+  - Operating Earnings
+  - Income from Operations
+  - Operating Surplus
+  - Profit from Operations
+  - Op Income
+  - Op Profit
+  # --- IFRS ---
+  - Profit from Operating Activities
+  - Results from Operating Activities
+
+net_income:
+  add_synonyms:
+  # --- Analyst colloquial ---
+  - Bottom Line
+  - Bottom-line
+  - Bottomline
+  # --- SEC filing labels ---
+  - Net Income Attributable to Common Shareholders
+  - Net Income Attributable to Common Stockholders
+  - Net Income Available to Common Shareholders
+  - Profit for the Period              # IFRS
+  - Profit for the Year                # IFRS
+  - Profit Attributable to Owners
+  - Net Income from Continuing Operations
+  - Consolidated Net Income
+  # --- Abbreviations ---
+  - NI
+  # --- PE context ---
+  - Adjusted Net Income
+  - Pro Forma Net Income
+  - Normalized Net Income
+
+ebitda:
+  add_synonyms:
+  # --- PE/Credit essential ---
+  - Adjusted EBITDA
+  - Adj EBITDA
+  - Adj. EBITDA
+  - Pro Forma EBITDA
+  - Run Rate EBITDA
+  - LTM EBITDA
+  - NTM EBITDA
+  - Normalized EBITDA
+  - Cash EBITDA
+  - Covenant EBITDA                    # Credit/leveraged finance
+  - Bank EBITDA                        # Credit agreements
+  - Credit Agreement EBITDA
+  # --- Common variants ---
+  - Earnings Before Interest Taxes Depreciation and Amortization
+
+ebit:
+  add_synonyms:
+  - Earnings Before Interest and Tax
+  - Operating Earnings
+  - Op Earnings
+  # Note: "Operating Profit" already maps to operating_income which is
+  # essentially the same metric. EBIT and operating_income are synonymous
+  # in most contexts. The registry handles this via synonym collision rules.
+
+interest_expense:
+  add_synonyms:
+  - Financing Costs
+  - Debt Service Cost
+  - Interest on Borrowings
+  - Interest on Debt
+  - Cost of Debt
+  # --- PE context ---
+  - Cash Interest
+  - Cash Interest Expense
+  - Total Interest Expense
+  - Senior Debt Interest
+  - Mezzanine Interest
+
+pretax_income:
+  add_synonyms:
+  - Pre-tax Income
+  - Pre-Tax Profit
+  - Profit Before Tax                  # IFRS
+  - PBT
+  - Income Before Income Taxes
+  - Earnings Before Tax
+
+income_taxes:
+  add_synonyms:
+  - Tax Expense
+  - Tax Provision
+  - Income Tax
+  - Taxes Paid
+  - Effective Tax
+  - Cash Taxes
+  - Cash Tax Expense                   # PE adjustment context
+
+sganda:
+  add_synonyms:
+  - Selling General and Administrative
+  - Selling General & Administrative Expenses
+  - General and Administrative
+  - G&A
+  - G and A
+  - Operating Expenses                 # Often used loosely for SG&A
+  - Opex                               # Colloquial (careful: sometimes means total opex)
+  - Sales and Marketing Expense
+  - Marketing Expense
+
+randd:
+  add_synonyms:
+  - Research and Development
+  - R&D Expense
+  - R and D
+  - Technology and Content              # Amazon label
+  - Product Development Expense
+  - Development Costs
+  - Innovation Spend
+
+stock_based_compensation:
+  add_synonyms:
+  - Share-Based Compensation
+  - Equity Compensation
+  - Stock Comp
+  - SBC Expense
+  - Non-Cash Compensation
+  - Option Expense
+  - RSU Expense
+
+depreciation_amortization:
+  add_synonyms:
+  - Depreciation and Amortization
+  - D and A
+  - Depr & Amort
+  - Depreciation
+  - Amortization
+  - Non-Cash D&A
+
+# ═══════════════════════════════════════════════════════════════════════
+# BALANCE SHEET — balance_sheet.yaml
+# ═══════════════════════════════════════════════════════════════════════
+
+cash_and_cash_equivalents:
+  add_synonyms:
+  - Cash and Short-term Investments
+  - Cash Position
+  - Liquidity
+  - Cash Balance
+  - Cash Holdings
+  - Cash Reserves
+  - Treasury Cash
+  - Cash Pile
+  - Cash Hoard                         # Analyst slang (Apple, Google)
+  - Net Cash                           # Sometimes means cash minus debt
+
+total_assets:
+  add_synonyms:
+  - Asset Base
+  - Total Asset Base
+  - Consolidated Assets
+
+total_liabilities:
+  add_synonyms:
+  - Total Obligations
+  - Total Debt and Liabilities         # Loose usage
+  - Liability Base
+
+total_equity:
+  add_synonyms:
+  - Stockholders Equity
+  - Stockholders' Equity
+  - Shareholder Equity
+  - Net Worth
+  - Net Assets                         # IFRS
+  - Book Equity
+  - Tangible Book Value                # Banks
+  - TBV                                # Banks abbreviation
+
+long_term_debt:
+  add_synonyms:
+  - LT Debt
+  - Long-term Borrowings
+  - Senior Debt
+  - Senior Notes
+  - Term Loan
+  - Term Loan B
+  - High Yield Debt
+  - Bonds Outstanding
+  - Notes Outstanding
+  - Unsecured Notes
+  - Secured Debt
+  # --- PE context ---
+  - First Lien Debt
+  - Second Lien Debt
+  - Mezzanine Debt
+  - Subordinated Debt
+  - Sub Debt
+  - PIK Notes
+  - Unitranche
+
+short_term_debt:
+  add_synonyms:
+  - Current Debt
+  - Current Portion of Debt
+  - Current Maturities
+  - Revolver Balance
+  - Revolving Credit Facility
+  - Commercial Paper
+  - CP Outstanding
+  - Bridge Loan
+
+accounts_receivable:
+  add_synonyms:
+  - AR
+  - Trade AR
+  - Receivables
+  - Amounts Due from Customers
+  - Billed Revenue
+  - Unbilled Revenue
+  - Contract Receivables
+  # --- Analyst shorthand ---
+  - Days Sales Outstanding             # DSO query triggers AR
+  - DSO
+
+inventory:
+  add_synonyms:
+  - Inventories
+  - Merchandise Inventory
+  - Finished Goods Inventory
+  - WIP
+  - Work-in-Process
+  - Inventory Balance
+  # --- Analyst shorthand ---
+  - Days Inventory Outstanding
+  - DIO
+
+accounts_payable:
+  add_synonyms:
+  - AP
+  - Trade AP
+  - Payables
+  - Amounts Due to Suppliers
+  - Trade and Other Payables           # IFRS
+  # --- Analyst shorthand ---
+  - Days Payable Outstanding
+  - DPO
+
+goodwill:
+  add_synonyms:
+  - GW
+  - Acquisition Goodwill
+  - Goodwill and Intangibles           # Often grouped
+  - Goodwill Impairment                # Triggers goodwill lookup for context
+
+property_plant_equipment:
+  add_synonyms:
+  - PPE
+  - PP and E
+  - Fixed Assets Net
+  - Net Fixed Assets
+  - Tangible Fixed Assets
+  - Capital Assets
+  - Plant and Equipment
+
+# ═══════════════════════════════════════════════════════════════════════
+# CASH FLOW — cash_flow.yaml
+# ═══════════════════════════════════════════════════════════════════════
+
+net_cash_provided_by_operating_activities:
+  add_synonyms:
+  - Operating Cash Flow
+  - Cash from Operations
+  - Cash Generated from Operations
+  - OCF
+  - Operational Cash Flow
+  # --- PE context ---
+  - Cash Generation
+  - Cash Generative Capacity
+  - Cash Conversion                    # Sometimes means OCF/EBITDA
+
+capital_expenditures:
+  add_synonyms:
+  - Capex
+  - Cap Ex
+  - Capital Spending
+  - Capital Investment
+  - PP&E Purchases
+  - Property and Equipment Purchases
+  - Growth Capex
+  - Maintenance Capex
+  - Total Capex
+
+free_cash_flow:
+  add_synonyms:
+  - Free Cash
+  - Levered Free Cash Flow
+  - LFCF
+  - Unlevered Free Cash Flow
+  - UFCF
+  - FCF to Equity
+  - FCF to Firm
+  - Cash Flow After Capex
+  - Discretionary Cash Flow
+  # --- PE context ---
+  - Cash Available for Debt Service
+  - CFADS
+  - Cash Flow Available for Distribution
+  - Distributable Cash Flow
+
+dividends_paid_common:
+  add_synonyms:
+  - Dividend
+  - Dividends
+  - Dividend Payment
+  - Cash Dividends
+  - Shareholder Distributions
+  - Distributions to Shareholders
+  - Payout
+  # --- PE context ---
+  - LP Distributions
+  - Partner Distributions
+  - Fund Distributions
+
+equity_repurchased:
+  add_synonyms:
+  - Buyback
+  - Buybacks
+  - Share Repurchase
+  - Share Repurchases
+  - Stock Buyback
+  - Stock Buybacks
+  - Repurchase Program
+  - Capital Return                     # Loose usage (buybacks + dividends)
+
+# ═══════════════════════════════════════════════════════════════════════
+# COMPUTED METRICS — all_computed_metrics.yaml
+# ═══════════════════════════════════════════════════════════════════════
+
+gross_margin_pct:
+  add_synonyms:
+  - Gross Margin
+  - Gross Margins
+  - Gross Profit Margin
+  - Gross Profit %
+  - Product Margin                     # Retail/consumer
+  - Contribution Margin                # Sometimes used loosely
+
+operating_margin_pct:
+  add_synonyms:
+  - Operating Margin
+  - Operating Margins
+  - Op Margin
+  - OPM
+  - EBIT Margin
+  - Operating Profit Margin
+  - Operating Income Margin
+
+ebitda_margin_pct:
+  add_synonyms:
+  - EBITDA Margin
+  - EBITDA Margins
+  - Cash Margin
+  - Cash Flow Margin                   # Loose usage
+
+net_margin_pct:
+  add_synonyms:
+  - Net Margin
+  - Net Margins
+  - Net Profit Margin
+  - Net Income Margin
+  - Profit Margin
+  - Bottom Line Margin
+  - After-Tax Margin
+
+return_on_equity:
+  add_synonyms:
+  - ROE
+  - Return on Shareholders Equity
+  - Return on Book Equity
+  - Equity Return
+
+return_on_assets:
+  add_synonyms:
+  - ROA
+  - Return on Total Assets
+  - Asset Return
+  - Asset Productivity
+
+return_on_invested_capital:
+  add_synonyms:
+  - ROIC
+  - Return on Capital
+  - Return on Capital Employed
+  - ROCE
+  - Return on Net Assets
+  - RONA
+  - Capital Efficiency
+
+net_debt:
+  add_synonyms:
+  - Net Debt Position
+  - Net Financial Debt
+  - Net Borrowings
+  - Debt Net of Cash
+  - Total Debt Less Cash
+
+total_debt:
+  add_synonyms:
+  - Gross Debt
+  - Total Borrowings
+  - Total Financial Debt
+  - Debt Outstanding
+  - Aggregate Debt
+  - Total Funded Debt                  # Credit context
+
+net_debt_to_ebitda:
+  add_synonyms:
+  - Leverage
+  - Leverage Ratio
+  - Net Leverage
+  - Net Leverage Ratio
+  - Debt to EBITDA
+  - ND/EBITDA
+  - Turns of Leverage                  # PE slang ("3 turns")
+  - Leverage Multiple
+  - Net Debt Multiple
+  # --- Credit context ---
+  - Senior Leverage
+  - Total Leverage
+  - First Lien Leverage
+  - Secured Leverage
+
+debt_to_equity:
+  add_synonyms:
+  - D/E
+  - D/E Ratio
+  - Debt-to-Equity
+  - Gearing Ratio
+  - Gearing
+  - Financial Leverage
+
+interest_coverage:
+  add_synonyms:
+  - Interest Coverage Ratio
+  - ICR
+  - Times Interest Earned
+  - TIE
+  - EBITDA to Interest
+  - EBITDA to Cash Interest
+  - Fixed Charge Coverage
+  - FCCR                               # Fixed charge coverage ratio
+  - Debt Service Coverage
+  - DSCR
+
+current_ratio:
+  add_synonyms:
+  - Current Ratio
+  - Working Capital Ratio
+  - Liquidity Ratio
+  - Short-term Solvency
+
+quick_ratio:
+  add_synonyms:
+  - Quick Ratio
+  - Acid Test
+  - Acid-Test Ratio
+  - Liquid Ratio
+
+enterprise_value:
+  add_synonyms:
+  - EV
+  - Enterprise Val
+  - Firm Value
+  - Total Enterprise Value
+  - TEV
+
+ev_to_ebitda:
+  add_synonyms:
+  - EV/EBITDA
+  - Enterprise Value to EBITDA
+  - EBITDA Multiple
+  - Valuation Multiple
+  - Trading Multiple
+  # --- PE context ---
+  - Entry Multiple                     # At acquisition
+  - Exit Multiple                      # At sale
+
+earnings_per_share:
+  add_synonyms:
+  - EPS
+  - Earnings Per Share
+  - Diluted EPS
+  - Basic EPS
+  - GAAP EPS
+  - Non-GAAP EPS
+  - Adjusted EPS
+  - Pro Forma EPS
+
+# ═══════════════════════════════════════════════════════════════════════
+# PE/FUND METRICS — return_and_fund_metrics.yaml
+# ═══════════════════════════════════════════════════════════════════════
+
+moic:
+  add_synonyms:
+  - Gross MOIC
+  - Net MOIC
+  - Fund MOIC
+  - Deal MOIC
+  - Realized MOIC
+  - Unrealized MOIC
+  - Blended MOIC
+  - Total Return Multiple
+  - Investment Multiple
+  - Cash-on-Cash Return
+  - CoC
+
+irr:
+  add_synonyms:
+  - Gross IRR
+  - Net IRR
+  - Fund IRR
+  - Deal IRR
+  - Realized IRR
+  - Since-Inception IRR
+  - Pooled IRR
+  - PME IRR                            # Public Market Equivalent
+  - Annualized Return
+  - Compound Annual Return
+  - CAGR                               # Sometimes used interchangeably
+
+entry_multiple:
+  add_synonyms:
+  - Purchase Price Multiple
+  - Acquisition EV/EBITDA
+  - Buy-in Valuation
+  - Entry Price
+  - Closing Multiple
+  - Transaction Multiple
+
+exit_multiple:
+  add_synonyms:
+  - Sale Multiple
+  - Disposition Multiple
+  - Realization Valuation
+  - Exit Price
+  - Exit EV/EBITDA
+  - Terminal Multiple
+
+leverage_at_entry:
+  add_synonyms:
+  - Opening Leverage
+  - Day One Leverage
+  - Closing Leverage
+  - LBO Leverage
+  - Acquisition Leverage
+  - Initial Leverage
+  - Total Leverage at Close
+  - Senior Leverage at Close
+
+equity_contribution:
+  add_synonyms:
+  - Equity Check Size
+  - Equity Investment
+  - Sponsor Check
+  - GP Commitment
+  - Co-Investment
+  - Equity Co-Invest
+  - Total Equity Invested
+  - Equity Funded
+
+# ═══════════════════════════════════════════════════════════════════════
+# SECTOR-SPECIFIC — info_tech.yaml
+# ═══════════════════════════════════════════════════════════════════════
+
+# annual_recurring_revenue (if exists):
+annual_recurring_revenue:
+  add_synonyms:
+  - ARR
+  - Annual Recurring Revenue
+  - Annualized Recurring Revenue
+  - Run Rate ARR
+  - Ending ARR
+  - ARR Growth
+
+# net_revenue_retention (if exists):
+net_revenue_retention:
+  add_synonyms:
+  - NRR
+  - Net Dollar Retention
+  - NDR
+  - Dollar-Based Net Retention
+  - DBNER
+  - Net Retention Rate
+  - Revenue Retention
+  - Expansion Revenue Rate
+
+# ═══════════════════════════════════════════════════════════════════════
+# ANALYTICAL CONCEPTS — analytical_concepts.yaml
+# Add triggers for natural language queries
+# ═══════════════════════════════════════════════════════════════════════
+
+leverage:
+  add_triggers:
+  - how much debt does it have
+  - what's the debt situation
+  - is it overleveraged
+  - debt maturity profile
+  - refinancing risk
+  - covenant headroom
+  - how many turns of leverage
+  - what's the leverage
+
+profitability:
+  add_triggers:
+  - how profitable
+  - is it profitable
+  - margin profile
+  - margin structure
+  - earnings quality
+  - how much does it make
+  - what are the margins
+  - what's the margin
+
+liquidity:
+  add_triggers:
+  - how liquid
+  - cash position
+  - can it pay its bills
+  - short-term solvency
+  - working capital position
+  - how much cash does it have
+  - what's the cash position
+  - cash runway
+  - burn rate
+  - months of cash

@@ -50,6 +50,8 @@ export interface FinancialAnalysisContext {
   unifyingInstruction?: string;
   modelTier: 'haiku' | 'sonnet' | 'opus';
   tenantId?: string;
+  /** QUL intent string (e.g. 'NARRATIVE_SEARCH', 'HYBRID_ANALYSIS') for intent-aware synthesis */
+  qulIntent?: string;
 }
 
 // ── SynthesisResult (Req 8.7) ───────────────────────────────────────────
@@ -272,7 +274,7 @@ export class HybridSynthesisService {
 
       // Format ALL narratives with continuous [N] numbering matching ctx.narratives order
       // (extractCitations maps [N] → ctx.narratives[N-1], so numbering must match)
-      const allNarrativeBlock = this.formatNarratives(ctx.narratives);
+      const allNarrativeBlock = this.formatNarratives(ctx.narratives, ctx.qulIntent);
 
       if (uploadedDocNarratives.length > 0 && secNarratives.length > 0) {
         // Both sources present — instruct LLM to cross-reference
@@ -364,6 +366,30 @@ export class HybridSynthesisService {
         }
       }
 
+      // Fix 16: Intent-aware synthesis instructions for narrative depth
+      if (ctx.qulIntent) {
+        const narrativeInstruction = this.getNarrativeSynthesisInstruction(ctx.qulIntent);
+        if (narrativeInstruction) {
+          sections.push(narrativeInstruction);
+        }
+      }
+
+      // Fix 19: Always-on Investment Committee Challenge
+      // Ensures every narrative response ends with pointed, data-grounded questions
+      if ((ctx.narratives?.length || 0) > 0) {
+        sections.push(
+          '',
+          '=== INVESTMENT COMMITTEE CHALLENGE (ALWAYS INCLUDE) ===',
+          'Conclude with 2-3 pointed questions that an investment committee would ask.',
+          'Requirements:',
+          '- GROUNDED in specific data from the filings (cite the numbers)',
+          '- NON-OBVIOUS (not "will competition increase?")',
+          '- ACTIONABLE (the analyst can investigate further)',
+          '- UNCOMFORTABLE (challenges the consensus view or bull case)',
+          'Frame as: "Given that [specific data point], how do you reconcile [apparent contradiction or concerning trend]?"',
+        );
+      }
+
       return this.truncatePrompt(sections.join('\n'));
     }
   /**
@@ -374,6 +400,14 @@ export class HybridSynthesisService {
     const tickers = Array.isArray(ctx.intent.ticker) ? ctx.intent.ticker : ctx.intent.ticker ? [ctx.intent.ticker] : [];
     const hasNarratives = (ctx.narratives?.length || 0) > 0;
     const isComparison = ctx.intent.needsComparison || ctx.intent.needsPeerComparison || tickers.length > 1;
+
+    // Narrative-heavy intents need more room for depth
+    const narrativeHeavyIntents = new Set([
+      'NARRATIVE_SEARCH', 'SEGMENT_ANALYSIS', 'MANAGEMENT_ASSESSMENT',
+      'RED_FLAG_DETECTION', 'PROVOCATION', 'IC_MEMO_GENERATION',
+      'HYBRID_ANALYSIS', 'CROSS_TRANSCRIPT',
+    ]);
+    if (narrativeHeavyIntents.has(ctx.qulIntent || '')) return 1500;
 
     if (isComparison && hasNarratives) return 1200;
     if (isComparison) return 1000;
@@ -539,8 +573,16 @@ export class HybridSynthesisService {
    * Format narrative chunks with attribution (Req 8.4).
    * Each chunk shows ticker, section type, and fiscal period.
    */
-  private formatNarratives(narratives: ChunkResult[]): string | null {
+  private formatNarratives(narratives: ChunkResult[], qulIntent?: string): string | null {
       if (!narratives || narratives.length === 0) return null;
+
+      // Fix 18: Intent-aware budget partitioning
+      const isNarrativeHeavy = [
+        'NARRATIVE_SEARCH', 'SEGMENT_ANALYSIS', 'MANAGEMENT_ASSESSMENT',
+        'RED_FLAG_DETECTION', 'PROVOCATION', 'CROSS_TRANSCRIPT',
+      ].includes(qulIntent || '');
+      const narrativeBudget = isNarrativeHeavy ? 30_000 : MAX_NARRATIVE_CHARS;
+      const secBudgetRatio = isNarrativeHeavy ? 0.80 : 0.60;
 
       // Partition narratives by source type
       const secNarratives: { idx: number; chunk: ChunkResult }[] = [];
@@ -559,9 +601,9 @@ export class HybridSynthesisService {
         }
       });
 
-      // Budget: SEC gets 60%, uploaded gets 40%
-      const secBudget = Math.floor(MAX_NARRATIVE_CHARS * 0.6);
-      const uploadedBudget = MAX_NARRATIVE_CHARS - secBudget;
+      // Budget: SEC gets secBudgetRatio, uploaded gets the rest
+      const secBudget = Math.floor(narrativeBudget * secBudgetRatio);
+      const uploadedBudget = narrativeBudget - secBudget;
 
       // Build blocks in original order to preserve [N] numbering
       // extractCitations maps [1] → narratives[0], so order must match ctx.narratives
@@ -728,7 +770,7 @@ export class HybridSynthesisService {
           citationNumber: num,
           type: citationType as Citation['type'],
           sourceType: citationSourceType as Citation['sourceType'],
-          title: `${chunk.metadata.ticker?.toUpperCase() ?? ''} ${chunk.metadata.sectionType ?? ''} ${chunk.metadata.fiscalPeriod ?? ''}`.trim(),
+          title: this.buildCitationTitle(chunk.metadata),
           content: chunk.content.substring(0, 500),
           excerpt: chunk.content.substring(0, 500), // Add excerpt for modal display
           metadata: {
@@ -906,5 +948,158 @@ export class HybridSynthesisService {
       return `${(value / 1_000).toFixed(2)}K`;
     }
     return value.toFixed(2);
+  }
+
+  // ── Fix 16: Intent-aware synthesis instructions ───────────────────
+
+  /**
+   * Returns intent-specific synthesis instructions that guide the LLM
+   * to produce investment-grade depth for narrative-heavy queries.
+   */
+  private getNarrativeSynthesisInstruction(qulIntent: string): string | null {
+    switch (qulIntent) {
+      case 'NARRATIVE_SEARCH':
+        return [
+          '',
+          '=== NARRATIVE ANALYSIS DEPTH ===',
+          'This is a narrative-focused query. Provide a comprehensive 600-800 word analysis covering:',
+          '1. Key themes and strategic priorities mentioned by management',
+          '2. Segment-level performance and outlook',
+          '3. Tone analysis: is management confident, cautious, or defensive?',
+          '4. Forward-looking indicators and guidance',
+          '5. Red flags: unusual language, hedging, or omissions',
+          '6. Sentiment shifts compared to prior periods (if data available)',
+        ].join('\n');
+
+      case 'SEGMENT_ANALYSIS':
+        return [
+          '',
+          '=== SEGMENT ANALYSIS DEPTH ===',
+          'Provide a per-segment breakdown covering:',
+          '1. Revenue contribution and growth rate for each segment',
+          '2. Segment margins and profitability trends',
+          '3. Key performance indicators (KPIs) specific to each segment',
+          '4. Management commentary on segment outlook',
+          '5. Cross-segment dynamics (cannibalization, synergies)',
+        ].join('\n');
+
+      case 'MANAGEMENT_ASSESSMENT':
+        return [
+          '',
+          '=== MANAGEMENT ASSESSMENT DEPTH ===',
+          'Evaluate management quality and credibility:',
+          '1. Capital allocation track record (M&A, buybacks, dividends, capex)',
+          '2. Compensation alignment with shareholder interests',
+          '3. Insider ownership and recent transactions',
+          '4. Strategic consistency: do actions match stated priorities?',
+          '5. Governance red flags (related party transactions, board independence)',
+        ].join('\n');
+
+      case 'RED_FLAG_DETECTION':
+        return [
+          '',
+          '=== RED FLAG SYSTEMATIC SCAN ===',
+          'Scan for red flags across these categories:',
+          '1. Revenue quality (channel stuffing, bill-and-hold, related party)',
+          '2. Earnings quality (one-time items, non-cash adjustments)',
+          '3. Cash flow divergence from earnings',
+          '4. Balance sheet risks (off-balance sheet, contingent liabilities)',
+          '5. Accounting policy changes or restatements',
+          '6. Auditor concerns or qualifications',
+          '7. Management turnover or insider selling',
+          '8. Related party transactions',
+          '9. Unusual accruals or reserves',
+          '10. Declining asset quality',
+          '11. Covenant compliance risks',
+          'Quantify each finding with specific numbers from the filings.',
+        ].join('\n');
+
+      case 'PROVOCATION':
+        return [
+          '',
+          '=== PROVOCATION MODE ===',
+          'Generate 5-7 specific, data-driven uncomfortable questions:',
+          '- Each must reference a specific data point from the filings',
+          '- Challenge the consensus view or bull case',
+          '- Identify contradictions between management statements and financial data',
+          '- Highlight risks that the market may be underpricing',
+          '- Frame as: "Given that [specific data], how do you reconcile [concern]?"',
+        ].join('\n');
+
+      case 'CROSS_TRANSCRIPT':
+        return [
+          '',
+          '=== CROSS-PERIOD NARRATIVE COMPARISON ===',
+          'Compare narrative content across multiple periods:',
+          '1. Tone shifts: how has management language changed?',
+          '2. Priority changes: what topics gained/lost emphasis?',
+          '3. Guidance evolution: how have forward estimates shifted?',
+          '4. Risk factor changes: new risks added, old risks removed?',
+          '5. Strategic pivots: any change in stated strategy?',
+        ].join('\n');
+
+      default:
+        return null;
+    }
+  }
+
+  // ── Fix 20: Rich citation titles ──────────────────────────────────
+
+  /**
+   * Build a human-readable citation title from chunk metadata.
+   * e.g. "NVDA 10-K FY2025 — Item 7: Management's Discussion & Analysis"
+   */
+  private buildCitationTitle(metadata: any): string {
+    const isUploadedDoc =
+      metadata?.filingType === 'uploaded-document' ||
+      metadata?.sectionType === 'uploaded-document';
+
+    if (isUploadedDoc) {
+      const docName = metadata?.documentName || metadata?.fileName || 'Uploaded Document';
+      return `Uploaded: ${docName}`;
+    }
+
+    const parts: string[] = [];
+    if (metadata?.ticker) parts.push(metadata.ticker.toUpperCase());
+    if (metadata?.filingType) parts.push(metadata.filingType);
+    if (metadata?.fiscalPeriod) parts.push(metadata.fiscalPeriod);
+
+    const sectionLabel = this.humanizeSectionType(metadata?.sectionType);
+    if (sectionLabel) {
+      return parts.length > 0
+        ? `${parts.join(' ')} — ${sectionLabel}`
+        : sectionLabel;
+    }
+
+    return parts.join(' ') || 'Financial Filing';
+  }
+
+  /**
+   * Map raw section type strings to human-readable labels.
+   */
+  private humanizeSectionType(sectionType?: string): string | null {
+    if (!sectionType) return null;
+    const map: Record<string, string> = {
+      'mdna': "Item 7: Management's Discussion & Analysis",
+      'management_discussion': "Item 7: Management's Discussion & Analysis",
+      'item_7': "Item 7: Management's Discussion & Analysis",
+      'item_7a': 'Item 7A: Quantitative & Qualitative Disclosures',
+      'risk_factors': 'Item 1A: Risk Factors',
+      'item_1a': 'Item 1A: Risk Factors',
+      'business': 'Item 1: Business',
+      'item_1': 'Item 1: Business',
+      'business_overview': 'Item 1: Business Overview',
+      'legal_proceedings': 'Item 3: Legal Proceedings',
+      'item_3': 'Item 3: Legal Proceedings',
+      'financial_statements': 'Financial Statements',
+      'notes_to_financial_statements': 'Notes to Financial Statements',
+      'segment_information': 'Segment Information',
+      'executive_compensation': 'Executive Compensation',
+      'corporate_governance': 'Corporate Governance',
+      'income_statement': 'Income Statement',
+      'balance_sheet': 'Balance Sheet',
+      'cash_flow_statement': 'Cash Flow Statement',
+    };
+    return map[sectionType.toLowerCase()] || null;
   }
 }

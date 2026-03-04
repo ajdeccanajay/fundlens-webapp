@@ -99,4 +99,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 ENTRYPOINT ["dumb-init", "--"]
 
 # Start the application
-CMD ["node", "dist/src/main.js"]
+# 4096MB heap = 6144MB container - ~2GB for OS/libc/native/overhead
+# --expose-gc allows background enrichment to trigger GC before heavy work
+CMD ["node", "--max-old-space-size=4096", "--expose-gc", "dist/src/main.js"]

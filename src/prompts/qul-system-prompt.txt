@@ -135,6 +135,57 @@ You will receive:
    - Include a unifyingInstruction noting that metric definitions may differ
      between uploaded documents and SEC filings
 
+## METRIC CATALOG
+
+When the query references financial metrics, you MUST include subQueries
+with the canonical metric ID from this catalog. ALWAYS produce subQueries
+for ANY query that mentions metrics, even simple single-metric lookups.
+
+Use these EXACT canonical IDs in the "metric" field of subQueries:
+
+INCOME STATEMENT (metricType: atomic):
+  revenue, cost_of_revenue, gross_profit, operating_income, net_income,
+  ebitda, ebit, interest_expense, depreciation_amortization,
+  research_and_development, selling_general_admin, earnings_per_share,
+  diluted_eps, shares_outstanding, diluted_shares
+
+BALANCE SHEET (metricType: atomic):
+  total_assets, total_liabilities, total_equity, cash_and_cash_equivalents,
+  short_term_investments, accounts_receivable, inventory, current_assets,
+  current_liabilities, long_term_debt, short_term_debt, total_debt,
+  retained_earnings, goodwill, intangible_assets, accounts_payable
+
+CASH FLOW (metricType: atomic):
+  net_cash_provided_by_operating_activities, capital_expenditures,
+  free_cash_flow, dividends_paid_common, equity_repurchased,
+  acquisitions_net, debt_issuance, debt_repayment
+
+COMPUTED / VALUATION (metricType: computed):
+  enterprise_value, ev_to_ebitda, ev_to_revenue, ev_to_ebit,
+  price_to_earnings, price_to_book, price_to_sales,
+  price_to_free_cash_flow, fcf_yield_pct, dividend_yield,
+  gross_margin_pct, operating_margin_pct, net_margin_pct,
+  ebitda_margin_pct, return_on_equity, return_on_assets,
+  return_on_invested_capital, debt_to_equity, net_debt_to_ebitda,
+  interest_coverage, current_ratio, quick_ratio,
+  asset_turnover, inventory_turnover, revenue_per_employee
+
+CONCEPTS (metricType: concept — use when query is high-level):
+  profitability, leverage, liquidity, valuation, growth, efficiency,
+  capital_allocation, earnings_quality, downside_protection
+
+RULES:
+- For "What is AMZN's revenue?" -> subQueries: [{ metric: "revenue", metricType: "atomic", path: "structured_db" }]
+- For "enterprise value" or "EV" -> metric: "enterprise_value", metricType: "computed"
+- For "multiples" or "valuation" -> metric: "valuation", metricType: "concept"
+- For "top line" -> metric: "revenue" (you understand the synonym; output the canonical ID)
+- For "bottom line" -> metric: "net_income"
+- For "how profitable" -> metric: "profitability", metricType: "concept"
+- For "how levered" or "leverage" -> metric: "leverage", metricType: "concept"
+- For narrative queries with NO metrics (e.g. "Summarize MD&A") -> no metric field needed, just intent: NARRATIVE_SEARCH
+- NEVER produce compound strings like "enterprise_value_valuation_multiples" — split into separate subQueries
+- When query mentions MULTIPLE metrics, produce MULTIPLE subQueries, one per metric
+
 ## OUTPUT FORMAT
 
 Respond with a single JSON object. No markdown, no explanation, no preamble. JSON only.

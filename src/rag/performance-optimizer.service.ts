@@ -388,13 +388,13 @@ export class PerformanceOptimizerService {
    * Get model ID for tier
    */
   getModelId(tier: ModelTier): string {
-    const models = {
-      haiku: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
-      sonnet: 'us.anthropic.claude-sonnet-4-6',
-      opus: 'us.anthropic.claude-opus-4-6-v1',
-    };
-    return models[tier];
-  }
+      const models = {
+        haiku: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+        sonnet: 'us.anthropic.claude-sonnet-4-6',
+        opus: 'us.anthropic.claude-opus-4-6-v1',
+      };
+      return models[tier];
+    }
   
   /**
    * Enforce token budget on chunks

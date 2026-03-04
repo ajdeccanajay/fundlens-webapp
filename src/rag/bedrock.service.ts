@@ -437,7 +437,7 @@ export class BedrockService {
     temperature?: number;
   }): Promise<string> {
     try {
-      const modelId = params.modelId || 'us.anthropic.claude-3-haiku-20240307-v1:0'; // Claude 3 Haiku Inference Profile
+      const modelId = params.modelId || 'us.anthropic.claude-haiku-4-5-20251001-v1:0'; // Claude Haiku 4.5 Inference Profile
       
       const commandInput: any = {
         modelId,
