@@ -950,6 +950,13 @@ Output ONLY the extracted tables, no commentary.`;
               : ['board_composition', 'shareholder_proposals', 'audit_committee', 'related_party_transactions', 'stock_ownership'];
             this.logger.log(`📋 Proxy routing: ${isCompensationQuery ? 'compensation' : 'governance'} query detected — boosting sections: ${proxySections.join(', ')}`);
           }
+
+          // Phase 4: Transcript section routing — earnings call queries
+          // Route to earnings transcript chunks when query references calls, management comments, or speaker names
+          const isTranscriptQuery = /\b(earnings\s*call|conference\s*call|what\s*did\s*(?:the\s*)?(?:ceo|cfo|management|[A-Z][a-z]+\s+[A-Z][a-z]+)\s*say|management\s*(?:tone|commentary|remarks|said|comment)|prepared\s*remarks|q\s*&\s*a|analyst\s*question|guidance\s*call|quarterly\s*call)\b/i.test(query);
+          if (isTranscriptQuery) {
+            this.logger.log(`🎙️ Transcript routing: earnings call query detected — boosting EARNINGS chunks`);
+          }
         }
       }
 

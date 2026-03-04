@@ -1059,6 +1059,19 @@ export class HybridSynthesisService {
       return `Uploaded: ${docName}`;
     }
 
+    // Phase 4: Transcript citations with speaker attribution (§8.3)
+    if (metadata?.filingType === 'EARNINGS') {
+      const parts: string[] = [];
+      if (metadata?.ticker) parts.push(metadata.ticker.toUpperCase());
+      parts.push('Earnings Call Transcript');
+      const sectionLabel = this.humanizeSectionType(metadata?.sectionType);
+      if (sectionLabel) parts.push(sectionLabel);
+      // Add speaker name if available (subsectionName holds speaker for transcripts)
+      if (metadata?.subsectionName) parts.push(metadata.subsectionName);
+      if (metadata?.fiscalPeriod) parts.push(metadata.fiscalPeriod);
+      return parts.join(' — ');
+    }
+
     const parts: string[] = [];
     if (metadata?.ticker) parts.push(metadata.ticker.toUpperCase());
     if (metadata?.filingType) parts.push(metadata.filingType);

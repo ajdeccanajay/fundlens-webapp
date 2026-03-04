@@ -775,4 +775,79 @@ export class SECProcessingService {
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
+
+  /**
+   * Process an earnings call transcript (Phase 4).
+   * Dispatches to the Python transcript parser and stores narrative chunks.
+   */
+  async processEarningsTranscript(params: {
+    ticker: string;
+    quarter: string;
+    year: string;
+    rawText: string;
+    source: string;
+    callDate?: string;
+  }): Promise<ProcessingResult> {
+    const { ticker, quarter, year, rawText, source, callDate } = params;
+    this.logger.log(`Processing earnings transcript for ${ticker} ${quarter} ${year}`);
+
+    try {
+      const parserUrl = process.env.PYTHON_PARSER_URL || 'http://localhost:8000';
+      const response = await this.http.axiosRef.post(`${parserUrl}/sec-parser`, {
+        ticker,
+        filing_type: 'EARNINGS',
+        html_content: rawText,
+        quarter,
+        year,
+        call_date: callDate,
+        source,
+      });
+
+      const result = response.data;
+      if (!result || result.metadata?.status === 'error') {
+        throw new Error(result?.metadata?.message || 'Parser returned error');
+      }
+
+      // Store narrative chunks
+      const chunks = result.narrative_chunks || [];
+      for (const chunk of chunks) {
+        await this.prisma.narrativeChunk.create({
+          data: {
+            ticker: ticker.toUpperCase(),
+            filingType: 'EARNINGS',
+            sectionType: chunk.section_type,
+            subsectionName: chunk.subsection_name || null,
+            chunkIndex: chunk.chunk_index,
+            content: chunk.content,
+            filingDate: callDate ? new Date(callDate) : new Date(),
+          },
+        });
+      }
+
+      this.logger.log(`Stored ${chunks.length} transcript chunks for ${ticker} ${quarter}`);
+
+      return {
+        ticker,
+        filingType: 'EARNINGS',
+        accessionNumber: `transcript-${quarter}-${year}`,
+        metricsExtracted: 0,
+        narrativesExtracted: chunks.length,
+        processingTime: 0,
+        status: 'success' as const,
+        errors: [],
+      };
+    } catch (error) {
+      this.logger.error(`Transcript processing failed for ${ticker}: ${error.message}`);
+      return {
+        ticker,
+        filingType: 'EARNINGS',
+        accessionNumber: `transcript-${quarter}-${year}`,
+        metricsExtracted: 0,
+        narrativesExtracted: 0,
+        processingTime: 0,
+        status: 'failed' as const,
+        errors: [error.message],
+      };
+    }
+  }
 }

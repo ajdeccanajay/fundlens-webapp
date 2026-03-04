@@ -65,6 +65,7 @@
     "@types/uuid": "^10.0.0",
     "aws-jwt-verify": "^5.1.1",
     "axios": "^1.6.0",
+    "cheerio": "^1.2.0",
     "dotenv": "^16.4.5",
     "exceljs": "^4.4.0",
     "js-yaml": "^4.1.1",

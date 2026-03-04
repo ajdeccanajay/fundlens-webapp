@@ -251,8 +251,8 @@ async def sec_parser_legacy(request: dict):
         # Phase 3: DEF 14A + S-1 parsers
         'S-1': 'hybrid_s1',    'S-1/A': 'hybrid_s1',
         'DEF 14A': 'proxy',    'DEFA14A': 'proxy',
-        # Phase 4+ parsers (not yet implemented — will return unsupported)
-        # 'EARNINGS': 'transcript',
+        # Phase 4: Earnings transcript parser
+        'EARNINGS': 'transcript',
     }
 
     filing_type = request.get("filing_type", "10-K")
@@ -318,6 +318,20 @@ async def sec_parser_legacy(request: dict):
             accession_no=request.get("accession_no", ""),
         )
         logger.info(f"Proxy parser: {result['metadata']['total_chunks']} chunks, {result['metadata']['sections_found']} sections for {ticker}")
+        return result
+
+    # ── Phase 4: Earnings transcript parser dispatch ─────────────────
+    if parser_key == 'transcript':
+        from parse_transcript import parse_transcript
+        result = parse_transcript(
+            content=request.get("html_content", ""),
+            ticker=ticker,
+            quarter=request.get("quarter", ""),
+            year=request.get("year", ""),
+            call_date=request.get("call_date"),
+            source=request.get("source", "ir_page"),
+        )
+        logger.info(f"Transcript parser: {result['metadata']['total_chunks']} chunks for {ticker}")
         return result
 
     # ── Phase 3: S-1 parser dispatch (reuses hybrid with S-1 sections) ──

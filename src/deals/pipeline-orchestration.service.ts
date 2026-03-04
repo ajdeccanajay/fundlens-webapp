@@ -14,6 +14,7 @@ import { MarketDataService } from './market-data.service';
 import { ComprehensiveSECPipelineService } from '../s3/comprehensive-sec-pipeline.service';
 import { MetricHierarchyService } from './metric-hierarchy.service';
 import { FootnoteLinkingService } from './footnote-linking.service';
+import { OrchestratorAgent } from '../agents/orchestrator.agent';
 // NOTE: MDAIntelligenceService removed - Step F removed (duplicates Step E)
 
 export interface PipelineStep {
@@ -84,6 +85,8 @@ export class PipelineOrchestrationService {
     private readonly metricHierarchyService: MetricHierarchyService,
     @Inject(forwardRef(() => FootnoteLinkingService))
     private readonly footnoteLinkingService: FootnoteLinkingService,
+    @Inject(forwardRef(() => OrchestratorAgent))
+    private readonly orchestratorAgent: OrchestratorAgent,
     // NOTE: MDAIntelligenceService removed - Step F removed (duplicates Step E)
   ) {
     // Configure BedrockAgentClient with exponential backoff and adaptive retry mode
@@ -274,13 +277,8 @@ export class PipelineOrchestrationService {
       // Step A: Download SEC Filings
       await this.executeStepA(dealId, ticker, years, status);
 
-      // Step A2: Acquire Earnings Transcripts (placeholder — parser not yet implemented)
-      {
-        const stepA2 = status.steps.find(s => s.id === 'A2')!;
-        stepA2.status = 'skipped';
-        stepA2.message = 'Transcript acquisition not yet implemented (Phase 4)';
-        stepA2.completedAt = new Date();
-      }
+      // Step A2: Acquire Earnings Transcripts
+      await this.executeStepA2(dealId, ticker, status);
 
       // Step B: Parse & Store Metrics
       await this.executeStepB(dealId, ticker, years, status);
@@ -483,6 +481,64 @@ export class PipelineOrchestrationService {
       step.message = `Failed: ${error.message}`;
       step.completedAt = new Date();
       throw error;
+    }
+  }
+
+  /**
+   * Step A2: Acquire Earnings Transcripts via Agentic Pipeline (Phase 4)
+   *
+   * Non-blocking: failures here don't stop the pipeline.
+   * Uses OrchestratorAgent to discover IR pages and download transcripts.
+   */
+  private async executeStepA2(dealId: string, ticker: string, status: PipelineStatus): Promise<void> {
+    const step = status.steps.find(s => s.id === 'A2')!;
+    step.status = 'running';
+    step.startedAt = new Date();
+    step.message = 'Acquiring earnings transcripts...';
+    status.currentStep = 'A2';
+    await this.updateDealStatus(dealId, 'processing', 'Step A2: Acquiring earnings transcripts...');
+
+    try {
+      // Look up company name from deal
+      let companyName = ticker;
+      try {
+        const deal = await this.prisma.deal.findUnique({ where: { id: dealId }, select: { companyName: true } });
+        if (deal?.companyName) companyName = deal.companyName;
+      } catch { /* use ticker as fallback */ }
+
+      const report = await this.orchestratorAgent.execute({
+        ticker,
+        companyName,
+        type: 'transcript_only',
+        triggeredBy: 'deal_creation',
+      });
+
+      if (report.transcriptsAcquired > 0) {
+        step.status = 'completed';
+        step.message = `Acquired ${report.transcriptsAcquired} earnings transcripts`;
+      } else if (report.errors.length > 0) {
+        step.status = 'completed_with_warnings';
+        step.message = `No transcripts acquired: ${report.errors[0]?.error || 'IR page not found'}`;
+      } else {
+        step.status = 'completed';
+        step.message = 'No new transcripts to acquire';
+      }
+
+      step.details = {
+        transcriptsAcquired: report.transcriptsAcquired,
+        llmCalls: report.llmCalls,
+        actions: report.actions.length,
+        errors: report.errors.length,
+      };
+      step.completedAt = new Date();
+      this.logger.log(`✅ Step A2 completed for ${ticker}: ${report.transcriptsAcquired} transcripts`);
+
+    } catch (error) {
+      // Non-critical — log and continue pipeline
+      step.status = 'completed_with_warnings';
+      step.message = `Transcript acquisition failed: ${error.message}`;
+      step.completedAt = new Date();
+      this.logger.warn(`⚠️ Step A2 failed for ${ticker} (non-critical): ${error.message}`);
     }
   }
 
