@@ -248,9 +248,10 @@ async def sec_parser_legacy(request: dict):
         # Phase 2: Form 4 + 13F parsers
         '13F-HR': 'form_13f',  '13F-HR/A': 'form_13f',
         '4': 'form_4',         '4/A': 'form_4',
-        # Phase 3+ parsers (not yet implemented — will return unsupported)
-        # 'S-1': 'hybrid_s1',  'S-1/A': 'hybrid_s1',
-        # 'DEF 14A': 'proxy',  'DEFA14A': 'proxy',
+        # Phase 3: DEF 14A + S-1 parsers
+        'S-1': 'hybrid_s1',    'S-1/A': 'hybrid_s1',
+        'DEF 14A': 'proxy',    'DEFA14A': 'proxy',
+        # Phase 4+ parsers (not yet implemented — will return unsupported)
         # 'EARNINGS': 'transcript',
     }
 
@@ -306,6 +307,100 @@ async def sec_parser_legacy(request: dict):
         )
         logger.info(f"13F parser: {result['metadata']['total_holdings']} holdings for {ticker}")
         return result
+
+    # ── Phase 3: DEF 14A proxy parser dispatch ───────────────────────
+    if parser_key == 'proxy':
+        from parse_proxy import parse_proxy
+        result = parse_proxy(
+            content=request.get("html_content", ""),
+            ticker=ticker,
+            filing_date=request.get("filing_date"),
+            accession_no=request.get("accession_no", ""),
+        )
+        logger.info(f"Proxy parser: {result['metadata']['total_chunks']} chunks, {result['metadata']['sections_found']} sections for {ticker}")
+        return result
+
+    # ── Phase 3: S-1 parser dispatch (reuses hybrid with S-1 sections) ──
+    if parser_key == 'hybrid_s1':
+        # Reuse the hybrid parser but force filing_type to 'S-1'
+        # so it picks up SEC_SECTIONS['S-1'] definitions
+        filing_request = FilingRequest(
+            ticker=ticker,
+            filingType='S-1',
+            content=request.get("html_content", ""),
+            accessionNumber=request.get("cik", "unknown"),
+            extractMetrics=True,
+            extractNarratives=True,
+            validateAccuracy=True,
+        )
+        result = await parse_filing(filing_request)
+        # Convert to legacy format (same as hybrid path below)
+        legacy_response = {
+            "structured_metrics": [],
+            "narrative_chunks": [],
+            "holdings": [],
+            "transactions": [],
+            "metadata": {
+                "ticker": ticker,
+                "filing_type": "S-1",
+                "cik": request.get("cik", "unknown"),
+                "total_metrics": 0,
+                "total_chunks": 0,
+                "total_holdings": 0,
+                "total_transactions": 0,
+                "high_confidence_metrics": 0,
+                "parser_type": "hybrid_s1",
+                "status": "success" if result.success else "error",
+            }
+        }
+        if result.success and result.metrics:
+            for key, metric in result.metrics.items():
+                if 'normalized_metric' in metric:
+                    normalized_metric = metric['normalized_metric']
+                else:
+                    if '_FY' in key:
+                        key_without_period = key.rsplit('_FY', 1)[0]
+                    elif '_Q' in key:
+                        key_without_period = key.rsplit('_Q', 1)[0]
+                    else:
+                        key_without_period = key
+                    if key_without_period.endswith('_annual'):
+                        normalized_metric = key_without_period[:-7]
+                    elif key_without_period.endswith('_quarterly'):
+                        normalized_metric = key_without_period[:-10]
+                    else:
+                        normalized_metric = key_without_period
+                legacy_response["structured_metrics"].append({
+                    "ticker": ticker,
+                    "normalized_metric": normalized_metric,
+                    "raw_label": metric["raw_label"],
+                    "value": metric["value"],
+                    "fiscal_period": metric["period"],
+                    "period_type": "annual" if "FY" in metric["period"] else "quarterly",
+                    "filing_type": "S-1",
+                    "statement_type": metric["statement_type"],
+                    "confidence_score": metric["confidence"],
+                })
+            legacy_response["metadata"]["total_metrics"] = len(result.metrics)
+            legacy_response["metadata"]["high_confidence_metrics"] = sum(
+                1 for m in result.metrics.values() if m["confidence"] >= 0.9
+            )
+        if result.success and result.narratives:
+            for section_type, chunks in result.narratives.items():
+                for chunk in chunks:
+                    legacy_response["narrative_chunks"].append({
+                        "ticker": ticker,
+                        "filing_type": "S-1",
+                        "section_type": section_type,
+                        "chunk_index": chunk["chunk_index"],
+                        "content": chunk["content"],
+                    })
+            legacy_response["metadata"]["total_chunks"] = sum(
+                len(chunks) for chunks in result.narratives.values()
+            )
+        logger.info(f"S-1 parser: {legacy_response['metadata']['total_metrics']} metrics, "
+                     f"{legacy_response['metadata']['total_chunks']} chunks for {ticker}")
+        return legacy_response
 
     # Existing hybrid parser path for 10-K, 10-Q, 8-K
     try:

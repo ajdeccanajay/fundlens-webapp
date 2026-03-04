@@ -938,6 +938,18 @@ Output ONLY the extracted tables, no commentary.`;
               this.logger.log(`📋 Injected institutional holdings narrative for ${primaryTicker}`);
             }
           }
+
+          // Phase 3: Proxy section routing — compensation/governance queries
+          // boost DEF 14A proxy chunks by adding section type hints
+          const isCompensationQuery = /\b(compensation|executive\s*comp|ceo\s*pay|cfo\s*pay|pay\s*ratio|pay\s*vs\.?\s*performance|named\s*executive|summary\s*compensation|stock\s*(?:option|award|grant)|equity\s*(?:award|grant|incentive))\b/i.test(query);
+          const isGovernanceQuery = /\b(governance|board\s*(?:of\s*directors|composition|member|nominee)|director\s*(?:election|nominee|independence)|shareholder\s*proposal|stockholder\s*proposal|proxy\s*(?:statement|vote|voting)|audit\s*committee|related\s*party)\b/i.test(query);
+
+          if (isCompensationQuery || isGovernanceQuery) {
+            const proxySections = isCompensationQuery
+              ? ['executive_compensation', 'director_compensation', 'ceo_pay_ratio', 'pay_vs_performance']
+              : ['board_composition', 'shareholder_proposals', 'audit_committee', 'related_party_transactions', 'stock_ownership'];
+            this.logger.log(`📋 Proxy routing: ${isCompensationQuery ? 'compensation' : 'governance'} query detected — boosting sections: ${proxySections.join(', ')}`);
+          }
         }
       }
 
