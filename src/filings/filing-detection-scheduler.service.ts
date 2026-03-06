@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SECSyncService } from '../s3/sec-sync.service';
@@ -6,6 +6,7 @@ import { SECProcessingService } from '../s3/sec-processing.service';
 import { FilingNotificationService } from './filing-notification.service';
 import { FilingDetectorService } from './filing-detector.service';
 import { DistributedLockService } from '../common/distributed-lock.service';
+import { OrchestratorAgent } from '../agents/orchestrator.agent';
 
 export interface DetectionSummary {
   totalTickers: number;
@@ -38,6 +39,7 @@ export class FilingDetectionScheduler {
     private readonly secProcessingService: SECProcessingService,
     private readonly notificationService: FilingNotificationService,
     private readonly lockService: DistributedLockService,
+    @Optional() private readonly orchestratorAgent?: OrchestratorAgent,
   ) {}
 
   /**
@@ -86,6 +88,28 @@ export class FilingDetectionScheduler {
     // Log rate limit compliance metrics
     this.detectorService.logRateLimitMetrics();
 
+    // §7.1 Change 2: Weekly transcript freshness check (Mondays only)
+    if (new Date().getDay() === 1 && this.orchestratorAgent) {
+      this.logger.log('📅 Monday — running weekly transcript freshness check');
+      for (const ticker of trackedTickers) {
+        try {
+          const deal = await this.prisma.deal.findFirst({
+            where: { ticker: { equals: ticker, mode: 'insensitive' } },
+            select: { companyName: true },
+          });
+          await this.orchestratorAgent.execute({
+            ticker,
+            companyName: deal?.companyName || ticker,
+            type: 'freshness_check',
+            triggeredBy: 'scheduled',
+          });
+          this.logger.log(`🎙️ Transcript freshness check complete for ${ticker}`);
+        } catch (error) {
+          this.logger.warn(`⚠️ Transcript freshness check failed for ${ticker}: ${error.message}`);
+        }
+      }
+    }
+
     this.logger.log(
       `Detection complete: ${summary.totalNewFilings} new filings found in ${duration}ms`,
     );
@@ -107,7 +131,7 @@ export class FilingDetectionScheduler {
     try {
       // 1. Use FilingDetectorService to detect new filings
       // This uses SecService.getFillings() to query SEC EDGAR
-      // Filters by filing types (10-K, 10-Q, 8-K)
+      // Filters by all supported filing types (10-K, 10-Q, 8-K, 13F-HR, DEF 14A, Form 4, S-1, 40-F, 6-K, F-1)
       // Returns only filings since last check date (forward-looking)
       const detectionResult = await this.detectorService.detectNewFilings(ticker);
 

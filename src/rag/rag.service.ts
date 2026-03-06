@@ -22,6 +22,7 @@ import { FormulaResolutionService } from './metric-resolution/formula-resolution
 import { ConceptRegistryService } from './metric-resolution/concept-registry.service';
 import { BackgroundEnrichmentService } from '../documents/background-enrichment.service';
 import { FilingDataRetrieverService } from './filing-data-retriever.service';
+import { OrchestratorAgent } from '../agents/orchestrator.agent';
 import { humanizeSectionType } from '../common/section-labels';
 
 /**
@@ -69,6 +70,8 @@ export class RAGService {
     private readonly backgroundEnrichment?: BackgroundEnrichmentService,
     @Optional()
     private readonly filingDataRetriever?: FilingDataRetrieverService,
+    @Optional()
+    private readonly orchestratorAgent?: OrchestratorAgent,
   ) {}
 
   /**
@@ -896,6 +899,7 @@ Output ONLY the extracted tables, no commentary.`;
       // ── Phase 2: Enrich with insider/institutional data ────────────
       // When the query references insider activity or institutional holdings,
       // inject structured data as virtual narratives for the LLM to reference.
+      let responseAcquisitionNote: string | undefined;
       if (this.filingDataRetriever) {
         const queryLower = query.toLowerCase();
         const tickers = Array.isArray(intent.ticker) ? intent.ticker : intent.ticker ? [intent.ticker] : [];
@@ -956,6 +960,68 @@ Output ONLY the extracted tables, no commentary.`;
           const isTranscriptQuery = /\b(earnings\s*call|conference\s*call|what\s*did\s*(?:the\s*)?(?:ceo|cfo|management|[A-Z][a-z]+\s+[A-Z][a-z]+)\s*say|management\s*(?:tone|commentary|remarks|said|comment)|prepared\s*remarks|q\s*&\s*a|analyst\s*question|guidance\s*call|quarterly\s*call)\b/i.test(query);
           if (isTranscriptQuery) {
             this.logger.log(`🎙️ Transcript routing: earnings call query detected — boosting EARNINGS chunks`);
+          }
+
+          // §7.4 Phase 5: Query-triggered background acquisition
+          // When a query references data types we don't have, enqueue background acquisition
+          // and attach a user-facing note to the response metadata.
+          if (this.orchestratorAgent) {
+            const hasInsiderData = narratives.some(n => n.metadata?.filingType === '4' || n.metadata?.sectionType === 'insider_transactions');
+            const hasHoldingsData = narratives.some(n => n.metadata?.filingType === '13F-HR' || n.metadata?.sectionType === 'institutional_holdings');
+            const hasTranscriptData = narratives.some(n => n.metadata?.filingType === 'EARNINGS');
+
+            if (isInsiderQuery && !hasInsiderData) {
+              this.logger.log(`📥 Query-triggered acquisition: insider data missing for ${primaryTicker}, enqueuing background Form 4 acquisition`);
+              setImmediate(async () => {
+                try {
+                  await this.orchestratorAgent!.execute({
+                    ticker: primaryTicker,
+                    companyName: primaryTicker,
+                    type: 'specific',
+                    description: 'Acquire Form 4 insider transaction data',
+                    triggeredBy: 'query_triggered',
+                  });
+                } catch (e) { this.logger.warn(`Background Form 4 acquisition failed: ${e.message}`); }
+              });
+              if (!responseAcquisitionNote) {
+                responseAcquisitionNote = 'Insider transaction data is being acquired and will be available shortly.';
+              }
+            }
+
+            if (isHoldingsQuery && !hasHoldingsData) {
+              this.logger.log(`📥 Query-triggered acquisition: holdings data missing for ${primaryTicker}, enqueuing background 13F acquisition`);
+              setImmediate(async () => {
+                try {
+                  await this.orchestratorAgent!.execute({
+                    ticker: primaryTicker,
+                    companyName: primaryTicker,
+                    type: 'specific',
+                    description: 'Acquire 13F institutional holdings data',
+                    triggeredBy: 'query_triggered',
+                  });
+                } catch (e) { this.logger.warn(`Background 13F acquisition failed: ${e.message}`); }
+              });
+              if (!responseAcquisitionNote) {
+                responseAcquisitionNote = 'Institutional holdings data is being acquired and will be available shortly.';
+              }
+            }
+
+            if (isTranscriptQuery && !hasTranscriptData) {
+              this.logger.log(`📥 Query-triggered acquisition: transcript data missing for ${primaryTicker}, enqueuing background transcript acquisition`);
+              setImmediate(async () => {
+                try {
+                  await this.orchestratorAgent!.execute({
+                    ticker: primaryTicker,
+                    companyName: primaryTicker,
+                    type: 'transcript_only',
+                    triggeredBy: 'query_triggered',
+                  });
+                } catch (e) { this.logger.warn(`Background transcript acquisition failed: ${e.message}`); }
+              });
+              if (!responseAcquisitionNote) {
+                responseAcquisitionNote = 'Earnings call transcript data is being acquired and will be available shortly.';
+              }
+            }
           }
         }
       }
@@ -1425,6 +1491,7 @@ Output ONLY the extracted tables, no commentary.`;
           parallelExecution: optimizationDecisions.parallelExecution,
           optimizationDecisions: optimizationDecisions.reasoning,
           sessionDocsUnavailable,
+          acquisitionNote: responseAcquisitionNote,
         },
       };
 

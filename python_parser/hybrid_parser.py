@@ -116,6 +116,22 @@ SEC_SECTIONS = {
         'underwriting': {'pattern': r'(?:^|\s)UNDERWRITING(?:\s|$)|(?:^|\s)Underwriting(?:\s|$)', 'title': 'Underwriting', 'part': 'I'},
         'financial_statements': {'pattern': r'FINANCIAL\s*STATEMENTS|INDEX\s*TO.*FINANCIAL', 'title': 'Financial Statements', 'part': 'I'},
     },
+    # F-1 Foreign Registration Statement — same structure as S-1
+    'F-1': {
+        'prospectus_summary': {'pattern': r'(?:PROSPECTUS|Prospectus)\s*SUMMARY|(?:^|\s)Summary(?:\s|$)', 'title': 'Prospectus Summary', 'part': 'I'},
+        'risk_factors': {'pattern': r'RISK\s*FACTORS|Risk\s*Factors', 'title': 'Risk Factors', 'part': 'I'},
+        'use_of_proceeds': {'pattern': r'USE\s*OF\s*PROCEEDS|Use\s*of\s*Proceeds', 'title': 'Use of Proceeds', 'part': 'I'},
+        'dilution': {'pattern': r'(?:^|\s)DILUTION(?:\s|$)|(?:^|\s)Dilution(?:\s|$)', 'title': 'Dilution', 'part': 'I'},
+        'capitalization': {'pattern': r'(?:^|\s)CAPITALIZATION(?:\s|$)|(?:^|\s)Capitalization(?:\s|$)', 'title': 'Capitalization', 'part': 'I'},
+        'dividend_policy': {'pattern': r'DIVIDEND\s*POLICY|Dividend\s*Policy', 'title': 'Dividend Policy', 'part': 'I'},
+        'mda': {'pattern': r"MANAGEMENT.S\s*DISCUSSION|Management.s\s*Discussion", 'title': 'MD&A', 'part': 'I'},
+        'business': {'pattern': r'(?:^|\s)BUSINESS(?:\s|$)|Our\s*Business', 'title': 'Business', 'part': 'I'},
+        'management': {'pattern': r'MANAGEMENT(?:\s|$)|DIRECTORS|Executive\s*Officers', 'title': 'Management', 'part': 'I'},
+        'principal_stockholders': {'pattern': r'PRINCIPAL\s*STOCKHOLDERS|SECURITY\s*OWNERSHIP', 'title': 'Principal Stockholders', 'part': 'I'},
+        'description_capital_stock': {'pattern': r'DESCRIPTION\s*OF\s*CAPITAL', 'title': 'Description of Capital Stock', 'part': 'I'},
+        'underwriting': {'pattern': r'(?:^|\s)UNDERWRITING(?:\s|$)|(?:^|\s)Underwriting(?:\s|$)', 'title': 'Underwriting', 'part': 'I'},
+        'financial_statements': {'pattern': r'FINANCIAL\s*STATEMENTS|INDEX\s*TO.*FINANCIAL', 'title': 'Financial Statements', 'part': 'I'},
+    },
 }
 
 

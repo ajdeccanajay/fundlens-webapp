@@ -27,6 +27,10 @@ const QUALITATIVE_QUESTIONS = {
     "Compare {ticker}'s Risk Factors section across the last 3 annual filings. What risks were added, removed, or materially re-worded, and what business developments explain the changes?",
     "From {ticker}'s most recent earnings call, identify every question where management gave a non-answer, deflected, or pivoted away from the analyst's actual question. What topics were they avoiding?",
   ],
+  transcriptAnalysis: [
+    "Perform a tone forensics analysis on {ticker}'s last 4 earnings calls. Score sentiment (-1 to +1) separately for prepared remarks vs Q&A in each call. Identify the quarter with the largest gap between scripted optimism and spontaneous candor. Quote the exact phrases that reveal management's true confidence level — track migrations like 'strong demand' → 'healthy demand' → 'resilient demand' and 'we will' → 'we expect' → 'we believe'. Flag any hedging language that appeared for the first time.",
+    "Build a guidance accuracy ledger for {ticker}: for each of the last 4 quarters, list every numerical target management gave on the earnings call (revenue, margins, EPS, capex), compare to actual reported results, and calculate the miss rate. Then identify every analyst question where management deflected, gave a non-answer, or pivoted to a different topic — group these by theme to reveal what subjects management is systematically avoiding. These avoidance patterns are the highest-signal areas for further diligence.",
+  ],
 };
 
 // Priority categories to precompute (most important first)
@@ -36,6 +40,7 @@ const PRIORITY_CATEGORIES = [
   'capitalAllocation',
   'earningsQuality',
   'competitiveRisk',
+  'transcriptAnalysis',
 ];
 
 export interface PrecomputeResult {

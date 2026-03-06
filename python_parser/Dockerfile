@@ -22,10 +22,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Copy and install requirements
-COPY requirements.txt .
+# Copy and install requirements (slim Docker deps, excludes torch/sentence-transformers)
+COPY requirements-docker.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir -r requirements-docker.txt
 
 # -----------------------------------------------------------------------------
 # Stage 2: Production

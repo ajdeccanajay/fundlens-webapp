@@ -8,6 +8,7 @@ import {
   ListIngestionJobsCommand,
 } from '@aws-sdk/client-bedrock-agent';
 import { ChunkExporterService } from '../rag/chunk-exporter.service';
+import { SectionExporterService } from '../rag/section-exporter.service';
 import { QualitativePrecomputeService } from './qualitative-precompute.service';
 import { FinancialCalculatorService } from './financial-calculator.service';
 import { MarketDataService } from './market-data.service';
@@ -87,6 +88,8 @@ export class PipelineOrchestrationService {
     private readonly footnoteLinkingService: FootnoteLinkingService,
     @Inject(forwardRef(() => OrchestratorAgent))
     private readonly orchestratorAgent: OrchestratorAgent,
+    @Inject(forwardRef(() => SectionExporterService))
+    private readonly sectionExporter: SectionExporterService,
     // NOTE: MDAIntelligenceService removed - Step F removed (duplicates Step E)
   ) {
     // Configure BedrockAgentClient with exponential backoff and adaptive retry mode
@@ -406,7 +409,7 @@ export class PipelineOrchestrationService {
           const result = await this.secPipeline.processCompanyComprehensive(ticker, {
             companies: [ticker],
             years: Array.from({ length: years }, (_, i) => new Date().getFullYear() - i),
-            filingTypes: ['10-K', '10-Q', '8-K', '13F-HR', 'DEF 14A', '4', 'S-1'],
+            filingTypes: ['10-K', '10-Q', '8-K', 'DEF 14A', '4', 'S-1', '40-F', '6-K', 'F-1'],
             batchSize: 1,
             skipExisting: true,
             syncToKnowledgeBase: false,
@@ -701,225 +704,169 @@ export class PipelineOrchestrationService {
    * to ensure new filings are indexed for RAG queries.
    */
   private async executeStepD(dealId: string, ticker: string, status: PipelineStatus): Promise<void> {
-    const step = status.steps.find(s => s.id === 'D')!;
-    step.status = 'running';
-    step.startedAt = new Date();
-    step.message = 'Preparing KB sync...';
-    status.currentStep = 'D';
-    await this.updateDealStatus(dealId, 'processing', 'Step D: Syncing with Bedrock Knowledge Base...');
+      const step = status.steps.find(s => s.id === 'D')!;
+      step.status = 'running';
+      step.startedAt = new Date();
+      step.message = 'Preparing section-based KB sync...';
+      status.currentStep = 'D';
+      await this.updateDealStatus(dealId, 'processing', 'Step D: Section-based KB sync (non-blocking)...');
 
-    // Enterprise configuration
-    const S3_UPLOAD_MAX_RETRIES = 5;
-    const KB_INGESTION_MAX_RETRIES = 5;
-    const KB_INGESTION_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes max wait
-    const KB_POLL_INTERVAL_MS = 15 * 1000; // 15 seconds between polls
+      const S3_UPLOAD_MAX_RETRIES = 3;
 
-    try {
-      // Get chunk count first to know what we're uploading
-      const totalChunks = await this.prisma.narrativeChunk.count({ where: { ticker } });
-      
-      if (totalChunks === 0) {
-        step.status = 'completed';
-        step.message = 'No narrative chunks to sync (metrics-only deal)';
-        step.completedAt = new Date();
-        this.logger.log(`✅ Step D skipped for ${ticker}: No narrative chunks`);
-        return;
-      }
+      try {
+        // Get chunk count first to know what we're working with
+        const totalChunks = await this.prisma.narrativeChunk.count({ where: { ticker } });
 
-      // Get existing sync status for logging/monitoring (but don't skip!)
-      const existingSyncStatus = await this.getKBSyncStatus(ticker);
-      if (existingSyncStatus) {
-        this.logger.log(`📊 Previous sync status for ${ticker}: ${existingSyncStatus.chunksInS3} chunks, last sync: ${existingSyncStatus.lastKbSyncAt?.toISOString() || 'never'}`);
-      }
-
-      this.logger.log(`📤 Step D: Uploading ${totalChunks} chunks for ${ticker} to S3...`);
-      step.message = `Uploading ${totalChunks} chunks to S3...`;
-
-      // ============================================================
-      // PHASE 1: Upload chunks to S3 with retry (BLOCKING)
-      // ============================================================
-      let uploadResult: { uploadedCount: number; totalSize: number; keys: string[] } | null = null;
-      let lastUploadError: Error | null = null;
-
-      for (let attempt = 1; attempt <= S3_UPLOAD_MAX_RETRIES; attempt++) {
-        try {
-          step.message = attempt === 1 
-            ? `Uploading ${totalChunks} chunks to S3...`
-            : `Uploading chunks to S3 (retry ${attempt}/${S3_UPLOAD_MAX_RETRIES})...`;
-
-          uploadResult = await this.chunkExporter.uploadToS3({
-            bucket: 'fundlens-bedrock-chunks',
-            ticker,
-            keyPrefix: 'chunks',
-            dryRun: false,
-            batchSize: Math.max(totalChunks + 100, 5000),
-          });
-
-          // Verify upload succeeded
-          if (uploadResult.uploadedCount === 0) {
-            throw new Error(`S3 upload returned 0 chunks (expected ${totalChunks})`);
-          }
-
-          // Success - break retry loop
-          this.logger.log(`✅ S3 upload complete: ${uploadResult.uploadedCount}/${totalChunks} chunks (attempt ${attempt})`);
-          break;
-
-        } catch (error) {
-          lastUploadError = error;
-          
-          if (attempt < S3_UPLOAD_MAX_RETRIES) {
-            const delay = Math.min(Math.pow(2, attempt) * 2000 + Math.random() * 1000, 60000);
-            this.logger.warn(`S3 upload failed (attempt ${attempt}/${S3_UPLOAD_MAX_RETRIES}): ${error.message}. Retrying in ${Math.round(delay/1000)}s...`);
-            step.message = `S3 upload retry ${attempt}/${S3_UPLOAD_MAX_RETRIES} in ${Math.round(delay/1000)}s...`;
-            await this.sleep(delay);
-          }
+        if (totalChunks === 0) {
+          step.status = 'completed';
+          step.message = 'No narrative chunks to sync (metrics-only deal)';
+          step.completedAt = new Date();
+          this.logger.log(`✅ Step D skipped for ${ticker}: No narrative chunks`);
+          return;
         }
-      }
 
-      if (!uploadResult || uploadResult.uploadedCount === 0) {
-        throw new Error(`S3 upload failed after ${S3_UPLOAD_MAX_RETRIES} attempts: ${lastUploadError?.message || 'Unknown error'}`);
-      }
+        this.logger.log(`📤 Step D: Section-based export for ${ticker} (${totalChunks} chunks → aggregated sections)...`);
+        step.message = `Aggregating ${totalChunks} chunks into sections...`;
 
-      // Update sync tracking - S3 upload complete
-      await this.updateKBSyncStatus(ticker, {
-        chunksInS3: uploadResult.uploadedCount,
-        chunksInRds: totalChunks,
-        lastS3UploadAt: new Date(),
-        needsKbSync: true,
-      });
+        // ============================================================
+        // PHASE 1: Section-based S3 upload (BLOCKING — but much faster)
+        // Instead of uploading ~128K individual chunk files, we aggregate
+        // chunks by section (ticker/filing_type/section_type/fiscal_period)
+        // reducing S3 file count from ~128K to ~1K.
+        // ============================================================
+        let exportStats: { totalSections: number; totalCharacters: number; filesCreated: string[] } | null = null;
+        let lastUploadError: Error | null = null;
 
-      step.details = { 
-        uploadedChunks: uploadResult.uploadedCount,
-        totalChunks,
-        uploadSuccess: true,
-      };
+        for (let attempt = 1; attempt <= S3_UPLOAD_MAX_RETRIES; attempt++) {
+          try {
+            step.message = attempt === 1 
+              ? `Exporting ${totalChunks} chunks as aggregated sections to S3...`
+              : `Section export retry ${attempt}/${S3_UPLOAD_MAX_RETRIES}...`;
 
-      // ============================================================
-      // PHASE 2: Trigger and WAIT for KB ingestion (BLOCKING)
-      // Only if this is a NEW ticker that needs syncing
-      // ============================================================
-      const kbId = process.env.BEDROCK_KB_ID;
-      const dataSourceId = process.env.BEDROCK_DATA_SOURCE_ID || 'OQMSFOE5SL';
+            exportStats = await this.sectionExporter.exportTickerSections(ticker, { dryRun: false });
 
-      if (!kbId) {
-        // KB not configured - this is a CRITICAL error in enterprise mode
-        throw new Error('BEDROCK_KB_ID not configured - KB sync is REQUIRED for enterprise RAG');
-      }
-
-      step.message = `Uploaded ${uploadResult.uploadedCount} chunks. Starting KB ingestion...`;
-      this.logger.log(`🔄 Starting BLOCKING KB ingestion for ${ticker}...`);
-
-      // Start or wait for KB ingestion with retry
-      const jobId = await this.startIngestionWithRetry(kbId, dataSourceId, step, KB_INGESTION_MAX_RETRIES);
-
-      if (!jobId) {
-        throw new Error('Failed to start or find KB ingestion job after max retries');
-      }
-
-      step.details = { 
-        ...step.details, 
-        ingestionJobId: jobId,
-        kbSyncStatus: 'in_progress',
-      };
-
-      // ============================================================
-      // PHASE 3: Wait for KB ingestion to COMPLETE (BLOCKING)
-      // ============================================================
-      step.message = `KB ingestion started (Job: ${jobId}). Waiting for completion...`;
-      this.logger.log(`⏳ Waiting for KB ingestion job ${jobId} to complete (max ${KB_INGESTION_TIMEOUT_MS/60000} minutes)...`);
-
-      const startWaitTime = Date.now();
-      let lastStatus = 'STARTING';
-      let documentsIndexed = 0;
-      let documentsScanned = 0;
-      let documentsFailed = 0;
-
-      while (Date.now() - startWaitTime < KB_INGESTION_TIMEOUT_MS) {
-        try {
-          const getJobCommand = new GetIngestionJobCommand({
-            knowledgeBaseId: kbId,
-            dataSourceId: dataSourceId,
-            ingestionJobId: jobId,
-          });
-
-          const jobStatus = await this.bedrockAgent.send(getJobCommand);
-          lastStatus = jobStatus.ingestionJob?.status || 'UNKNOWN';
-          const stats = jobStatus.ingestionJob?.statistics;
-          
-          documentsScanned = stats?.numberOfDocumentsScanned || 0;
-          documentsIndexed = stats?.numberOfNewDocumentsIndexed || 0;
-          documentsFailed = stats?.numberOfDocumentsFailed || 0;
-
-          // Update step with progress
-          const elapsedMin = Math.round((Date.now() - startWaitTime) / 60000);
-          step.message = `KB sync: ${lastStatus} (${documentsScanned} scanned, ${documentsIndexed} indexed, ${elapsedMin}min elapsed)`;
-
-          this.logger.log(`KB job ${jobId}: ${lastStatus} - ${documentsScanned} scanned, ${documentsIndexed} indexed, ${documentsFailed} failed`);
-
-          if (lastStatus === 'COMPLETE') {
-            // Update sync tracking - KB sync complete
-            await this.updateKBSyncStatus(ticker, {
-              lastKbSyncAt: new Date(),
-              kbSyncJobId: jobId,
-              kbSyncStatus: 'synced',
-              needsKbSync: false,
-            });
-
-            // CRITICAL FIX: Update bedrock_kb_id field in narrative_chunks table
-            // This field is used by diagnostic scripts and monitoring
-            try {
-              await this.prisma.$executeRawUnsafe(`
-                UPDATE narrative_chunks
-                SET bedrock_kb_id = $1
-                WHERE ticker = $2
-              `, jobId, ticker);
-              
-              this.logger.log(`✅ Updated bedrock_kb_id for ${ticker} chunks (Job: ${jobId})`);
-            } catch (updateError) {
-              // Log but don't fail - this is for monitoring only
-              this.logger.warn(`Failed to update bedrock_kb_id for ${ticker}: ${updateError.message}`);
+            if (exportStats.totalSections === 0) {
+              throw new Error(`Section export returned 0 sections (expected aggregation of ${totalChunks} chunks)`);
             }
 
+            this.logger.log(`✅ Section export complete: ${exportStats.totalSections} sections (${exportStats.totalCharacters.toLocaleString()} chars) from ${totalChunks} chunks (attempt ${attempt})`);
+            break;
+
+          } catch (error) {
+            lastUploadError = error;
+            if (attempt < S3_UPLOAD_MAX_RETRIES) {
+              const delay = Math.min(Math.pow(2, attempt) * 2000 + Math.random() * 1000, 30000);
+              this.logger.warn(`Section export failed (attempt ${attempt}/${S3_UPLOAD_MAX_RETRIES}): ${error.message}. Retrying in ${Math.round(delay/1000)}s...`);
+              await this.sleep(delay);
+            }
+          }
+        }
+
+        if (!exportStats || exportStats.totalSections === 0) {
+          throw new Error(`Section export failed after ${S3_UPLOAD_MAX_RETRIES} attempts: ${lastUploadError?.message || 'Unknown error'}`);
+        }
+
+        // Update sync tracking - S3 upload complete
+        await this.updateKBSyncStatus(ticker, {
+          chunksInS3: exportStats.totalSections,
+          chunksInRds: totalChunks,
+          lastS3UploadAt: new Date(),
+          needsKbSync: true,
+        });
+
+        step.details = { 
+          sectionsUploaded: exportStats.totalSections,
+          totalChunks,
+          totalCharacters: exportStats.totalCharacters,
+          uploadSuccess: true,
+          mode: 'section-based',
+        };
+
+        // ============================================================
+        // PHASE 2: Trigger KB ingestion — NON-BLOCKING (fire and forget)
+        // We start the ingestion job but do NOT wait for it to complete.
+        // The Lambda trigger + background sync will handle completion.
+        // This eliminates the 15-minute timeout that was blocking the pipeline.
+        // ============================================================
+        const kbId = process.env.BEDROCK_KB_ID;
+        const dataSourceId = process.env.BEDROCK_DATA_SOURCE_ID || 'OQMSFOE5SL';
+
+        if (!kbId) {
+          this.logger.warn('⚠️ BEDROCK_KB_ID not configured — skipping KB ingestion trigger. Sections are in S3, Lambda trigger will handle sync.');
+          step.status = 'completed';
+          step.message = `Uploaded ${exportStats.totalSections} sections to S3. KB ingestion will be triggered by Lambda.`;
+          step.completedAt = new Date();
+          return;
+        }
+
+        step.message = `Uploaded ${exportStats.totalSections} sections. Triggering KB ingestion (non-blocking)...`;
+        this.logger.log(`🔄 Triggering NON-BLOCKING KB ingestion for ${ticker}...`);
+
+        try {
+          // Check for ongoing job first — if one is running, just log and move on
+          const ongoingJob = await this.checkForOngoingIngestionJob(kbId, dataSourceId);
+
+          if (ongoingJob) {
+            this.logger.log(`📋 Existing KB ingestion job already running (${ongoingJob.jobId}, status: ${ongoingJob.status}). New sections will be picked up.`);
             step.details = {
               ...step.details,
-              kbSyncStatus: 'complete',
-              documentsScanned,
-              documentsIndexed,
-              documentsFailed,
-              syncDurationMs: Date.now() - startWaitTime,
+              ingestionJobId: ongoingJob.jobId,
+              kbSyncStatus: 'piggyback_on_existing',
             };
-            step.status = 'completed';
-            step.message = `KB sync complete: ${documentsIndexed} documents indexed (${documentsScanned} scanned)`;
-            step.completedAt = new Date();
-            this.logger.log(`✅ Step D complete for ${ticker}: KB sync finished - ${documentsIndexed} documents indexed`);
-            return;
+          } else {
+            // Start a new ingestion job
+            const startCommand = new StartIngestionJobCommand({
+              knowledgeBaseId: kbId,
+              dataSourceId: dataSourceId,
+              description: `Section-based sync for ${ticker}: ${exportStats.totalSections} sections at ${new Date().toISOString()}`,
+            });
+
+            const response = await this.bedrockAgent.send(startCommand);
+            const jobId = response.ingestionJob?.ingestionJobId;
+
+            if (jobId) {
+              this.logger.log(`✅ KB ingestion job started: ${jobId} (non-blocking — not waiting for completion)`);
+
+              // Update sync tracking with job ID
+              await this.updateKBSyncStatus(ticker, {
+                kbSyncJobId: jobId,
+                kbSyncStatus: 'ingestion_triggered',
+                needsKbSync: true,
+              });
+
+              step.details = {
+                ...step.details,
+                ingestionJobId: jobId,
+                kbSyncStatus: 'triggered_non_blocking',
+              };
+            } else {
+              this.logger.warn('⚠️ KB ingestion started but no job ID returned');
+            }
           }
-
-          if (lastStatus === 'FAILED') {
-            throw new Error(`KB ingestion job failed: ${documentsFailed} documents failed`);
-          }
-
-          // Still running - wait and poll again
-          await this.sleep(KB_POLL_INTERVAL_MS);
-
-        } catch (pollError) {
-          // Don't fail on polling errors - just log and continue
-          this.logger.warn(`Error polling KB job ${jobId}: ${pollError.message}`);
-          await this.sleep(KB_POLL_INTERVAL_MS);
+        } catch (ingestionError) {
+          // Non-blocking: log the error but don't fail the step
+          this.logger.warn(`⚠️ KB ingestion trigger failed (non-blocking): ${ingestionError.message}. Lambda trigger will handle sync.`);
+          step.details = {
+            ...step.details,
+            kbSyncStatus: 'trigger_failed_lambda_fallback',
+            triggerError: ingestionError.message,
+          };
         }
+
+        // Mark step as completed immediately — don't wait for ingestion
+        step.status = 'completed';
+        step.message = `Section-based sync: ${exportStats.totalSections} sections uploaded, KB ingestion triggered (non-blocking)`;
+        step.completedAt = new Date();
+        this.logger.log(`✅ Step D complete for ${ticker}: ${exportStats.totalSections} sections in S3, ingestion triggered (non-blocking)`);
+
+      } catch (error) {
+        step.status = 'failed';
+        step.message = `Section-based KB sync failed: ${error.message}`;
+        step.completedAt = new Date();
+        this.logger.error(`❌ Step D FAILED for ${ticker}: ${error.message}`);
+        throw error;
       }
-
-      // Timeout reached - this is a FAILURE in enterprise mode
-      throw new Error(`KB ingestion timeout after ${KB_INGESTION_TIMEOUT_MS/60000} minutes. Last status: ${lastStatus}, Scanned: ${documentsScanned}, Indexed: ${documentsIndexed}`);
-
-    } catch (error) {
-      step.status = 'failed';
-      step.message = `KB sync failed: ${error.message}`;
-      step.completedAt = new Date();
-      this.logger.error(`❌ Step D FAILED for ${ticker}: ${error.message}`);
-      throw error; // CRITICAL: KB sync failure should fail the pipeline
     }
-  }
 
   /**
    * Start KB ingestion with smart handling of ongoing jobs

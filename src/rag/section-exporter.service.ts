@@ -85,69 +85,69 @@ export class SectionExporterService {
   async aggregateChunksBySection(ticker: string): Promise<AggregatedSection[]> {
     this.logger.log(`Aggregating chunks for ${ticker}`);
 
-    // Query chunks grouped by section
-    const chunks = await this.prisma.narrativeChunk.findMany({
-      where: { ticker },
-      orderBy: [
-        { filingType: 'asc' },
-        { sectionType: 'asc' },
-        { chunkIndex: 'asc' },
-      ],
-    });
+    // Query chunks grouped by section — include filing_date from each chunk
+    const chunks = await this.prisma.$queryRaw<Array<{
+      id: number;
+      ticker: string;
+      filingType: string;
+      sectionType: string;
+      chunkIndex: number;
+      content: string;
+      filing_date: Date | null;
+    }>>`
+      SELECT id, ticker, filing_type as "filingType", section_type as "sectionType", 
+             chunk_index as "chunkIndex", content, filing_date
+      FROM narrative_chunks
+      WHERE ticker = ${ticker}
+      ORDER BY filing_type ASC, filing_date ASC, section_type ASC, chunk_index ASC
+    `;
 
     if (chunks.length === 0) {
       this.logger.warn(`No chunks found for ${ticker}`);
       return [];
     }
 
-    // Get filing metadata for fiscal period and filing date info
-    const filingMetadata = await this.prisma.filingMetadata.findMany({
-      where: { ticker },
-      orderBy: { filingDate: 'desc' },
-    });
+    // Derive fiscal_period from each chunk's own filing_date
+    const deriveFiscalPeriod = (filingType: string, filingDate: Date | null): string => {
+      if (!filingDate) return 'unknown';
+      const d = new Date(filingDate);
+      const year = d.getFullYear();
+      const quarter = Math.ceil((d.getMonth() + 1) / 3);
+      if (filingType.includes('10-K') || filingType.includes('40-F')) return `FY${year}`;
+      if (filingType.includes('10-Q')) return `Q${quarter}-${year}`;
+      // For 8-K, DEF 14A, Form 4, 6-K, etc. — use date-based key to separate filings
+      return `${year}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    };
 
-    // Create a map of filingType -> latest filing metadata
-    const filingMetadataMap = new Map<string, { fiscalPeriod: string; filingDate: Date }>();
-    for (const fm of filingMetadata) {
-      if (!filingMetadataMap.has(fm.filingType)) {
-        // Extract fiscal period from filing date (e.g., "FY2024" or "Q3-2024")
-        const year = fm.filingDate.getFullYear();
-        const quarter = Math.ceil((fm.filingDate.getMonth() + 1) / 3);
-        const fiscalPeriod = fm.filingType.includes('10-K') 
-          ? `FY${year}` 
-          : `Q${quarter}-${year}`;
-        filingMetadataMap.set(fm.filingType, { fiscalPeriod, filingDate: fm.filingDate });
-      }
-    }
-
-    // Group chunks by section key (ticker/filingType_sectionType)
-    const sectionMap = new Map<string, typeof chunks>();
+    // Group chunks by section key using chunk's own filing_date for fiscal_period
+    const sectionMap = new Map<string, { chunks: typeof chunks; filingType: string; sectionType: string; fiscalPeriod: string; filingDate: Date | null }>();
     
     for (const chunk of chunks) {
       const filingType = chunk.filingType || '10-K';
+      const fiscalPeriod = deriveFiscalPeriod(filingType, chunk.filing_date);
       const sectionKey = this.buildSectionKey(
         ticker,
         filingType,
         chunk.sectionType,
-        filingMetadataMap.get(filingType)?.fiscalPeriod || 'unknown'
+        fiscalPeriod,
       );
 
       if (!sectionMap.has(sectionKey)) {
-        sectionMap.set(sectionKey, []);
+        sectionMap.set(sectionKey, { chunks: [], filingType, sectionType: chunk.sectionType, fiscalPeriod, filingDate: chunk.filing_date });
       }
-      sectionMap.get(sectionKey)!.push(chunk);
+      sectionMap.get(sectionKey)!.chunks.push(chunk);
     }
 
     // Build aggregated sections
     const sections: AggregatedSection[] = [];
 
-    for (const [sectionKey, sectionChunks] of sectionMap) {
+    for (const [sectionKey, sectionData] of sectionMap) {
       // Sort chunks by index to maintain order
-      sectionChunks.sort((a, b) => a.chunkIndex - b.chunkIndex);
+      sectionData.chunks.sort((a, b) => a.chunkIndex - b.chunkIndex);
 
       // Concatenate content with section markers
       const contentParts: string[] = [];
-      for (const chunk of sectionChunks) {
+      for (const chunk of sectionData.chunks) {
         const cleanedContent = this.cleanContent(chunk.content);
         if (cleanedContent.length > 0) {
           contentParts.push(cleanedContent);
@@ -161,23 +161,23 @@ export class SectionExporterService {
         continue;
       }
 
-      // Get metadata from first chunk and filing metadata
-      const firstChunk = sectionChunks[0];
-      const filingType = firstChunk.filingType || '10-K';
-      const filingMeta = filingMetadataMap.get(filingType);
-      const sectionTitle = this.getSectionTitle(firstChunk.sectionType);
+      // Get metadata from section data
+      const sectionTitle = this.getSectionTitle(sectionData.sectionType);
+      const filingDateStr = sectionData.filingDate 
+        ? new Date(sectionData.filingDate).toISOString().split('T')[0] 
+        : '';
 
       sections.push({
         key: `sections/${sectionKey}.txt`,
         content: fullContent,
         metadata: {
           ticker,
-          filing_type: filingType,
-          section_type: firstChunk.sectionType,
+          filing_type: sectionData.filingType,
+          section_type: sectionData.sectionType,
           section_title: sectionTitle,
-          fiscal_period: filingMeta?.fiscalPeriod || 'unknown',
-          filing_date: filingMeta?.filingDate?.toISOString().split('T')[0] || '',
-          chunk_count: sectionChunks.length,
+          fiscal_period: sectionData.fiscalPeriod,
+          filing_date: filingDateStr,
+          chunk_count: sectionData.chunks.length,
           total_characters: fullContent.length,
         },
       });

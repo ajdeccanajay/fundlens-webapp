@@ -294,8 +294,20 @@ export class SecService {
 
   // Helper method to filter filings by form type
   private filterFilingRowsByForm(rows: FilingRow[], formType: string): FilingRow[] {
-    return rows.filter(row => row.form === formType);
-  }
+      // Match base form type AND amended versions (e.g., 10-K matches 10-K/A, 10-K/A/A)
+      // Also handle 40-F for Canadian companies (equivalent to 10-K)
+      return rows.filter(row => {
+        const form = row.form?.trim();
+        if (!form) return false;
+        // Exact match
+        if (form === formType) return true;
+        // Amended filing match: 10-K/A, 10-Q/A, 8-K/A, etc.
+        if (form.startsWith(formType + '/')) return true;
+        // NT (notification of late filing) match: NT 10-K, NT 10-Q
+        if (form === `NT ${formType}`) return true;
+        return false;
+      });
+    }
 
   // Helper method to map filing row to response format
   private mapFilingRow(filing: FilingRow) {

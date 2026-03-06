@@ -169,7 +169,8 @@ export class ComprehensiveSECPipelineService {
               includeOlderPages: true,
             });
 
-            // Get the appropriate filing array based on type
+            // Get filings: use categorized arrays for 10-K/10-Q/8-K,
+            // fall back to allFilings for expanded types (13F-HR, DEF 14A, 4, S-1, etc.)
             let filings: any[] = [];
             if (filingType === '10-K') {
               filings = filingsResponse.filings.tenK || [];
@@ -177,6 +178,9 @@ export class ComprehensiveSECPipelineService {
               filings = filingsResponse.filings.tenQ || [];
             } else if (filingType === '8-K') {
               filings = filingsResponse.filings.eightK || [];
+            } else {
+              // Phase 2/3 filing types: use allFilings which contains all form types
+              filings = filingsResponse.allFilings || [];
             }
 
             allFilings.push(...filings.map(f => ({ ...f, filingType })));
@@ -264,75 +268,119 @@ export class ComprehensiveSECPipelineService {
    * Process single filing through comprehensive pipeline
    */
   private async processFilingComprehensive(
-    ticker: string,
-    cik: string,
-    filing: any,
-    config: PipelineConfig,
-    result: ComprehensivePipelineResult,
-  ): Promise<void> {
-    const accessionNumber = filing.accessionNumber;
-    const filingType = filing.filingType || filing.form;
-    const filingDate = filing.filingDate;
-    const filingUrl = filing.url;
+      ticker: string,
+      cik: string,
+      filing: any,
+      config: PipelineConfig,
+      result: ComprehensivePipelineResult,
+    ): Promise<void> {
+      const accessionNumber = filing.accessionNumber;
+      const filingType = filing.filingType || filing.form;
+      const filingDate = filing.filingDate;
+      const filingUrl = filing.url;
 
-    this.logger.log(`📥 Processing ${ticker} ${filingType} ${accessionNumber}...`);
+      this.logger.log(`📥 Processing ${ticker} ${filingType} ${accessionNumber}...`);
 
-    // Check if already processed (if skipExisting is true)
-    if (config.skipExisting) {
-      const existing = await this.prisma.filingMetadata.findFirst({
-        where: {
-          ticker,
-          filingType,
-          filingDate: new Date(filingDate),
-        },
-      });
+      // Smart skipExisting: check actual chunk count, not just filing_metadata.processed flag
+      if (config.skipExisting) {
+        const existing = await this.prisma.filingMetadata.findFirst({
+          where: {
+            ticker,
+            filingType,
+            filingDate: new Date(filingDate),
+          },
+        });
 
-      if (existing?.processed) {
-        this.logger.debug(`⏭️  Skipping already processed filing: ${accessionNumber}`);
-        result.totalMetrics += existing.metricsCount || 0;
-        result.totalNarratives += existing.chunksCount || 0;
-        return;
+        if (existing?.processed) {
+          // Verify we actually have meaningful data — check narrative_chunks count
+          const chunkCount = await this.prisma.narrativeChunk.count({
+            where: {
+              ticker,
+              filingType,
+              filingDate: new Date(filingDate),
+            },
+          });
+
+          // Define minimum expected chunks per filing type
+          const minChunks: Record<string, number> = {
+            '10-K': 15, '40-F': 15,
+            '10-Q': 8,
+            '8-K': 2, '6-K': 2,
+            'DEF 14A': 3,
+            '4': 1,
+            'S-1': 5, 'F-1': 5,
+          };
+          const threshold = minChunks[filingType] || 2;
+
+          if (chunkCount >= threshold) {
+            this.logger.debug(`⏭️  Skipping ${accessionNumber}: ${chunkCount} chunks (threshold: ${threshold})`);
+            result.totalMetrics += existing.metricsCount || 0;
+            result.totalNarratives += chunkCount;
+            return;
+          }
+
+          // Suspiciously low chunk count — re-process
+          this.logger.warn(
+            `🔄 Re-processing ${ticker} ${filingType} ${accessionNumber}: only ${chunkCount} chunks (min: ${threshold})`
+          );
+
+          // Reset processed flag so ingestFiling() won't short-circuit
+          await this.prisma.filingMetadata.update({
+            where: { id: existing.id },
+            data: { processed: false },
+          });
+        }
+      } else {
+        // skipExisting is false — force re-processing by resetting the processed flag
+        const existing = await this.prisma.filingMetadata.findFirst({
+          where: { ticker, filingType, filingDate: new Date(filingDate) },
+        });
+        if (existing?.processed) {
+          await this.prisma.filingMetadata.update({
+            where: { id: existing.id },
+            data: { processed: false },
+          });
+        }
       }
-    }
 
-    // Step 1: Download filing content from SEC
-    const filingContent = await this.downloadFilingFromSEC(filingUrl);
-    
-    // Step 2: Store raw filing in S3
-    await this.storeRawFilingInS3(ticker, filingType, accessionNumber, filingContent);
-    result.s3Uploads.rawFilings++;
+      // Step 1: Download filing content from SEC
+      const filingContent = await this.downloadFilingFromSEC(filingUrl);
 
-    // Step 3: Process filing using existing IngestionService
-    const ingestionResult = await this.ingestionService.ingestFiling(
-      ticker,
-      cik,
-      filingUrl,
-      filingType,
-      filingDate,
-    );
+      // Step 2: Store raw filing in S3
+      await this.storeRawFilingInS3(ticker, filingType, accessionNumber, filingContent);
+      result.s3Uploads.rawFilings++;
 
-    if (ingestionResult.status === 'success' || ingestionResult.status === 'already_processed') {
-      // Update metrics count
-      const metricsCount = ingestionResult.parsing_results?.saved_metrics || 
-                          ingestionResult.metrics_count || 0;
-      const narrativesCount = ingestionResult.parsing_results?.saved_chunks || 0;
-      
-      result.totalMetrics += metricsCount;
-      result.totalNarratives += narrativesCount;
-
-      // Step 4: Store processed data in S3
-      if (narrativesCount > 0) {
-        await this.storeProcessedDataInS3(ticker, filingType, accessionNumber);
-        result.s3Uploads.processedData++;
-      }
-
-      this.logger.log(
-        `✅ ${ticker} ${filingType} ${accessionNumber}: ${metricsCount} metrics, ${narrativesCount} narratives`
+      // Step 3: Process filing using existing IngestionService
+      const ingestionResult = await this.ingestionService.ingestFiling(
+        ticker,
+        cik,
+        filingUrl,
+        filingType,
+        filingDate,
       );
-    } else {
-      throw new Error(`Ingestion failed: ${ingestionResult.status}`);
+
+      if (ingestionResult.status === 'success' || ingestionResult.status === 'already_processed') {
+        // Update metrics count
+        const metricsCount = ingestionResult.parsing_results?.saved_metrics || 
+                            ingestionResult.metrics_count || 0;
+        const narrativesCount = ingestionResult.parsing_results?.saved_chunks || 0;
+
+        result.totalMetrics += metricsCount;
+        result.totalNarratives += narrativesCount;
+
+        // Step 4: Store processed data in S3
+        if (narrativesCount > 0) {
+          await this.storeProcessedDataInS3(ticker, filingType, accessionNumber);
+          result.s3Uploads.processedData++;
+        }
+
+        this.logger.log(
+          `✅ ${ticker} ${filingType} ${accessionNumber}: ${metricsCount} metrics, ${narrativesCount} narratives`
+        );
+      } else {
+        throw new Error(`Ingestion failed: ${ingestionResult.status}`);
+      }
     }
-  }
 
   /**
    * Download filing content from SEC with timeout and retry
@@ -490,12 +538,12 @@ export class ComprehensiveSECPipelineService {
     if (parts.length >= 2) {
       const year = `20${parts[1]}`;
       
-      // For 10-K, it's annual
-      if (filingType === '10-K') {
+      // Annual filing types: 10-K and 40-F (foreign private issuer annual report)
+      if (filingType === '10-K' || filingType === '40-F') {
         return `FY${year}`;
       }
       
-      // For 10-Q, approximate quarter based on filing pattern
+      // For 10-Q and 6-K (foreign private issuer interim report), approximate quarter
       return `Q${Math.floor(Math.random() * 4) + 1}_${year}`;
     }
     

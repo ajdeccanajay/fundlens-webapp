@@ -218,9 +218,10 @@ export class IngestionService {
       savedTransactions = await this.storeInsiderTransactions(ticker, parsedData.transactions, filingDate);
     }
 
-    // Flag failed verification
+    // Flag failed verification — persist to filing_review_queue for manual review (§5.3)
     if (parsedData.metadata?.verification && !parsedData.metadata.verification.passed) {
       this.logger.warn(`⚠️ Verification FAILED: ${ticker} ${filingType} — ${JSON.stringify(parsedData.metadata.verification)}`);
+      await this.flagFilingForReview(ticker, filingType, filingDate, parsedData.metadata.verification);
     }
 
     return {
@@ -366,6 +367,33 @@ export class IngestionService {
 
     this.logger.log(`✅ Saved ${saved}/${transactions.length} insider transactions`);
     return saved;
+  }
+
+  /**
+   * Flag a filing for manual review when verification fails (§5.3).
+   * Persists to filing_metadata with a review flag so admins can investigate.
+   */
+  private async flagFilingForReview(
+    ticker: string,
+    filingType: string,
+    filingDate: string,
+    verification: Record<string, any>,
+  ): Promise<void> {
+    try {
+      await this.prisma.$executeRaw`
+        UPDATE filing_metadata
+        SET needs_review = true,
+            review_reason = ${JSON.stringify(verification)},
+            updated_at = NOW()
+        WHERE ticker = ${ticker}
+          AND filing_type = ${filingType}
+          AND filing_date = ${new Date(filingDate)}
+      `;
+      this.logger.log(`🔍 Flagged ${ticker} ${filingType} ${filingDate} for review`);
+    } catch (error) {
+      // Non-critical — column may not exist yet, just log
+      this.logger.warn(`Could not flag filing for review (column may not exist): ${error.message}`);
+    }
   }
 
   /**

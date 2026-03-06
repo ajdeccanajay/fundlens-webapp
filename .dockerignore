@@ -38,6 +38,7 @@ test/
 *.md
 !README.md
 docs/
+COMPREHENSIVE_SYNONYM_EXPANSION.yaml
 
 # Local development
 local-s3-storage
@@ -56,6 +57,14 @@ scripts/
 python_parser/
 !python_parser/xbrl_parsing/
 !python_parser/xbrl_parsing/metric_mapping_enhanced.yaml
+
+# Large files that should never be in the image
+*.pdf
+*.docx
+*.xlsx
+*.pptx
+FUTURE/
+DEPLOYMENT/
 
 # Misc
 .DS_Store

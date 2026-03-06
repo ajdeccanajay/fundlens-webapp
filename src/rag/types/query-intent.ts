@@ -247,6 +247,7 @@ export interface RAGResponse {
     optimizationDecisions?: string[]; // Optimization reasoning
     needsClarification?: boolean; // Whether clarification prompt was generated
     sessionDocsUnavailable?: boolean; // Whether session doc retrieval failed (graceful degradation)
+    acquisitionNote?: string; // §7.4 Phase 5: User-facing note when data is being acquired in background
   };
 }
 

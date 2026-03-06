@@ -245,11 +245,15 @@ async def sec_parser_legacy(request: dict):
         '10-K': 'hybrid',      '10-K/A': 'hybrid',
         '10-Q': 'hybrid',      '10-Q/A': 'hybrid',
         '8-K': 'hybrid',
+        # Foreign Private Issuer equivalents
+        '40-F': 'hybrid',      '40-F/A': 'hybrid',     # Annual report (≈ 10-K)
+        '6-K': 'hybrid',       '6-K/A': 'hybrid',      # Interim report (≈ 10-Q/8-K)
         # Phase 2: Form 4 + 13F parsers
         '13F-HR': 'form_13f',  '13F-HR/A': 'form_13f',
         '4': 'form_4',         '4/A': 'form_4',
         # Phase 3: DEF 14A + S-1 parsers
         'S-1': 'hybrid_s1',    'S-1/A': 'hybrid_s1',
+        'F-1': 'hybrid_s1',    'F-1/A': 'hybrid_s1',   # Foreign IPO (≈ S-1)
         'DEF 14A': 'proxy',    'DEFA14A': 'proxy',
         # Phase 4: Earnings transcript parser
         'EARNINGS': 'transcript',
@@ -334,13 +338,14 @@ async def sec_parser_legacy(request: dict):
         logger.info(f"Transcript parser: {result['metadata']['total_chunks']} chunks for {ticker}")
         return result
 
-    # ── Phase 3: S-1 parser dispatch (reuses hybrid with S-1 sections) ──
+    # ── Phase 3: S-1/F-1 parser dispatch (reuses hybrid with S-1/F-1 sections) ──
     if parser_key == 'hybrid_s1':
-        # Reuse the hybrid parser but force filing_type to 'S-1'
-        # so it picks up SEC_SECTIONS['S-1'] definitions
+        # Reuse the hybrid parser — S-1 and F-1 share the same section structure
+        # Use the actual filing_type if it has its own SEC_SECTIONS entry, else fall back to S-1
+        effective_type = filing_type if filing_type in ('S-1', 'F-1') else 'S-1'
         filing_request = FilingRequest(
             ticker=ticker,
-            filingType='S-1',
+            filingType=effective_type,
             content=request.get("html_content", ""),
             accessionNumber=request.get("cik", "unknown"),
             extractMetrics=True,
@@ -356,7 +361,7 @@ async def sec_parser_legacy(request: dict):
             "transactions": [],
             "metadata": {
                 "ticker": ticker,
-                "filing_type": "S-1",
+                "filing_type": filing_type,
                 "cik": request.get("cik", "unknown"),
                 "total_metrics": 0,
                 "total_chunks": 0,

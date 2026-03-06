@@ -701,6 +701,7 @@ export class DealService {
     filings: Record<string, { count: number; latest: string | null }>;
     insiderTransactions: number;
     institutionalHoldings: number;
+    earningsTranscripts: number;
     lastUpdated: string | null;
   }> {
     const deal = await this.getDealById(dealId);
@@ -711,6 +712,7 @@ export class DealService {
         filings: {},
         insiderTransactions: 0,
         institutionalHoldings: 0,
+        earningsTranscripts: 0,
         lastUpdated: null,
       };
     }
@@ -756,14 +758,29 @@ export class DealService {
       // Table may not exist yet in some environments
     }
 
-    // Last updated from filing_metadata
+    // Earnings transcript count (distinct quarters from narrative_chunks with filingType='EARNINGS')
+    let earningsTranscripts = 0;
+    try {
+      const etResult = await this.prisma.$queryRawUnsafe<{ count: number }[]>(
+        `SELECT COUNT(DISTINCT filing_date)::int as count FROM narrative_chunks WHERE ticker = $1 AND filing_type = 'EARNINGS'`,
+        ticker.toUpperCase(),
+      );
+      earningsTranscripts = etResult[0]?.count || 0;
+    } catch {
+      // Table may not have EARNINGS data yet
+    }
+
+    // Last updated from filing_metadata + narrative_chunks
     const lastRow = await this.prisma.$queryRawUnsafe<{ latest: string }[]>(
-      `SELECT MAX(created_at)::text as latest FROM filing_metadata WHERE ticker = $1`,
+      `SELECT GREATEST(
+        (SELECT MAX(created_at) FROM filing_metadata WHERE ticker = $1),
+        (SELECT MAX(created_at) FROM narrative_chunks WHERE ticker = $1)
+      )::text as latest`,
       ticker.toUpperCase(),
     );
     const lastUpdated = lastRow[0]?.latest || null;
 
-    return { ticker: ticker.toUpperCase(), filings, insiderTransactions, institutionalHoldings, lastUpdated };
+    return { ticker: ticker.toUpperCase(), filings, insiderTransactions, institutionalHoldings, earningsTranscripts, lastUpdated };
   }
 
 }
